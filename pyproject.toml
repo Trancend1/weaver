@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "weaver"
+version = "0.0.1"
+description = "Offline-capable, glossary-aware JP-EN novel translation workbench."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Farhan Alamsyah", email = "farhanalamsyah099@gmail.com" },
+]
+keywords = ["translation", "epub", "japanese", "cli", "llm"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Text Processing :: Linguistic",
+]
+dependencies = [
+    "typer>=0.12",
+    "rich>=13",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "pyright>=1.1",
+]
+
+[project.scripts]
+weaver = "weaver.cli.main:app"
+
+[project.urls]
+Homepage = "https://github.com/Trancend1/weaver-translate"
+Repository = "https://github.com/Trancend1/weaver-translate"
+Issues = "https://github.com/Trancend1/weaver-translate/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/weaver"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+reportMissingImports = "error"
+reportMissingTypeStubs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "requires_ollama: test needs a running Ollama instance",
+    "requires_cloud: test needs a cloud-provider API key",
+    "slow: long-running test",
+]
