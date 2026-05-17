@@ -1,0 +1,30 @@
+#!/usr/bin/env sh
+set -eu
+
+message_file="$1"
+
+blocked_message_pattern='(Co-Authored-By|Generated-By|Assisted-By).*(Claude|Anthropic|Codex|ChatGPT|OpenAI)|noreply@anthropic.com|noreply@openai.com'
+
+if grep -Eiq "$blocked_message_pattern" "$message_file"; then
+  cat >&2 <<'EOF'
+Commit rejected: agentic AI attribution is not allowed in this repo.
+
+Remove AI co-author/generated-by/assisted-by trailers and keep the commit
+identity on the maintainer/user account only.
+EOF
+  exit 1
+fi
+
+author_ident="$(git var GIT_AUTHOR_IDENT)"
+committer_ident="$(git var GIT_COMMITTER_IDENT)"
+blocked_identity_pattern='Claude|Anthropic|Codex|ChatGPT|OpenAI|noreply@anthropic.com|noreply@openai.com'
+
+if printf '%s\n%s\n' "$author_ident" "$committer_ident" | grep -Eiq "$blocked_identity_pattern"; then
+  cat >&2 <<'EOF'
+Commit rejected: author/committer identity looks like an agentic AI account.
+
+Set git user.name and user.email to the maintainer/user identity before
+committing.
+EOF
+  exit 1
+fi

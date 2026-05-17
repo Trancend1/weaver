@@ -37,5 +37,8 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
+# Local agent settings
+.claude/settings.local.json
+
 # Weaver runtime
 .weaver/
