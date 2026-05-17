@@ -28,6 +28,7 @@ dependencies = [
     "typer>=0.12",
     "rich>=13",
     "pydantic>=2",
+    "ebooklib>=0.20",
 ]
 
 [project.optional-dependencies]
