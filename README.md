@@ -11,6 +11,21 @@ A command-line tool for amateur fan-translators working on Japanese light novels
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/) for environment management
 
+## Glossary Tokenizer Setup
+
+Glossary candidate extraction runs without external tokenizer setup by falling
+back to deterministic regex extraction. For higher-quality Japanese proper noun
+extraction, install MeCab before installing optional tokenizer packages:
+
+- Linux: install MeCab with your package manager, then install `fugashi`.
+- macOS: `brew install mecab mecab-ipadic`, then install `fugashi`.
+- Windows: install a prebuilt MeCab binary, add its `bin` directory to `PATH`,
+  restart the shell, then install `fugashi`.
+
+If MeCab is unavailable, `weaver init` still completes and creates
+`glossary_candidates.tsv`; the candidate list will be lower quality but
+reviewable.
+
 ## Quickstart
 
 ```bash

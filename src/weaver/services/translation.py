@@ -14,6 +14,7 @@ from weaver.errors import ConfigError, ProviderError
 from weaver.providers import LLMProvider, build_provider
 from weaver.providers.types import GlossaryTerm, TranslationContext, TranslationRequest
 from weaver.readers.epub import read_epub
+from weaver.services.glossary import raise_on_glossary_conflicts
 from weaver.storage.db import connect_database, transaction
 from weaver.storage.glossary import list_glossary_terms
 from weaver.storage.projects import ProjectRecord, get_project
@@ -167,6 +168,7 @@ def translate_project(
 
     with closing(connect_database(db_path)) as connection:
         project = _load_single_project(connection)
+        raise_on_glossary_conflicts(connection, project_id=project.id)
         with transaction(connection):
             sync_document_segments(connection, project_id=project.id, document=document)
 

@@ -14,6 +14,7 @@ from typing import Any
 from weaver.errors import ProviderError, WeaverError
 from weaver.providers import ProviderStatus, build_provider
 from weaver.readers.epub import read_epub
+from weaver.services.glossary import extract_and_store_project_glossary
 from weaver.storage.db import (
     SCHEMA_VERSION,
     connect_readonly_database,
@@ -33,6 +34,8 @@ class InitResult:
     database_path: Path
     chapter_count: int
     segment_count: int
+    glossary_candidate_count: int
+    glossary_candidate_path: Path
 
 
 @dataclass(frozen=True)
@@ -71,6 +74,7 @@ def initialize_project(source_epub: Path, *, cwd: Path | None = None) -> InitRes
     project_name = source_epub.stem
     project_dir = base_dir / ".weaver" / project_name
     output_dir = project_dir / "output"
+    candidate_path = project_dir / "glossary_candidates.tsv"
     db_path = project_dir / "weaver.db"
     project_toml = project_dir / "project.toml"
 
@@ -90,6 +94,12 @@ def initialize_project(source_epub: Path, *, cwd: Path | None = None) -> InitRes
                 target_lang="en",
             )
             sync_document_segments(connection, project_id=project_id, document=document)
+            glossary_result = extract_and_store_project_glossary(
+                connection=connection,
+                project_id=project_id,
+                document=document,
+                candidate_path=candidate_path,
+            )
         connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     _write_project_toml(
@@ -106,6 +116,8 @@ def initialize_project(source_epub: Path, *, cwd: Path | None = None) -> InitRes
         database_path=db_path,
         chapter_count=chapter_count,
         segment_count=segment_count,
+        glossary_candidate_count=glossary_result.candidate_count,
+        glossary_candidate_path=glossary_result.candidate_path,
     )
 
 

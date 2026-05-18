@@ -5,12 +5,15 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from weaver.errors import ProviderResponseError
+import pytest
+
+from weaver.errors import GlossaryConflictError, ProviderResponseError
 from weaver.providers.base import LLMProvider, ProviderStatus
 from weaver.providers.types import TranslationRequest, TranslationResponse
 from weaver.services.project import initialize_project
 from weaver.services.translation import translate_project
 from weaver.storage.db import connect_database, transaction
+from weaver.storage.glossary import approve_glossary_candidate, insert_glossary_candidate
 from weaver.storage.segments import update_segment_status
 
 FIXTURE_EPUB = Path(__file__).resolve().parents[2] / "fixtures" / "aozora_sample.epub"
@@ -47,6 +50,36 @@ def test_translate_project_sends_previous_chapter_window_to_provider(tmp_path, m
             f"EN: {provider.requests[0].normalized_source_text}",
         ),
     )
+
+
+def test_translate_project_injects_approved_glossary_terms_into_matching_prompt(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    provider = CapturingProvider()
+    first_segment = _first_segment_text(init.database_path)
+    term_source = first_segment[:2]
+    with connect_database(init.database_path) as connection, transaction(connection):
+        project_id = connection.execute("SELECT id FROM projects LIMIT 1").fetchone()["id"]
+        candidate_id = insert_glossary_candidate(
+            connection,
+            project_id=project_id,
+            source=term_source,
+            target="Pinned Term",
+            category="fallback",
+            notes=None,
+            status="pending",
+            frequency=1,
+        )
+        approve_glossary_candidate(connection, candidate_id=candidate_id)
+
+    translate_project(init.project_toml, provider=provider)
+
+    first_request_terms = provider.requests[0].context.glossary_terms
+    assert [(term.source, term.target) for term in first_request_terms] == [
+        (term_source, "Pinned Term")
+    ]
 
 
 def test_translate_project_resets_interrupted_segment_and_resumes(tmp_path, monkeypatch) -> None:
@@ -113,6 +146,37 @@ def test_translate_project_syncs_source_and_marks_changed_segment_stale(
 
     assert summary.stale_segments == 1
     assert _count_status(init.database_path, "stale") == 1
+
+
+def test_translate_project_halts_when_approved_glossary_conflicts(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    _set_fake_provider(init.project_toml)
+    with connect_database(init.database_path) as connection, transaction(connection):
+        project_id = connection.execute("SELECT id FROM projects LIMIT 1").fetchone()["id"]
+        insert_glossary_candidate(
+            connection,
+            project_id=project_id,
+            source="カイ",
+            target="Kai",
+            category="katakana",
+            notes=None,
+            status="approved",
+            frequency=2,
+        )
+        insert_glossary_candidate(
+            connection,
+            project_id=project_id,
+            source="カイ",
+            target="Kye",
+            category="katakana",
+            notes=None,
+            status="edited",
+            frequency=2,
+        )
+
+    with pytest.raises(GlossaryConflictError):
+        translate_project(init.project_toml)
 
 
 class AlwaysFailProvider(LLMProvider):
@@ -189,4 +253,13 @@ def _first_segment_id(db_path: Path) -> str:
     with sqlite3.connect(db_path) as connection:
         return str(
             connection.execute("SELECT id FROM segments ORDER BY block_order LIMIT 1").fetchone()[0]
+        )
+
+
+def _first_segment_text(db_path: Path) -> str:
+    with sqlite3.connect(db_path) as connection:
+        return str(
+            connection.execute(
+                "SELECT source_text FROM segments ORDER BY block_order LIMIT 1"
+            ).fetchone()[0]
         )

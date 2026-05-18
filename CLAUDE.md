@@ -44,9 +44,9 @@ Single source of truth for build status. Update at end of every phase. Roadmap, 
 | 2 | State Store — SQLite (WAL), migrations, repository fns | 1 | ✅ Complete |
 | 3 | Providers — `FakeProvider`, `DeepSeekProvider`, `GeminiProvider`, `OllamaProvider` | 2 | ✅ Complete |
 | 4 | Translation Orchestrator — context builder, resumable loop | 3 | ✅ Complete |
-| 5 | Glossary Workflow — candidate extraction, interactive review | 4 | ⏳ Next |
-| 6 | Markdown Export — per-chapter review files | 4 | ⬜ Pending |
-| 7 | Manual Edit — `weaver edit <segment>` via `$EDITOR` | 4 (parallel with 6) | ⬜ Pending |
+| 5 | Glossary Workflow — candidate extraction, interactive review | 4 | ✅ Complete |
+| 6 | Markdown Export — per-chapter review files | 4 | ✅ Complete |
+| 7 | Manual Edit — `weaver edit <segment>` via `$EDITOR` | 4 (parallel with 6) | ⏳ Next |
 | 8 | EPUB Renderer — translated EPUB roundtrip | 1 + 6 | ⬜ Pending |
 | 9 | QA Engine — `weaver validate` deterministic checks | 4 (parallel) | ⬜ Pending |
 | 10 | Hardening, Docs, Release — v0.1.0 to PyPI | all | ⬜ Pending |
@@ -68,13 +68,13 @@ Before starting any next phase, always run this gate:
 
 Required reminder before phase transition: **"Check exit criteria first. No next phase until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Phase 5: Glossary Workflow
+### 2.3 Active Phase — Phase 7: Manual Edit
 
-**Goal:** Candidate extraction plus interactive review for approved glossary terms.
+**Goal:** `weaver edit <project> <segment-id>` overrides a translation through `$EDITOR`.
 
-**Tasks:** seeded from [BLUEPRINT_EXECUTION_PLAN.md](docs/BLUEPRINT_EXECUTION_PLAN.md) §Phase 5 when work begins.
+**Tasks:** seeded from [BLUEPRINT_EXECUTION_PLAN.md](docs/BLUEPRINT_EXECUTION_PLAN.md) §Phase 7 when work begins.
 
-**Exit criteria:** seeded from [BLUEPRINT_EXECUTION_PLAN.md](docs/BLUEPRINT_EXECUTION_PLAN.md) §Phase 5 when work begins.
+**Exit criteria:** seeded from [BLUEPRINT_EXECUTION_PLAN.md](docs/BLUEPRINT_EXECUTION_PLAN.md) §Phase 7 when work begins.
 
 **Blockers / open questions:** none.
 
@@ -276,6 +276,99 @@ Usability:
 - Internal-only: transaction orchestration, previous-segment context assembly, retry-failed selection, token totals in `TranslationRunSummary`.
 - Not user-facing yet: glossary candidate extraction/review, manual edit, Markdown/EPUB export, QA engine.
 
+#### Phase 5 — Glossary Workflow
+
+Status: `✅ Passed`
+
+Plain-language criteria:
+
+1. `weaver init` extracts glossary candidates, stores them in SQLite, and writes `glossary_candidates.tsv`.
+2. A user can approve, edit, reject, skip, undo, and resume review through `weaver glossary review`.
+3. Approved glossary terms are copied into `glossary_terms` and appear in subsequent translation contexts.
+4. Conflicting approved/edited glossary candidates halt translation with a clear error.
+5. Windows users are not blocked by missing MeCab; extraction falls back to deterministic regex and README documents the optional MeCab/fugashi path.
+
+Evidence:
+
+| Criterion | Proof | Status |
+|---|---|---|
+| Synthetic extraction works | `tests/unit/services/test_glossary.py` covers katakana, honorific, variant clustering, singleton filtering, and conflict detection. | ✅ Passed |
+| Review actions persist | `tests/unit/storage/test_glossary.py::test_candidate_review_actions_persist_and_update_terms` covers approve/edit/reject state and `glossary_terms` updates. | ✅ Passed |
+| `init` writes candidate TSV | `tests/integration/test_cli_glossary.py::test_weaver_init_extracts_glossary_candidates_and_writes_tsv` asserts DB candidates and TSV header are created. | ✅ Passed |
+| Interactive review persists | `tests/integration/test_cli_glossary.py` covers approving the first candidate and editing target/notes through `weaver glossary review`. | ✅ Passed |
+| Approved terms enter translation context | `tests/unit/services/test_translation_orchestrator.py::test_translate_project_injects_approved_glossary_terms_into_matching_prompt` asserts an approved term is present in the provider request context. | ✅ Passed |
+| Glossary conflicts halt translation | `tests/unit/services/test_translation_orchestrator.py::test_translate_project_halts_when_approved_glossary_conflicts` verifies `GlossaryConflictError`; CLI maps that error class to exit code 6. | ✅ Passed |
+
+Verification commands:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -m "not requires_ollama and not requires_cloud"
+.\.venv\Scripts\python.exe -m ruff check src tests
+.\.venv\Scripts\python.exe -m ruff format --check src tests
+.\.venv\Scripts\pyright.exe --pythonpath .\.venv\Scripts\python.exe
+```
+
+Latest observed result: `98 passed, 3 deselected`; Ruff lint + format clean; Pyright `0 errors`.
+
+Manual inspection:
+
+- `src/weaver/services/glossary.py` adds candidate extraction with optional `fugashi` proper-noun tokenization and deterministic regex fallback for katakana, honorifics, CJK/title fallback, TSV write, TSV sync, and conflict checks.
+- `src/weaver/storage/glossary.py` adds candidate records, review actions, term upsert/removal, undo restore, status counts, and conflict listing.
+- `src/weaver/services/project.py` now extracts/stores candidates during `weaver init` and writes `glossary_candidates.tsv`.
+- `src/weaver/cli/main.py` adds `weaver glossary review`, `weaver glossary edit`, and `weaver glossary conflicts`; glossary conflict errors exit with code 6.
+- `src/weaver/services/translation.py` blocks translation when approved/edited glossary candidates conflict.
+- `README.md` documents optional MeCab/fugashi setup and the regex fallback.
+- Manual smoke in `.tmp_phase5_manual`: `weaver init` on the fixture printed `Extracted 2 glossary candidates`; `weaver glossary review` approved one candidate; `weaver inspect` showed `Glossary Candidates 2` and `Glossary Terms 1`. On legacy PowerShell codepage, Japanese candidate text degraded to `???` instead of crashing; UTF-8 terminals render the underlying TSV/database text normally.
+
+Usability:
+
+- Usable now: `weaver init` produces candidates + TSV; `weaver glossary review <project.toml>` can approve/edit/reject candidates; approved terms feed `weaver translate`.
+- Internal-only: tokenizer fallback details, TSV sync implementation, conflict scan helpers.
+- Not user-facing yet: manual segment edit, EPUB export, QA engine.
+
+#### Phase 6 — Markdown Export
+
+Status: `✅ Passed`
+
+Plain-language criteria:
+
+1. `weaver export --mode markdown` creates a top-level `review.md` index and one Markdown file per chapter.
+2. Default output shows source text and translated text in reviewable pairs.
+3. `--translation-only` hides source blocks and keeps translated text/markers.
+4. Failed, stale, and missing segments are rendered as visible markers.
+5. Chapter file order matches EPUB spine order.
+
+Evidence:
+
+| Criterion | Proof | Status |
+|---|---|---|
+| Index and per-chapter files | `tests/integration/test_cli_export_markdown.py::test_weaver_export_markdown_writes_review_index_and_chapter_files` asserts `review.md`, two fixture chapter files, index links, source labels, translation labels, and `EN:` translated text. | ✅ Passed |
+| Translation-only mode | `tests/integration/test_cli_export_markdown.py::test_weaver_export_markdown_translation_only_omits_source_blocks` asserts source labels are omitted and translated text remains. | ✅ Passed |
+| Failed/stale/missing markers | `tests/integration/test_cli_export_markdown.py::test_weaver_export_markdown_marks_failed_stale_and_missing_segments` seeds failed/stale/pending segments and verifies `[FAILED: ...]`, `[STALE: ...]`, and `[MISSING: ...]` markers. | ✅ Passed |
+
+Verification commands:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -m "not requires_ollama and not requires_cloud"
+.\.venv\Scripts\python.exe -m ruff check src tests
+.\.venv\Scripts\python.exe -m ruff format --check src tests
+.\.venv\Scripts\pyright.exe --pythonpath .\.venv\Scripts\python.exe
+```
+
+Latest observed result: `101 passed, 3 deselected`; Ruff lint + format clean; Pyright `0 errors`.
+
+Manual inspection:
+
+- `src/weaver/services/export.py` adds `export_markdown_project()` and renders `output/markdown/review.md` plus `chapter-NNN.md` files from the current EPUB + latest matching SQLite translations.
+- `src/weaver/cli/main.py` adds `weaver export <project.toml> --mode markdown` and `--translation-only`.
+- Manual smoke in `.tmp_phase6_manual`: `weaver init`, config rewritten to `fake`, `weaver translate`, then `weaver export .weaver\aozora_sample\project.toml --mode markdown` printed `Wrote ...\output\markdown\review.md` and `Chapters: 2`; output directory contained `review.md`, `chapter-001.md`, and `chapter-002.md`.
+
+Usability:
+
+- Usable now: `weaver export <project.toml> --mode markdown` creates review files; add `--translation-only` for cleaner reading.
+- Internal-only: Markdown rendering helpers and latest-translation lookup.
+- Not user-facing yet: manual segment edit, EPUB export, QA engine.
+
 ### 2.5 Phase Log
 
 | # | Phase | PR | Outcome |
@@ -285,6 +378,8 @@ Usability:
 | 2 | State Store | Local sprint | SQLite WAL schema, project bootstrap, repository functions, `weaver init`, `weaver inspect`, stale/reset behavior, and 10,000-segment scan covered by unit + integration tests. |
 | 3 | Providers | Local sprint | `LLMProvider` ABC + four providers (`fake`, `deepseek`, `gemini`, `ollama`) via `build_provider()` factory; Jinja2 prompt templates; JSON parser with repair flow; `build_context()` glossary + rolling window; schema v2 migration adds token columns; `weaver inspect --healthcheck` opt-in flag; 82 unit + integration tests cover happy path, repair, error mapping, healthcheck, and migration. |
 | 4 | Translation Orchestrator | Local sprint | `weaver translate` drives the configured provider over pending segments with rolling context, one-segment transactions, resume reset, stale detection, failed-segment status, retry-failed selection, Rich progress, and 89-test verification. |
+| 5 | Glossary Workflow | Local sprint | `weaver init` extracts candidates and writes TSV; `weaver glossary review/edit/conflicts` handles approval, edit, rejection, TSV sync, undo, and conflict display; approved terms feed translation context; conflicts block translate with exit code 6; 98-test verification. |
+| 6 | Markdown Export | Local sprint | `weaver export --mode markdown` writes `review.md` plus per-chapter files, supports source+translation and translation-only modes, and renders failed/stale/missing markers; 101-test verification. |
 
 ---
 
