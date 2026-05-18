@@ -46,9 +46,9 @@ Single source of truth for build status. Update at end of every phase. Roadmap, 
 | 4 | Translation Orchestrator — context builder, resumable loop | 3 | ✅ Complete |
 | 5 | Glossary Workflow — candidate extraction, interactive review | 4 | ✅ Complete |
 | 6 | Markdown Export — per-chapter review files | 4 | ✅ Complete |
-| 7 | Manual Edit — `weaver edit <segment>` via `$EDITOR` | 4 (parallel with 6) | ⏳ Next |
-| 8 | EPUB Renderer — translated EPUB roundtrip | 1 + 6 | ⬜ Pending |
-| 9 | QA Engine — `weaver validate` deterministic checks | 4 (parallel) | ⬜ Pending |
+| 7 | Manual Edit — `weaver edit <segment>` via `$EDITOR` | 4 (parallel with 6) | ✅ Complete |
+| 8 | EPUB Renderer — translated EPUB roundtrip | 1 + 6 | ✅ Complete |
+| 9 | QA Engine — `weaver validate` deterministic checks | 4 (parallel) | ⏳ Next |
 | 10 | Hardening, Docs, Release — v0.1.0 to PyPI | all | ⬜ Pending |
 
 Legend: ✅ complete · 🟡 in progress · ⏳ next · ⬜ pending · 🚫 blocked.
@@ -68,13 +68,13 @@ Before starting any next phase, always run this gate:
 
 Required reminder before phase transition: **"Check exit criteria first. No next phase until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Phase 7: Manual Edit
+### 2.3 Active Phase — Phase 9: QA Engine
 
-**Goal:** `weaver edit <project> <segment-id>` overrides a translation through `$EDITOR`.
+**Goal:** `weaver validate <project.toml>` runs the six deterministic checks and reports findings with severities.
 
-**Tasks:** seeded from [BLUEPRINT_EXECUTION_PLAN.md](docs/BLUEPRINT_EXECUTION_PLAN.md) §Phase 7 when work begins.
+**Tasks:** seeded from [BLUEPRINT_EXECUTION_PLAN.md](docs/BLUEPRINT_EXECUTION_PLAN.md) §Phase 9 when work begins.
 
-**Exit criteria:** seeded from [BLUEPRINT_EXECUTION_PLAN.md](docs/BLUEPRINT_EXECUTION_PLAN.md) §Phase 7 when work begins.
+**Exit criteria:** seeded from [BLUEPRINT_EXECUTION_PLAN.md](docs/BLUEPRINT_EXECUTION_PLAN.md) §Phase 9 when work begins.
 
 **Blockers / open questions:** none.
 
@@ -369,6 +369,100 @@ Usability:
 - Internal-only: Markdown rendering helpers and latest-translation lookup.
 - Not user-facing yet: manual segment edit, EPUB export, QA engine.
 
+#### Phase 7 — Manual Edit
+
+Status: `✅ Passed`
+
+Plain-language criteria:
+
+1. `weaver edit <project.toml> <segment-id>` opens the segment in `$EDITOR` and persists the saved text.
+2. Saving a non-empty edit stores a new `translations` row and sets the segment status to `manual`.
+3. `manual` segments survive `weaver translate` and `weaver translate --retry-failed`.
+4. A non-existent segment id produces a clear error and a non-zero exit code.
+
+Evidence:
+
+| Criterion | Proof | Status |
+|---|---|---|
+| Editor flow stores manual translation | `tests/integration/test_cli_edit.py::test_weaver_edit_opens_editor_and_marks_segment_manual` writes a stub editor, runs `weaver edit`, and asserts `segments.status='manual'` plus a `translations` row with `provider='manual'`. | ✅ Passed |
+| Manual translation records new attempt over existing run | `tests/unit/services/test_manual_edit.py::test_apply_manual_translation_overrides_previous_translation_with_new_attempt` confirms attempt 2 is recorded after a Fake translate run. | ✅ Passed |
+| Manual translation survives `--retry-failed` | `tests/unit/services/test_manual_edit.py::test_manual_translation_survives_retry_failed` marks other rows failed, runs retry, and asserts the manual row keeps `status='manual'` and the latest translation provider stays `manual`. | ✅ Passed |
+| Empty saved text is rejected | `tests/unit/services/test_manual_edit.py::test_apply_manual_translation_rejects_empty_text` raises `ValueError`. | ✅ Passed |
+| Non-existent segment id raises | `tests/unit/services/test_manual_edit.py::test_apply_manual_translation_unknown_segment_id_raises` and `tests/integration/test_cli_edit.py::test_weaver_edit_missing_segment_id_exits_with_clear_error` confirm `SegmentNotFoundError` and CLI exit code 5. | ✅ Passed |
+| Missing `$EDITOR` is reported cleanly | `tests/integration/test_cli_edit.py::test_weaver_edit_missing_editor_env_exits_with_config_hint` confirms `ConfigError` mentions `EDITOR` and exits non-zero. | ✅ Passed |
+
+Verification commands:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -m "not requires_ollama and not requires_cloud"
+.\.venv\Scripts\python.exe -m ruff check src tests
+.\.venv\Scripts\python.exe -m ruff format --check src tests
+.\.venv\Scripts\pyright.exe --pythonpath .\.venv\Scripts\python.exe
+```
+
+Latest observed result: `109 passed, 3 deselected`; Ruff lint + format clean; Pyright `0 errors`.
+
+Manual inspection:
+
+- `src/weaver/services/manual_edit.py` exposes `apply_manual_translation()` (pure) and `edit_segment()` (opens `$EDITOR` with a temp file, reads the result with `utf-8-sig` to drop a possible BOM, and delegates).
+- `src/weaver/cli/main.py` adds `weaver edit <project.toml> <segment-id>`. `ValueError` (empty save) → exit code 1; `SegmentNotFoundError` → exit code 5; `ConfigError` for missing `$EDITOR` → standard CLI error path.
+- `src/weaver/storage/segments.py` adds `get_segment()`. `src/weaver/storage/translations.py` adds `get_latest_translation_text()` to pre-fill the editor with the current translation when available.
+- Phase 7 smoke in `.tmp_phase7_manual`: `weaver init`, provider rewritten to `fake`, `weaver translate` produced 6 translated segments, `weaver edit <segment_id>` with a `.cmd` editor stub printed `Saved. Segment 8732df9c64e0a7ce marked manual.`; SQLite then showed `status=manual` and latest translation `(2, 'Manual smoke override.', 'manual')`.
+
+Usability:
+
+- Usable now: `weaver edit <project.toml> <segment-id>` overrides a translation through `$EDITOR`. Manual segments persist across translate runs.
+- Internal-only: `apply_manual_translation()` pure helper used by tests, `get_latest_translation_text()` for editor pre-fill, `get_segment()` lookup.
+- Not user-facing yet: EPUB export, QA engine.
+
+#### Phase 8 — EPUB Renderer
+
+Status: `✅ Passed`
+
+Plain-language criteria:
+
+1. `weaver export --mode epub` writes a `.translated.epub` that reopens with `ebooklib`.
+2. Translated blocks show the translated text in the rendered EPUB; segments without a usable translation fall back to source text.
+3. EPUB metadata (title, language, identifier) and spine order match the source.
+4. Asset items (CSS, images) carry through to the rendered EPUB.
+
+Evidence:
+
+| Criterion | Proof | Status |
+|---|---|---|
+| `--mode epub` writes a reopenable EPUB | `tests/integration/test_cli_export_epub.py::test_weaver_export_epub_writes_translated_epub_that_reads_back` runs `init` → `translate` (FakeProvider) → `export --mode epub`, reopens with `ebooklib`, and asserts `EN: ` appears inside `text/chapter01.xhtml`. CLI prints `Translated blocks: 6 | Fallback blocks: 0`. | ✅ Passed |
+| Pending segments fall back to source text | `tests/integration/test_cli_export_epub.py::test_weaver_export_epub_falls_back_to_source_for_pending_segments` exports without translating; rendered chapter still contains `吾輩は猫である` and CLI reports `Translated blocks: 0 | Fallback blocks: 6`. | ✅ Passed |
+| Renderer replaces text only for matching segments | `tests/unit/renderers/test_epub.py::test_render_translated_epub_replaces_text_for_known_segments` injects per-block translations and asserts they appear in chapter 1. | ✅ Passed |
+| Renderer falls back when translation missing | `tests/unit/renderers/test_epub.py::test_render_translated_epub_falls_back_to_source_when_translation_missing` translates only block 0 and asserts block 1's source text remains. | ✅ Passed |
+| Metadata, spine, and assets preserved | `tests/unit/renderers/test_epub.py::test_render_translated_epub_preserves_metadata_spine_and_assets` compares title, language, spine ordering, and asset paths between source and rendered EPUB. | ✅ Passed |
+| `--mode epub --translation-only` rejected | `tests/integration/test_cli_export_epub.py::test_weaver_export_epub_rejects_translation_only_flag` asserts a non-zero exit and a flag-mismatch message. | ✅ Passed |
+
+Verification commands:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -m "not requires_ollama and not requires_cloud"
+.\.venv\Scripts\python.exe -m ruff check src tests
+.\.venv\Scripts\python.exe -m ruff format --check src tests
+.\.venv\Scripts\pyright.exe --pythonpath .\.venv\Scripts\python.exe
+```
+
+Latest observed result: `115 passed, 3 deselected`; Ruff lint + format clean; Pyright `0 errors`.
+
+Manual inspection:
+
+- `src/weaver/renderers/epub.py` adds `render_translated_epub()` plus `EpubRenderResult`. Registers the XHTML and EPUB namespaces with ElementTree, groups blocks by chapter href, walks each block's `markup_context.xpath` step-by-step using local-name comparison, and replaces the matched element's `text` (clearing children — known trade-off documented in [PRD_v2.md](docs/PRD_v2.md) §6 Output).
+- Missing or unmatched segments increment `fallback_blocks` and keep the source text untouched.
+- `_ensure_navigation_items()` adds an `EpubNcx` entry when the source EPUB does not ship one. Without this, `ebooklib.write_epub` emits `<spine toc="ncx">` referencing a nonexistent manifest item, and the resulting EPUB cannot be reopened by `ebooklib` (and is rejected by strict EPUB 2 readers).
+- `src/weaver/services/export.py` adds `export_epub_project()` and `_load_publishable_translations()` (latest translation per segment whose status is `translated` or `manual` and whose `translations.source_hash` still matches the segment hash).
+- `src/weaver/cli/main.py` extends `weaver export` to accept `--mode epub`. `--translation-only` with `--mode epub` exits with code 1 and a clear message.
+- Phase 8 smoke in `.tmp_phase8_manual`: `weaver init`, provider rewritten to `fake`, `weaver translate` produced 6 translated segments, `weaver export --mode epub` printed `Wrote .../aozora_sample.translated.epub` and `Translated blocks: 6 | Fallback blocks: 0`. Reopening the rendered EPUB with `ebooklib` showed translated text in `chapter01.xhtml` (e.g. `<h1>EN: 第一章</h1>`, `<p class="lead">EN: 名前はまだ無い。</p>`), preserved `xmlns="http://www.w3.org/1999/xhtml"`, preserved CSS asset, and the added `EpubNcx` item at `toc.ncx`.
+
+Usability:
+
+- Usable now: `weaver export <project.toml> --mode epub` writes `<output_dir>/epub/<source-stem>.translated.epub`.
+- Internal-only: `_load_publishable_translations()`, `_ensure_navigation_items()`, ElementTree namespace registration, xpath resolution helpers.
+- Not user-facing yet: QA engine, hardening/docs/release.
+
 ### 2.5 Phase Log
 
 | # | Phase | PR | Outcome |
@@ -380,6 +474,8 @@ Usability:
 | 4 | Translation Orchestrator | Local sprint | `weaver translate` drives the configured provider over pending segments with rolling context, one-segment transactions, resume reset, stale detection, failed-segment status, retry-failed selection, Rich progress, and 89-test verification. |
 | 5 | Glossary Workflow | Local sprint | `weaver init` extracts candidates and writes TSV; `weaver glossary review/edit/conflicts` handles approval, edit, rejection, TSV sync, undo, and conflict display; approved terms feed translation context; conflicts block translate with exit code 6; 98-test verification. |
 | 6 | Markdown Export | Local sprint | `weaver export --mode markdown` writes `review.md` plus per-chapter files, supports source+translation and translation-only modes, and renders failed/stale/missing markers; 101-test verification. |
+| 7 | Manual Edit | Local sprint | `weaver edit <project.toml> <segment-id>` opens `$EDITOR`, writes a new translation row with `provider='manual'`, sets `segments.status='manual'`, and survives `--retry-failed`; missing-id surfaces `SegmentNotFoundError` with exit code 5; 109-test verification. |
+| 8 | EPUB Renderer | Local sprint | `weaver export --mode epub` rewrites translated block text by `markup_context.xpath`, preserves metadata/spine/assets, falls back to source text when no translation exists, and adds an `EpubNcx` item so `ebooklib`/EPUB 2 readers can reopen the output; 115-test verification. |
 
 ---
 

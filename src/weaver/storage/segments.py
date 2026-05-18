@@ -207,6 +207,30 @@ def list_segments_for_translation(
     return [_segment_from_row(row) for row in rows]
 
 
+def get_segment(connection: sqlite3.Connection, segment_id: str) -> SegmentRecord | None:
+    """Return one segment row by id, or None if it does not exist.
+
+    Args:
+        connection: Open SQLite connection.
+        segment_id: Segment id to look up.
+
+    Returns:
+        SegmentRecord if the segment exists, otherwise None.
+    """
+
+    row = connection.execute(
+        """
+        SELECT id, chapter_id, block_order, kind, source_text, source_hash, status
+        FROM segments
+        WHERE id = ?
+        """,
+        (segment_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return _segment_from_row(row)
+
+
 def reset_in_progress_segments(connection: sqlite3.Connection) -> int:
     """Reset interrupted segments to pending.
 

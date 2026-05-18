@@ -22,10 +22,11 @@ from rich.progress import (
 from rich.table import Table
 
 from weaver import __version__
-from weaver.errors import GlossaryConflictError, WeaverError
+from weaver.errors import GlossaryConflictError, SegmentNotFoundError, WeaverError
 from weaver.providers import ProviderStatus
-from weaver.services.export import export_markdown_project
+from weaver.services.export import export_epub_project, export_markdown_project
 from weaver.services.glossary import sync_glossary_tsv_to_database
+from weaver.services.manual_edit import edit_segment
 from weaver.services.project import initialize_project, inspect_project
 from weaver.services.translation import translate_project
 from weaver.storage.db import connect_database, transaction
@@ -182,6 +183,25 @@ def translate_project_command(
         typer.echo(f"Tokens: input {summary.input_tokens} | output {summary.output_tokens}")
 
 
+@app.command("edit")
+def edit_segment_command(project_toml: Path, segment_id: str) -> None:
+    """Override one segment's translation through $EDITOR."""
+
+    try:
+        result = edit_segment(
+            project_toml,
+            segment_id,
+            editor=os.environ.get("EDITOR"),
+        )
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    except WeaverError as exc:
+        _exit_with_error(exc)
+
+    typer.echo(f"Saved. Segment {result.segment_id} marked manual.")
+
+
 @app.command("export")
 def export_project_command(
     project_toml: Path,
@@ -198,23 +218,41 @@ def export_project_command(
 ) -> None:
     """Export review or reader artifacts."""
 
-    if mode != "markdown":
+    if mode not in {"markdown", "epub"}:
         typer.echo(
-            "Unsupported export mode. Likely cause: only markdown export is implemented. "
-            "Next command: run `weaver export <project.toml> --mode markdown`.",
+            "Unsupported export mode. Likely cause: only markdown and epub modes are implemented. "
+            "Next command: run `weaver export <project.toml> --mode markdown` "
+            "or `--mode epub`.",
             err=True,
         )
         raise typer.Exit(code=1)
-    try:
-        result = export_markdown_project(
-            project_toml,
-            translation_only=translation_only,
+    if mode == "epub" and translation_only:
+        typer.echo(
+            "--translation-only is only valid with --mode markdown. "
+            "Likely cause: flag combination is not supported for EPUB output. "
+            "Next command: rerun without --translation-only.",
+            err=True,
         )
+        raise typer.Exit(code=1)
+
+    try:
+        if mode == "markdown":
+            markdown_result = export_markdown_project(
+                project_toml,
+                translation_only=translation_only,
+            )
+            typer.echo(f"Wrote {markdown_result.index_path}")
+            typer.echo(f"Chapters: {len(markdown_result.chapter_paths)}")
+            return
+        epub_result = export_epub_project(project_toml)
     except WeaverError as exc:
         _exit_with_error(exc)
 
-    typer.echo(f"Wrote {result.index_path}")
-    typer.echo(f"Chapters: {len(result.chapter_paths)}")
+    typer.echo(f"Wrote {epub_result.output_path}")
+    typer.echo(
+        f"Translated blocks: {epub_result.translated_blocks} | "
+        f"Fallback blocks: {epub_result.fallback_blocks}"
+    )
 
 
 @glossary_app.command("review")
@@ -379,7 +417,12 @@ def _format_healthcheck(status: ProviderStatus) -> str:
 
 def _exit_with_error(error: WeaverError) -> NoReturn:
     typer.echo(str(error), err=True)
-    code = 6 if isinstance(error, GlossaryConflictError) else 1
+    if isinstance(error, GlossaryConflictError):
+        code = 6
+    elif isinstance(error, SegmentNotFoundError):
+        code = 5
+    else:
+        code = 1
     raise typer.Exit(code=code) from error
 
 

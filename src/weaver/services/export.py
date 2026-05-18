@@ -12,6 +12,7 @@ from pathlib import Path
 from weaver.core.ir import BlockIR, ChapterIR
 from weaver.errors import ConfigError
 from weaver.readers.epub import read_epub
+from weaver.renderers.epub import EpubRenderResult, render_translated_epub
 from weaver.storage.db import connect_readonly_database
 
 
@@ -68,6 +69,38 @@ def export_markdown_project(
         output_dir=output_dir,
         index_path=index_path,
         chapter_paths=tuple(chapter_paths),
+    )
+
+
+def export_epub_project(project_toml: Path, *, cwd: Path | None = None) -> EpubRenderResult:
+    """Export a Weaver project to a translated EPUB.
+
+    Args:
+        project_toml: Weaver project file.
+        cwd: Working directory used to resolve relative project paths.
+
+    Returns:
+        EpubRenderResult with output path and block counters.
+    """
+
+    base_dir = cwd or Path.cwd()
+    data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+    project = data["project"]
+    db_path = _resolve_path(str(project["database_path"]), base_dir, project_toml.parent)
+    source_path = _resolve_path(str(project["source_file"]), base_dir, project_toml.parent)
+    output_root = _resolve_path(str(project["output_dir"]), base_dir, project_toml.parent)
+    output_dir = output_root / "epub"
+    output_path = output_dir / f"{source_path.stem}.translated.epub"
+
+    document = read_epub(source_path)
+    with closing(connect_readonly_database(db_path)) as connection:
+        translations = _load_publishable_translations(connection)
+
+    return render_translated_epub(
+        source_epub_path=source_path,
+        output_path=output_path,
+        document=document,
+        translations_by_segment_id=translations,
     )
 
 
@@ -148,6 +181,34 @@ def _blockquote(text: str) -> str:
 def _clean_heading(text: str) -> str:
     cleaned = re.sub(r"\s+", " ", text).strip()
     return cleaned.replace("#", "").strip() or "Untitled"
+
+
+def _load_publishable_translations(connection: sqlite3.Connection) -> dict[str, str]:
+    """Return latest translation text per segment when status allows publishing.
+
+    Only segments whose status is `translated` or `manual` and whose latest
+    translation matches the current source_hash contribute text. All other
+    segments fall back to source text in the rendered EPUB.
+    """
+
+    rows = connection.execute(
+        """
+        WITH latest AS (
+          SELECT segment_id, MAX(attempt) AS attempt
+          FROM translations
+          GROUP BY segment_id
+        )
+        SELECT s.id, t.text
+        FROM segments s
+        JOIN latest l ON l.segment_id = s.id
+        JOIN translations t
+          ON t.segment_id = l.segment_id
+         AND t.attempt = l.attempt
+         AND t.source_hash = s.source_hash
+        WHERE s.status IN ('translated', 'manual')
+        """
+    ).fetchall()
+    return {str(row["id"]): str(row["text"]) for row in rows}
 
 
 def _load_segment_states(connection: sqlite3.Connection) -> dict[str, SegmentExportState]:

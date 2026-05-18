@@ -76,6 +76,32 @@ def record_translation(
     return attempt
 
 
+def get_latest_translation_text(connection: sqlite3.Connection, *, segment_id: str) -> str | None:
+    """Return the most recent translation text for one segment.
+
+    Args:
+        connection: Open SQLite connection.
+        segment_id: Segment id to look up.
+
+    Returns:
+        Latest translation text, or None if no translation has been recorded yet.
+    """
+
+    row = connection.execute(
+        """
+        SELECT text
+        FROM translations
+        WHERE segment_id = ?
+        ORDER BY attempt DESC
+        LIMIT 1
+        """,
+        (segment_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return str(row["text"])
+
+
 def list_previous_translated_segments(
     connection: sqlite3.Connection,
     *,
