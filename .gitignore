@@ -14,10 +14,6 @@ build/
 venv/
 env/
 
-#Folder
-docs/*.md
-CLAUDE.md
-
 # Tooling caches
 .pytest_cache/
 .ruff_cache/
@@ -42,3 +38,4 @@ Thumbs.db
 
 # Weaver runtime
 .weaver/
+.tmp_*/

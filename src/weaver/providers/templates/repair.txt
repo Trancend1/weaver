@@ -1,0 +1,8 @@
+The previous response was not valid JSON. Respond ONLY with a valid JSON object matching this schema:
+{
+  "translation": "<your translation here>",
+  "notes": [],
+  "uncertain_terms": []
+}
+
+No markdown. No explanation. JSON only.

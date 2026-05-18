@@ -3,14 +3,26 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import NoReturn
 
 import typer
 from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    Progress,
+    TaskID,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 from rich.table import Table
 
 from weaver import __version__
 from weaver.errors import WeaverError
+from weaver.providers import ProviderStatus
 from weaver.services.project import initialize_project, inspect_project
+from weaver.services.translation import translate_project
+from weaver.storage.segments import SegmentRecord
 
 app = typer.Typer(
     name="weaver",
@@ -59,11 +71,19 @@ def init_project(input_epub: Path) -> None:
 
 
 @app.command("inspect")
-def inspect_project_command(project_toml: Path) -> None:
+def inspect_project_command(
+    project_toml: Path,
+    healthcheck: bool = typer.Option(
+        False,
+        "--healthcheck",
+        "-H",
+        help="Probe the configured provider for availability (makes a network call).",
+    ),
+) -> None:
     """Show project status."""
 
     try:
-        summary = inspect_project(project_toml)
+        summary = inspect_project(project_toml, run_healthcheck=healthcheck)
     except WeaverError as exc:
         _exit_with_error(exc)
 
@@ -81,10 +101,74 @@ def inspect_project_command(project_toml: Path) -> None:
     table.add_row("Glossary Candidates", str(summary.glossary_candidate_count))
     table.add_row("Glossary Terms", str(summary.glossary_term_count))
     table.add_row("Output", summary.output_dir)
+    if summary.provider_status is not None:
+        table.add_row("Healthcheck", _format_healthcheck(summary.provider_status))
     console.print(table)
 
 
-def _exit_with_error(error: WeaverError) -> None:
+@app.command("translate")
+def translate_project_command(
+    project_toml: Path,
+    retry_failed: bool = typer.Option(
+        False,
+        "--retry-failed",
+        "-r",
+        help="Retry failed segments instead of translating pending segments.",
+    ),
+) -> None:
+    """Translate project segments through the configured provider."""
+
+    try:
+        with Progress(
+            TextColumn("Translating"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=console,
+            transient=True,
+        ) as progress:
+            task_id: TaskID | None = None
+
+            def advance(
+                current: int, total: int, segment: SegmentRecord, _translated: bool
+            ) -> None:
+                nonlocal task_id
+                if task_id is None:
+                    task_id = progress.add_task("segments", total=total)
+                progress.update(
+                    task_id,
+                    completed=current,
+                    description=f"Segment {segment.id}",
+                )
+
+            summary = translate_project(
+                project_toml,
+                retry_failed=retry_failed,
+                progress_callback=advance,
+            )
+    except WeaverError as exc:
+        _exit_with_error(exc)
+
+    typer.echo(f"Selected: {summary.selected_segments}")
+    typer.echo(f"Translated: {summary.translated_segments}")
+    typer.echo(f"Failed: {summary.failed_segments}")
+    typer.echo(f"Pending: {summary.pending_segments}")
+    typer.echo(f"Stale: {summary.stale_segments}")
+    if summary.input_tokens or summary.output_tokens:
+        typer.echo(f"Tokens: input {summary.input_tokens} | output {summary.output_tokens}")
+
+
+def _format_healthcheck(status: ProviderStatus) -> str:
+    state = "healthy" if status.healthy else "unhealthy"
+    parts = [state]
+    if status.latency_ms is not None:
+        parts.append(f"{status.latency_ms} ms")
+    if status.message:
+        parts.append(status.message)
+    return " — ".join(parts)
+
+
+def _exit_with_error(error: WeaverError) -> NoReturn:
     typer.echo(str(error), err=True)
     raise typer.Exit(code=1) from error
 

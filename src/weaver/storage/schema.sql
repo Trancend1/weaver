@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS translations (
   model TEXT NOT NULL,
   created_at TEXT NOT NULL,
   raw_response TEXT,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
   PRIMARY KEY (segment_id, attempt)
 );
 

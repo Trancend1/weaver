@@ -179,6 +179,34 @@ def list_pending_segments(
     return [_segment_from_row(row) for row in rows]
 
 
+def list_segments_for_translation(
+    connection: sqlite3.Connection, *, project_id: int, retry_failed: bool = False
+) -> list[SegmentRecord]:
+    """List segments selected by `weaver translate`.
+
+    Args:
+        connection: Open SQLite connection.
+        project_id: Project row id.
+        retry_failed: When true, select failed segments instead of pending ones.
+
+    Returns:
+        Translation targets ordered by chapter spine order and block order.
+    """
+
+    status = "failed" if retry_failed else "pending"
+    rows = connection.execute(
+        """
+        SELECT s.id, s.chapter_id, s.block_order, s.kind, s.source_text, s.source_hash, s.status
+        FROM segments s
+        JOIN chapters c ON c.id = s.chapter_id
+        WHERE c.project_id = ? AND s.status = ?
+        ORDER BY c.spine_order, s.block_order
+        """,
+        (project_id, status),
+    ).fetchall()
+    return [_segment_from_row(row) for row in rows]
+
+
 def reset_in_progress_segments(connection: sqlite3.Connection) -> int:
     """Reset interrupted segments to pending.
 

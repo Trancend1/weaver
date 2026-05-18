@@ -29,6 +29,10 @@ dependencies = [
     "rich>=13",
     "pydantic>=2",
     "ebooklib>=0.20",
+    "jinja2>=3.1",
+    "httpx>=0.27",
+    "openai>=1.40",
+    "google-generativeai>=0.7",
 ]
 
 [project.optional-dependencies]

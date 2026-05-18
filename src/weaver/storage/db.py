@@ -8,8 +8,9 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from weaver.errors import DatabaseError
+from weaver.storage.migrations import apply_migrations
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 
@@ -30,6 +31,7 @@ def initialize_database(path: Path) -> sqlite3.Connection:
     connection = _open_database(path)
     try:
         _apply_schema(connection)
+        apply_migrations(connection, target_version=SCHEMA_VERSION)
         reset_interrupted_segments(connection)
         connection.commit()
     except sqlite3.Error as exc:
@@ -58,6 +60,7 @@ def connect_database(path: Path) -> sqlite3.Connection:
 
     connection = _open_database(path)
     try:
+        apply_migrations(connection, target_version=SCHEMA_VERSION)
         reset_interrupted_segments(connection)
         connection.commit()
     except sqlite3.Error as exc:

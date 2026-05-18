@@ -15,6 +15,8 @@ def record_translation(
     provider: str,
     model: str,
     raw_response: str | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
 ) -> int:
     """Store a translation attempt for one segment.
 
@@ -26,6 +28,8 @@ def record_translation(
         provider: Provider name.
         model: Provider model name.
         raw_response: Optional provider raw response.
+        input_tokens: Provider-reported input token count, if available.
+        output_tokens: Provider-reported output token count, if available.
 
     Returns:
         Attempt number assigned to the translation.
@@ -50,9 +54,11 @@ def record_translation(
           provider,
           model,
           created_at,
-          raw_response
+          raw_response,
+          input_tokens,
+          output_tokens
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             segment_id,
@@ -63,6 +69,50 @@ def record_translation(
             model,
             datetime.now(UTC).isoformat(),
             raw_response,
+            input_tokens,
+            output_tokens,
         ),
     )
     return attempt
+
+
+def list_previous_translated_segments(
+    connection: sqlite3.Connection,
+    *,
+    chapter_id: str,
+    before_block_order: int,
+    limit: int = 5,
+) -> list[tuple[str, str]]:
+    """Return latest translated source/target pairs before one segment.
+
+    Args:
+        connection: Open SQLite connection.
+        chapter_id: Chapter to search within.
+        before_block_order: Exclude segments at or after this block order.
+        limit: Maximum number of previous translated/manual segments.
+
+    Returns:
+        `(source_text, translated_text)` pairs ordered oldest-first.
+    """
+
+    rows = connection.execute(
+        """
+        WITH latest AS (
+          SELECT segment_id, MAX(attempt) AS attempt
+          FROM translations
+          GROUP BY segment_id
+        )
+        SELECT s.source_text, t.text
+        FROM segments s
+        JOIN latest l ON l.segment_id = s.id
+        JOIN translations t ON t.segment_id = l.segment_id AND t.attempt = l.attempt
+        WHERE s.chapter_id = ?
+          AND s.block_order < ?
+          AND s.status IN ('translated', 'manual')
+          AND t.source_hash = s.source_hash
+        ORDER BY s.block_order DESC
+        LIMIT ?
+        """,
+        (chapter_id, before_block_order, limit),
+    ).fetchall()
+    return [(str(row["source_text"]), str(row["text"])) for row in reversed(rows)]

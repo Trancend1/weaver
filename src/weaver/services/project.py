@@ -6,9 +6,13 @@ import os
 import sqlite3
 import tempfile
 import tomllib
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+from weaver.errors import ProviderError, WeaverError
+from weaver.providers import ProviderStatus, build_provider
 from weaver.readers.epub import read_epub
 from weaver.storage.db import (
     SCHEMA_VERSION,
@@ -48,6 +52,7 @@ class InspectSummary:
     glossary_candidate_count: int
     glossary_term_count: int
     output_dir: str
+    provider_status: ProviderStatus | None = None
 
 
 def initialize_project(source_epub: Path, *, cwd: Path | None = None) -> InitResult:
@@ -75,15 +80,17 @@ def initialize_project(source_epub: Path, *, cwd: Path | None = None) -> InitRes
     chapter_count = len(document.chapters)
     segment_count = sum(len(chapter.blocks) for chapter in document.chapters)
 
-    with initialize_database(db_path) as connection, transaction(connection):
-        project_id = create_project(
-            connection,
-            name=project_name,
-            source_path=str(source_epub),
-            source_lang=document.metadata.language,
-            target_lang="en",
-        )
-        sync_document_segments(connection, project_id=project_id, document=document)
+    with closing(initialize_database(db_path)) as connection:
+        with transaction(connection):
+            project_id = create_project(
+                connection,
+                name=project_name,
+                source_path=str(source_epub),
+                source_lang=document.metadata.language,
+                target_lang="en",
+            )
+            sync_document_segments(connection, project_id=project_id, document=document)
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     _write_project_toml(
         project_toml,
@@ -102,15 +109,22 @@ def initialize_project(source_epub: Path, *, cwd: Path | None = None) -> InitRes
     )
 
 
-def inspect_project(project_toml: Path, *, cwd: Path | None = None) -> InspectSummary:
+def inspect_project(
+    project_toml: Path,
+    *,
+    cwd: Path | None = None,
+    run_healthcheck: bool = False,
+) -> InspectSummary:
     """Read project status without mutating the database.
 
     Args:
         project_toml: Path to a Weaver project.toml file.
         cwd: Working directory used to resolve generated project paths.
+        run_healthcheck: When true, instantiate the configured provider and
+            call `healthcheck()`. Plain inspect (the default) stays offline.
 
     Returns:
-        InspectSummary with project counts.
+        InspectSummary with project counts and optional provider status.
     """
 
     base_dir = cwd or Path.cwd()
@@ -119,8 +133,10 @@ def inspect_project(project_toml: Path, *, cwd: Path | None = None) -> InspectSu
     provider = data["provider"]
     db_path = _resolve_path(str(project["database_path"]), base_dir, project_toml.parent)
 
-    with connect_readonly_database(db_path) as connection:
+    with closing(connect_readonly_database(db_path)) as connection:
         counts = _read_counts(connection)
+
+    status = _run_provider_healthcheck(provider) if run_healthcheck else None
 
     return InspectSummary(
         project_name=str(project["name"]),
@@ -136,7 +152,33 @@ def inspect_project(project_toml: Path, *, cwd: Path | None = None) -> InspectSu
         glossary_candidate_count=counts["glossary_candidates"],
         glossary_term_count=counts["glossary_terms"],
         output_dir=str(project["output_dir"]),
+        provider_status=status,
     )
+
+
+def _run_provider_healthcheck(provider_config: dict[str, Any]) -> ProviderStatus:
+    provider_type = str(provider_config.get("type", ""))
+    model = str(provider_config.get("model", ""))
+    try:
+        provider = build_provider(provider_config)
+    except WeaverError as exc:
+        return ProviderStatus(
+            healthy=False,
+            provider_name=provider_type,
+            model=model,
+            message=str(exc),
+            latency_ms=None,
+        )
+    try:
+        return provider.healthcheck()
+    except ProviderError as exc:
+        return ProviderStatus(
+            healthy=False,
+            provider_name=provider_type,
+            model=model,
+            message=str(exc),
+            latency_ms=None,
+        )
 
 
 def _write_project_toml(

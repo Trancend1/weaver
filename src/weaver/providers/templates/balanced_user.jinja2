@@ -1,0 +1,23 @@
+<policy>
+honorifics: {{ honorific_policy }}
+</policy>
+{% if glossary_terms %}
+<glossary>
+{% for term in glossary_terms -%}
+{{ term.source }}	{{ term.target }}	{{ term.category or "" }}	{{ term.notes or "" }}
+{% endfor -%}
+</glossary>
+{% endif %}
+{% if previous_segments %}
+<context>
+{% for source, translation in previous_segments -%}
+[PREV-{{ loop.revindex }}] {{ source }}
+→ {{ translation }}
+{% if not loop.last %}
+{% endif -%}
+{% endfor %}
+</context>
+{% endif %}
+<source>
+{{ source_text }}
+</source>
