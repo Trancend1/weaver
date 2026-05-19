@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import sys
-import tomllib
 from contextlib import closing
 from pathlib import Path
 from typing import NoReturn
@@ -22,12 +21,26 @@ from rich.progress import (
 from rich.table import Table
 
 from weaver import __version__
-from weaver.errors import GlossaryConflictError, SegmentNotFoundError, WeaverError
+from weaver.core.config import load_project_config
+from weaver.errors import (
+    ConfigError,
+    EpubReadError,
+    EpubWriteError,
+    GlossaryConflictError,
+    ProviderUnavailable,
+    SegmentNotFoundError,
+    WeaverError,
+)
 from weaver.providers import ProviderStatus
 from weaver.services.export import export_epub_project, export_markdown_project
 from weaver.services.glossary import sync_glossary_tsv_to_database
 from weaver.services.manual_edit import edit_segment
 from weaver.services.project import initialize_project, inspect_project
+from weaver.services.qa import (
+    ValidationReport,
+    format_report_json,
+    validate_project,
+)
 from weaver.services.translation import translate_project
 from weaver.storage.db import connect_database, transaction
 from weaver.storage.glossary import (
@@ -208,7 +221,7 @@ def export_project_command(
     mode: str = typer.Option(
         "markdown",
         "--mode",
-        help="Export mode. MVP-0 currently supports markdown.",
+        help="Export mode: markdown or epub.",
     ),
     translation_only: bool = typer.Option(
         False,
@@ -252,6 +265,60 @@ def export_project_command(
     typer.echo(
         f"Translated blocks: {epub_result.translated_blocks} | "
         f"Fallback blocks: {epub_result.fallback_blocks}"
+    )
+
+
+@app.command("validate")
+def validate_project_command(
+    project_toml: Path,
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help="Emit findings as JSON.",
+    ),
+) -> None:
+    """Run deterministic QA checks against a project."""
+
+    try:
+        report = validate_project(project_toml)
+    except WeaverError as exc:
+        _exit_with_error(exc)
+
+    if json_output:
+        typer.echo(format_report_json(report))
+    else:
+        _render_validation_report(report)
+
+    if report.counts.get("critical", 0) > 0:
+        raise typer.Exit(code=1)
+
+
+def _render_validation_report(report: ValidationReport) -> None:
+    if not report.findings:
+        typer.echo(f"No QA warnings. Segments scanned: {report.total_segments}.")
+        return
+
+    table = Table(title=f"Validate: {report.project_name}")
+    table.add_column("Segment")
+    table.add_column("Check")
+    table.add_column("Severity")
+    table.add_column("Message")
+    for finding in report.findings:
+        table.add_row(
+            finding.segment_id,
+            finding.check_name,
+            finding.severity,
+            finding.message,
+        )
+    with console.capture() as capture:
+        console.print(table)
+    _safe_echo(capture.get())
+    typer.echo(
+        f"Total: {report.total_segments} | "
+        f"critical: {report.counts.get('critical', 0)} | "
+        f"warning: {report.counts.get('warning', 0)} | "
+        f"info: {report.counts.get('info', 0)}"
     )
 
 
@@ -316,7 +383,10 @@ def _run_glossary_review(project_toml: Path) -> None:
                 typer.echo("No pending glossary candidates.")
                 return
 
-            _print_candidate(candidate)
+            examples = _load_candidate_examples(
+                connection, project_id=project.id, source=candidate.source
+            )
+            _print_candidate(candidate, examples=examples)
             action = (
                 typer.prompt(
                     "[a]pprove [e]dit [r]eject [s]kip [u]ndo [q]uit ?",
@@ -365,7 +435,7 @@ def _run_glossary_review(project_toml: Path) -> None:
                     undo_snapshot = None
 
 
-def _print_candidate(candidate: GlossaryCandidateRecord) -> None:
+def _print_candidate(candidate: GlossaryCandidateRecord, *, examples: list[str]) -> None:
     typer.echo("")
     _safe_echo(f"Source: {candidate.source}")
     _safe_echo(f"Candidate target: {candidate.target or candidate.source}")
@@ -373,6 +443,28 @@ def _print_candidate(candidate: GlossaryCandidateRecord) -> None:
     _safe_echo(f"Frequency: {candidate.frequency}")
     if candidate.notes:
         _safe_echo(f"Notes: {candidate.notes}")
+    if examples:
+        typer.echo("Examples:")
+        for sentence in examples:
+            _safe_echo(f"  - {sentence}")
+
+
+def _load_candidate_examples(
+    connection, *, project_id: int, source: str, limit: int = 2
+) -> list[str]:
+    rows = connection.execute(
+        """
+        SELECT s.source_text
+        FROM segments s
+        JOIN chapters c ON c.id = s.chapter_id
+        WHERE c.project_id = ?
+          AND s.source_text LIKE ?
+        ORDER BY c.spine_order, s.block_order
+        LIMIT ?
+        """,
+        (project_id, f"%{source}%", limit),
+    ).fetchall()
+    return [str(row["source_text"]) for row in rows]
 
 
 def _safe_echo(text: str) -> None:
@@ -382,7 +474,7 @@ def _safe_echo(text: str) -> None:
 
 
 def _database_path_from_project(project_toml: Path) -> Path:
-    data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+    data = load_project_config(project_toml)
     path = Path(str(data["project"]["database_path"]))
     if path.is_absolute():
         return path
@@ -395,8 +487,6 @@ def _database_path_from_project(project_toml: Path) -> Path:
 def _load_single_project(connection):
     row = connection.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
     if row is None:
-        from weaver.errors import ConfigError
-
         raise ConfigError(
             "Project database has no project row. "
             "Likely cause: database was not initialized by `weaver init`. "
@@ -417,10 +507,16 @@ def _format_healthcheck(status: ProviderStatus) -> str:
 
 def _exit_with_error(error: WeaverError) -> NoReturn:
     typer.echo(str(error), err=True)
-    if isinstance(error, GlossaryConflictError):
-        code = 6
+    if isinstance(error, ProviderUnavailable):
+        code = 3
+    elif isinstance(error, (EpubReadError, EpubWriteError)):
+        code = 4
     elif isinstance(error, SegmentNotFoundError):
         code = 5
+    elif isinstance(error, GlossaryConflictError):
+        code = 6
+    elif isinstance(error, ConfigError):
+        code = 7
     else:
         code = 1
     raise typer.Exit(code=code) from error
