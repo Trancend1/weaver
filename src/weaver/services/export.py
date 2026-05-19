@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import re
 import sqlite3
-import tomllib
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
+from weaver.core.config import load_project_config
 from weaver.core.ir import BlockIR, ChapterIR
 from weaver.errors import ConfigError
 from weaver.readers.epub import read_epub
@@ -39,7 +39,7 @@ def export_markdown_project(
     """Export a Weaver project to per-chapter Markdown review files."""
 
     base_dir = cwd or Path.cwd()
-    data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+    data = load_project_config(project_toml)
     project = data["project"]
     db_path = _resolve_path(str(project["database_path"]), base_dir, project_toml.parent)
     source_path = _resolve_path(str(project["source_file"]), base_dir, project_toml.parent)
@@ -84,7 +84,7 @@ def export_epub_project(project_toml: Path, *, cwd: Path | None = None) -> EpubR
     """
 
     base_dir = cwd or Path.cwd()
-    data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+    data = load_project_config(project_toml)
     project = data["project"]
     db_path = _resolve_path(str(project["database_path"]), base_dir, project_toml.parent)
     source_path = _resolve_path(str(project["source_file"]), base_dir, project_toml.parent)

@@ -6,13 +6,13 @@ import csv
 import re
 import sqlite3
 import subprocess
-import tomllib
 from collections import Counter
 from collections.abc import Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
+from weaver.core.config import load_project_config
 from weaver.core.ir import DocumentIR
 from weaver.errors import ConfigError, GlossaryConflictError
 from weaver.storage.db import connect_database, transaction
@@ -189,7 +189,7 @@ def sync_glossary_tsv_to_database(project_toml: Path, *, editor: str | None) -> 
         )
 
     base_dir = Path.cwd()
-    data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+    data = load_project_config(project_toml)
     project_config = data["project"]
     glossary_config = data["glossary"]
     db_path = _resolve_path(str(project_config["database_path"]), base_dir, project_toml.parent)

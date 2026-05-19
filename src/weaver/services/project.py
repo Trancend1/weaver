@@ -5,12 +5,12 @@ from __future__ import annotations
 import os
 import sqlite3
 import tempfile
-import tomllib
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from weaver.core.config import load_project_config
 from weaver.errors import ProviderError, WeaverError
 from weaver.providers import ProviderStatus, build_provider
 from weaver.readers.epub import read_epub
@@ -140,7 +140,7 @@ def inspect_project(
     """
 
     base_dir = cwd or Path.cwd()
-    data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+    data = load_project_config(project_toml)
     project = data["project"]
     provider = data["provider"]
     db_path = _resolve_path(str(project["database_path"]), base_dir, project_toml.parent)

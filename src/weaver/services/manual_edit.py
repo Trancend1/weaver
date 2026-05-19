@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import subprocess
 import tempfile
-import tomllib
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
+from weaver.core.config import load_project_config
 from weaver.errors import ConfigError, SegmentNotFoundError
 from weaver.storage.db import connect_database, transaction
 from weaver.storage.projects import get_project
@@ -158,7 +158,7 @@ def _open_editor_with_text(editor: str, initial_text: str) -> str:
 
 
 def _resolve_database_path(project_toml: Path, cwd: Path) -> Path:
-    data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+    data = load_project_config(project_toml)
     project_config = data["project"]
     raw_path = str(project_config["database_path"])
     path = Path(raw_path)

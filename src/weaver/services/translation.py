@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import sqlite3
-import tomllib
 from collections.abc import Callable, Iterable, Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
+from weaver.core.config import load_project_config
 from weaver.core.ir import BlockIR, DocumentIR
-from weaver.errors import ConfigError, ProviderError
+from weaver.errors import ConfigError, ProviderError, ProviderUnavailable
 from weaver.providers import LLMProvider, build_provider
 from weaver.providers.types import GlossaryTerm, TranslationContext, TranslationRequest
 from weaver.readers.epub import read_epub
@@ -149,7 +149,7 @@ def translate_project(
     """
 
     base_dir = cwd or Path.cwd()
-    data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+    data = load_project_config(project_toml)
     project_config = data["project"]
     provider_config = data["provider"]
     translation_config = data["translation"]
@@ -159,6 +159,15 @@ def translate_project(
     document = read_epub(source_path)
     block_by_id = _index_blocks(document)
     active_provider = provider or build_provider(provider_config)
+    status = active_provider.healthcheck()
+    if not status.healthy:
+        detail = status.message or "no detail returned"
+        raise ProviderUnavailable(
+            f"Provider {active_provider.name} is unavailable: {detail}. "
+            "Likely cause: API key missing/invalid, network unreachable, or "
+            "local Ollama not running. "
+            "Next command: run `weaver inspect --healthcheck <project.toml>`."
+        )
     provider_model = str(provider_config["model"])
     honorific_policy = str(translation_config.get("honorifics", "preserve"))
 

@@ -54,6 +54,19 @@ def test_weaver_glossary_review_approves_and_persists_first_candidate(
     assert pending >= 0
 
 
+def test_weaver_glossary_review_shows_example_sentences(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    init = runner.invoke(app, ["init", str(FIXTURE_EPUB)])
+    assert init.exit_code == 0, init.output
+    project_toml = tmp_path / ".weaver" / "aozora_sample" / "project.toml"
+
+    result = runner.invoke(app, ["glossary", "review", str(project_toml)], input="q\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Examples:" in result.output
+
+
 def test_weaver_glossary_review_edit_updates_target_and_notes(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
