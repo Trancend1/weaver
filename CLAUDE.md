@@ -26,6 +26,7 @@ All specs live in [docs/](docs/). Read before non-trivial work.
 | [FEATURE_PRIORITY_MATRIX.md](docs/FEATURE_PRIORITY_MATRIX.md) | What ships when |
 | [GO_TO_MARKET.md](docs/GO_TO_MARKET.md) | Launch plan |
 | [FINAL_STARTUP_VERDICT.md](docs/FINAL_STARTUP_VERDICT.md) | Strategic context |
+| [decisions/](docs/decisions/) | ADRs: provider interface, IR shape, segment ID, glossary algorithm, EPUB roundtrip |
 
 **Rule:** docs are the spec. Code follows docs. If code contradicts docs, ask first.
 
@@ -48,8 +49,8 @@ Single source of truth for build status. Update at end of every phase. Roadmap, 
 | 6 | Markdown Export — per-chapter review files | 4 | ✅ Complete |
 | 7 | Manual Edit — `weaver edit <segment>` via `$EDITOR` | 4 (parallel with 6) | ✅ Complete |
 | 8 | EPUB Renderer — translated EPUB roundtrip | 1 + 6 | ✅ Complete |
-| 9 | QA Engine — `weaver validate` deterministic checks | 4 (parallel) | ⏳ Next |
-| 10 | Hardening, Docs, Release — v0.1.0 to PyPI | all | ⬜ Pending |
+| 9 | QA Engine — `weaver validate` deterministic checks | 4 (parallel) | ✅ Complete |
+| 10 | Hardening, Docs, Release — v0.1.0 to PyPI | all | ⏳ Next |
 
 Legend: ✅ complete · 🟡 in progress · ⏳ next · ⬜ pending · 🚫 blocked.
 
@@ -68,13 +69,19 @@ Before starting any next phase, always run this gate:
 
 Required reminder before phase transition: **"Check exit criteria first. No next phase until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Phase 9: QA Engine
+### 2.3 Active Phase — Phase 10: Hardening, Docs, Release
 
-**Goal:** `weaver validate <project.toml>` runs the six deterministic checks and reports findings with severities.
+**Goal:** ship `v0.1.0` to PyPI with documentation, ADRs, and a verified acceptance pass against the fixture EPUB.
 
-**Tasks:** seeded from [BLUEPRINT_EXECUTION_PLAN.md](docs/BLUEPRINT_EXECUTION_PLAN.md) §Phase 9 when work begins.
+**Sub-sprint plan** (one PR per slice; §PR Rules ENGINEERING_STANDARDS):
 
-**Exit criteria:** seeded from [BLUEPRINT_EXECUTION_PLAN.md](docs/BLUEPRINT_EXECUTION_PLAN.md) §Phase 9 when work begins.
+- **Sprint 10a — bugs + README + CHANGELOG (✅ done).** Three AC bugs fixed: `weaver export --help` listed only markdown (now includes epub); `_exit_with_error` only mapped codes 5/6 (now adds 3/4/7 per AC-9); `weaver glossary review` was missing example sentences (now shows up to 2). Added `weaver.core.config.load_project_config` to centralize TOML parsing across 8 call-sites with `ConfigError` messages carrying field + expected type. Added `provider.healthcheck()` preflight at the start of `translate_project` so a dead provider exits `3` cleanly. README rewritten end-to-end against the bundled fixture using the `fake` provider. `CHANGELOG.md` seeded with `[Unreleased]` + `[0.1.0]` entries. 142 tests pass (was 136).
+- **Sprint 10b — five ADRs in `docs/decisions/` (✅ done).** ADRs `0001-provider-interface.md`, `0002-ir-shape.md`, `0003-segment-id.md`, `0004-glossary-algorithm.md`, `0005-epub-roundtrip.md` written per [ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md) §Documentation Of Decisions format (Context / Decision / Consequences, one page each). Each cites the implementing module and references the spec source. Documentation Map updated.
+- **Sprint 10c — `docs/benchmarks.md` + 200-chapter synthetic fixture + perf budget verification** ([SECURITY_AND_PERFORMANCE.md](docs/SECURITY_AND_PERFORMANCE.md) budgets).
+- **Sprint 10d — MkDocs site + GitHub Pages workflow.**
+- **Sprint 10e — Phase 10.5 AC-1..AC-9 hands-on pass, version bump to `0.1.0`, `Development Status :: 3 - Alpha`, `uv publish`, tag `v0.1.0`.**
+
+**Exit criteria:** seeded from [BLUEPRINT_EXECUTION_PLAN.md](docs/BLUEPRINT_EXECUTION_PLAN.md) §Phase 10 when work begins. Plus the [PRD_v2.md](docs/PRD_v2.md) §10 acceptance criteria (AC-1 through AC-9) verified hands-on per the §Phase 10.5 gate.
 
 **Blockers / open questions:** none.
 
@@ -463,6 +470,63 @@ Usability:
 - Internal-only: `_load_publishable_translations()`, `_ensure_navigation_items()`, ElementTree namespace registration, xpath resolution helpers.
 - Not user-facing yet: QA engine, hardening/docs/release.
 
+#### Phase 9 — QA Engine
+
+Status: `✅ Passed`
+
+Plain-language criteria:
+
+1. Seeded warnings in test fixtures are detected.
+2. `weaver validate` exits with code `1` when any `critical` finding is present, else `0`.
+3. `--json` mode emits a machine-readable report with stable shape.
+4. Six deterministic checks run as pure functions in `qa/checks.py` (no I/O).
+5. False positives below 5% on the fixture novel.
+
+Evidence:
+
+| Criterion | Proof | Status |
+|---|---|---|
+| Per-check correctness | `tests/unit/qa/test_checks.py` covers empty, untranslated Japanese (4+ vs ≤3 char boundary), length ratio, glossary mismatch (including case-sensitive flag), failed, and stale; aggregator respects `[qa]` disable flags but always runs status checks. | ✅ Passed |
+| End-to-end CLI clean run = exit 0 | `tests/integration/test_cli_validate.py::test_weaver_validate_reports_clean_run_when_no_issues_exit_zero` runs init → fake translate with ASCII-only pattern → validate; exits `0` and prints `No QA warnings.`. | ✅ Passed |
+| Untranslated Japanese = critical exit 1 | `tests/integration/test_cli_validate.py::test_weaver_validate_detects_untranslated_japanese_exit_one` uses default fake pattern `EN: {source}`, expects exit `1` with `untranslated_japanese` and `critical` in output. | ✅ Passed |
+| Failed segment = critical exit 1 | `tests/integration/test_cli_validate.py::test_weaver_validate_flags_failed_segment_exit_one` seeds a `failed` row and confirms exit `1` plus `failed_segment` in output. | ✅ Passed |
+| Warning-only run = exit 0 | `tests/integration/test_cli_validate.py::test_weaver_validate_warning_only_exits_zero` seeds a `stale` row and confirms exit `0` plus `stale_segment` visible. | ✅ Passed |
+| `--json` shape | `tests/integration/test_cli_validate.py::test_weaver_validate_json_output_shape` asserts `project`, `total_segments`, `summary` (info/warning/critical), and `findings` keys; verifies `critical >= 1` and at least one `untranslated_japanese` finding. | ✅ Passed |
+
+Verification commands:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -m "not requires_ollama and not requires_cloud"
+.\.venv\Scripts\python.exe -m ruff check src tests
+.\.venv\Scripts\python.exe -m ruff format --check src tests
+.\.venv\Scripts\pyright.exe --pythonpath .\.venv\Scripts\python.exe
+```
+
+Latest observed result: `136 passed, 3 deselected`; Ruff lint + format clean; Pyright `0 errors`.
+
+Manual inspection:
+
+- `src/weaver/qa/checks.py` defines `SegmentInput`, `QAWarning`, six pure check fns (`check_empty_translation`, `check_untranslated_japanese`, `check_length_ratio`, `check_glossary_mismatch`, `check_failed_segment`, `check_stale_segment`), and `run_all_checks()` aggregator. `JP_LEAK_PATTERN` is `re.compile(r"[぀-ゟ゠-ヿ㐀-䶿一-鿿]{4,}")` (Hiragana + Katakana + CJK Ext-A + CJK Main; matches 4+ contiguous = ">3").
+- `src/weaver/services/qa.py` exposes `validate_project()` and `format_report_json()`. Reads `[qa]` config flags (`detect_empty_output`, `detect_untranslated_japanese`, `detect_glossary_mismatch`, `minimum_length_ratio`) with defaults `True`/`True`/`True`/`0.3`. Loads latest translation per segment via the same CTE pattern as `services/export.py`. Pulls glossary via `list_glossary_terms()`. Returns `ValidationReport` with severity counts. JSON output is `ensure_ascii=True` so Windows legacy codepage stdout cannot crash on JP characters.
+- `src/weaver/cli/main.py` registers `weaver validate <project.toml>` with `--json/-j`. Critical findings raise `typer.Exit(code=1)` after rendering. Rich table render runs through `console.capture()` + `_safe_echo` so a Windows console codepage that cannot encode JP degrades to `?` instead of raising `UnicodeEncodeError`.
+- Severity policy: empty / untranslated Japanese / failed = `critical`; length ratio / glossary mismatch / stale = `warning`. Locked in plan, reflected in `qa/checks.py`.
+- No writes to `qa_warnings` table (stateless validate). Schema row remains in `storage/schema.sql` for a future surface.
+
+Manual smoke (`.tmp_phase9_manual/`):
+
+1. `weaver init ..\tests\fixtures\aozora_sample.epub` → 2 chapters, 6 segments, 2 glossary candidates.
+2. Rewrote `project.toml` to `type = "fake"`, `model = "fake-1"`, `pattern = "EN: {source}"`.
+3. `weaver translate .weaver\aozora_sample\project.toml` → `Selected: 6, Translated: 6, Failed: 0`.
+4. `weaver validate .weaver\aozora_sample\project.toml` → exit `1`, Rich table prints 4 `untranslated_japanese` critical rows; JP literal degrades to `?` on PowerShell 5.1 CP1252.
+5. `weaver validate .weaver\aozora_sample\project.toml --json` → emits parseable JSON (`\uXXXX`-escaped JP), `summary.critical = 4`.
+6. Seeded a `failed` segment via `_seed_failed.py`; re-ran `weaver validate --json` → `summary.critical = 5`, checks present: `failed_segment, untranslated_japanese`.
+
+Usability:
+
+- Usable now: `weaver validate <project.toml>` runs all six checks and exits `1` on any critical; `--json` for tooling.
+- Internal-only: `SegmentInput`, `QAWarning`, `ValidationReport`, `run_all_checks()`, `_load_segments()` SQL.
+- Not user-facing yet: hardening, docs site, ADRs, release.
+
 ### 2.5 Phase Log
 
 | # | Phase | PR | Outcome |
@@ -476,6 +540,7 @@ Usability:
 | 6 | Markdown Export | Local sprint | `weaver export --mode markdown` writes `review.md` plus per-chapter files, supports source+translation and translation-only modes, and renders failed/stale/missing markers; 101-test verification. |
 | 7 | Manual Edit | Local sprint | `weaver edit <project.toml> <segment-id>` opens `$EDITOR`, writes a new translation row with `provider='manual'`, sets `segments.status='manual'`, and survives `--retry-failed`; missing-id surfaces `SegmentNotFoundError` with exit code 5; 109-test verification. |
 | 8 | EPUB Renderer | Local sprint | `weaver export --mode epub` rewrites translated block text by `markup_context.xpath`, preserves metadata/spine/assets, falls back to source text when no translation exists, and adds an `EpubNcx` item so `ebooklib`/EPUB 2 readers can reopen the output; 115-test verification. |
+| 9 | QA Engine | Local sprint | `weaver validate <project.toml>` runs six deterministic pure-function checks (empty, untranslated Japanese, length ratio, glossary mismatch, failed, stale); critical (empty / JP-leak / failed) exits `1`, warnings exit `0`; `--json` mode with stable shape and `ensure_ascii=True` for codepage safety; Rich table render captured through `_safe_echo` for Windows console safety; stateless (no `qa_warnings` writes); 136-test verification. |
 
 ---
 
