@@ -9,7 +9,7 @@ Translations persist across crashes, days-long pauses, and source-text edits. Th
 
 ## Decision
 
-Two separate values per segment, computed in [src/weaver/core/segment.py](../../src/weaver/core/segment.py):
+Two separate values per segment, computed in [src/weaver/core/segment.py](https://github.com/Trancend1/weaver/blob/main/src/weaver/core/segment.py):
 
 ```
 segment_id  = blake2b(chapter_href || 0x1f || dom_path || 0x1f || paragraph_index, digest_size=8).hex

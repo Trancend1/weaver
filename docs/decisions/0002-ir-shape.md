@@ -9,7 +9,7 @@ Source readers (EPUB today, plausibly HTML/PDF later) and the translation orches
 
 ## Decision
 
-Three immutable dataclasses in [src/weaver/core/ir.py](../../src/weaver/core/ir.py), all `@dataclass(frozen=True)`:
+Three immutable dataclasses in [src/weaver/core/ir.py](https://github.com/Trancend1/weaver/blob/main/src/weaver/core/ir.py), all `@dataclass(frozen=True)`:
 
 - `DocumentIR(metadata: DocumentMetadata, assets: list[AssetIR], chapters: list[ChapterIR])` — top-level format-neutral handoff.
 - `ChapterIR(id, title, href, order, blocks: list[BlockIR])` — spine-ordered grouping.

@@ -106,6 +106,7 @@ def render_translated_epub(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     _ensure_navigation_items(book)
+    _ensure_toc_entries(book, document=document, items_by_href=items_by_href)
     try:
         epub.write_epub(str(output_path), book)
     except (OSError, EpubException) as exc:
@@ -133,6 +134,31 @@ def _ensure_navigation_items(book: EpubBook) -> None:
     if any(isinstance(item, EpubNcx) for item in book.get_items()):
         return
     book.add_item(EpubNcx(uid="ncx", file_name="toc.ncx"))
+
+
+def _ensure_toc_entries(
+    book: EpubBook,
+    *,
+    document: DocumentIR,
+    items_by_href: dict[str, EpubHtml],
+) -> None:
+    """Ensure ebooklib can serialize all TOC entries.
+
+    Some EPUBs reopen nav entries as `Link` objects with `uid=None`. ebooklib
+    then crashes while writing NCX. Rebuilding from the spine-backed document
+    chapters preserves readable navigation and keeps export deterministic.
+    """
+
+    if book.toc and all(getattr(item, "uid", None) for item in book.toc):
+        return
+
+    toc_items = [
+        item
+        for chapter in document.chapters
+        if (item := items_by_href.get(chapter.href)) is not None
+    ]
+    if toc_items:
+        book.toc = toc_items
 
 
 def _group_blocks_by_href(document: DocumentIR) -> dict[str, list[BlockIR]]:

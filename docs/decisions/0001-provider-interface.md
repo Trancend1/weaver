@@ -9,7 +9,7 @@ Weaver must call multiple LLM backends (DeepSeek, Gemini, Ollama, and a determin
 
 ## Decision
 
-Define a single abstract base class `LLMProvider` in [src/weaver/providers/base.py](../../src/weaver/providers/base.py) with two methods:
+Define a single abstract base class `LLMProvider` in [src/weaver/providers/base.py](https://github.com/Trancend1/weaver/blob/main/src/weaver/providers/base.py) with two methods:
 
 - `translate(request: TranslationRequest) -> TranslationResponse` — synchronous, may raise any subclass of `weaver.errors.ProviderError`.
 - `healthcheck() -> ProviderStatus` — must not raise; failures are reported in `ProviderStatus(healthy=False, message=...)`.

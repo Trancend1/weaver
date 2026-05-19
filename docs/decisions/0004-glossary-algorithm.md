@@ -9,7 +9,7 @@ A long novel uses character, place, skill, and world-term names hundreds of time
 
 ## Decision
 
-Implemented in [src/weaver/services/glossary.py](../../src/weaver/services/glossary.py). Per project, at `weaver init` time:
+Implemented in [src/weaver/services/glossary.py](https://github.com/Trancend1/weaver/blob/main/src/weaver/services/glossary.py). Per project, at `weaver init` time:
 
 1. **Tokenize.** Optional `fugashi` proper-noun pass when MeCab is available; deterministic regex fallback otherwise. Regex covers katakana runs (≥ 2 chars, optional `たち`), honorific patterns (`Xさん` / `Xちゃん` / `X様`), and CJK runs (2–8 chars). If no candidates surface, a single-term fallback drawn from the document title prevents an empty TSV.
 2. **Filter.** Keep terms with frequency ≥ 2 across the document **or** present in any chapter title.

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "weaver"
-version = "0.0.1"
+version = "0.1.0"
 description = "Offline-capable, glossary-aware JP-EN novel translation workbench."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["translation", "epub", "japanese", "cli", "llm"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
@@ -40,15 +40,16 @@ dev = [
     "pytest>=8",
     "ruff>=0.6",
     "pyright>=1.1",
+    "mkdocs>=1.6",
 ]
 
 [project.scripts]
 weaver = "weaver.cli.main:app"
 
 [project.urls]
-Homepage = "https://github.com/Trancend1/weaver-translate"
-Repository = "https://github.com/Trancend1/weaver-translate"
-Issues = "https://github.com/Trancend1/weaver-translate/issues"
+Homepage = "https://github.com/Trancend1/weaver"
+Repository = "https://github.com/Trancend1/weaver"
+Issues = "https://github.com/Trancend1/weaver/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/weaver"]

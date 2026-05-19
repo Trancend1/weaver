@@ -9,7 +9,7 @@ Users want a translated EPUB out, not a Markdown dump. The source is EPUB; the o
 
 ## Decision
 
-Implemented in [src/weaver/renderers/epub.py](../../src/weaver/renderers/epub.py).
+Implemented in [src/weaver/renderers/epub.py](https://github.com/Trancend1/weaver/blob/main/src/weaver/renderers/epub.py).
 
 1. Load the source EPUB with `ebooklib.epub.read_epub`. Keep the resulting `EpubBook` as the carrier — metadata, spine, manifest, and asset items all flow through it untouched.
 2. Group `BlockIR` by chapter `href`.

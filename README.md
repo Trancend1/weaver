@@ -4,7 +4,7 @@
 
 A command-line tool for amateur fan-translators working on Japanese light novels and web novels. Weaver turns a Japanese EPUB into a translated EPUB plus a Markdown review file, with glossary consistency, resume safety, and deterministic QA across long projects.
 
-**Status:** v0.1.0 release candidate. Full MVP-0 command set is implemented; PyPI tagging happens after the acceptance pass.
+**Status:** v0.1.0 alpha. Full MVP-0 command set is implemented.
 
 ## Requirements
 
@@ -15,8 +15,8 @@ A command-line tool for amateur fan-translators working on Japanese light novels
 ## Install (development)
 
 ```bash
-git clone https://github.com/Trancend1/weaver-translate.git
-cd weaver-translate
+git clone https://github.com/Trancend1/weaver.git
+cd weaver
 uv sync --extra dev
 uv run weaver --version
 ```
@@ -24,7 +24,7 @@ uv run weaver --version
 Expected:
 
 ```
-weaver 0.0.1
+weaver 0.1.0
 ```
 
 Once published to PyPI, end users install with `uv tool install weaver`.

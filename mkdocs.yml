@@ -1,0 +1,38 @@
+site_name: Weaver
+site_url: https://trancend1.github.io/weaver/
+repo_url: https://github.com/Trancend1/weaver
+repo_name: Trancend1/weaver
+docs_dir: docs
+site_dir: site
+theme:
+  name: mkdocs
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Product:
+      - PRD v2: PRD_v2.md
+      - Blueprint Execution Plan: BLUEPRINT_EXECUTION_PLAN.md
+      - Feature Priority Matrix: FEATURE_PRIORITY_MATRIX.md
+      - Future Roadmap: FUTURE_ROADMAP.md
+      - Go To Market: GO_TO_MARKET.md
+      - Final Startup Verdict: FINAL_STARTUP_VERDICT.md
+  - Engineering:
+      - Architecture: SYSTEM_ARCHITECTURE.md
+      - Engineering Standards: ENGINEERING_STANDARDS.md
+      - Security And Performance: SECURITY_AND_PERFORMANCE.md
+      - Prompt Design: PROMPT_DESIGN.md
+      - Benchmarks: benchmarks.md
+      - Release Acceptance: release_acceptance.md
+      - AI Slop Prevention: AI_SLOP_PREVENTION.md
+      - Design System: DESIGN_SYSTEM.md
+      - Brand Direction: BRAND_DIRECTION.md
+  - Decisions:
+      - Provider Interface: decisions/0001-provider-interface.md
+      - IR Shape: decisions/0002-ir-shape.md
+      - Segment ID: decisions/0003-segment-id.md
+      - Glossary Algorithm: decisions/0004-glossary-algorithm.md
+      - EPUB Roundtrip: decisions/0005-epub-roundtrip.md
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true

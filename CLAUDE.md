@@ -27,6 +27,8 @@ All specs live in [docs/](docs/). Read before non-trivial work.
 | [GO_TO_MARKET.md](docs/GO_TO_MARKET.md) | Launch plan |
 | [FINAL_STARTUP_VERDICT.md](docs/FINAL_STARTUP_VERDICT.md) | Strategic context |
 | [decisions/](docs/decisions/) | ADRs: provider interface, IR shape, segment ID, glossary algorithm, EPUB roundtrip |
+| [benchmarks.md](docs/benchmarks.md) | Phase 10 performance budget evidence |
+| [release_acceptance.md](docs/release_acceptance.md) | Phase 10.5 AC-1 through AC-9 evidence |
 
 **Rule:** docs are the spec. Code follows docs. If code contradicts docs, ask first.
 
@@ -50,7 +52,7 @@ Single source of truth for build status. Update at end of every phase. Roadmap, 
 | 7 | Manual Edit — `weaver edit <segment>` via `$EDITOR` | 4 (parallel with 6) | ✅ Complete |
 | 8 | EPUB Renderer — translated EPUB roundtrip | 1 + 6 | ✅ Complete |
 | 9 | QA Engine — `weaver validate` deterministic checks | 4 (parallel) | ✅ Complete |
-| 10 | Hardening, Docs, Release — v0.1.0 to PyPI | all | ⏳ Next |
+| 10 | Hardening, Docs, Release — v0.1.0 to PyPI | all | ✅ Complete |
 
 Legend: ✅ complete · 🟡 in progress · ⏳ next · ⬜ pending · 🚫 blocked.
 
@@ -77,13 +79,13 @@ Required reminder before phase transition: **"Check exit criteria first. No next
 
 - **Sprint 10a — bugs + README + CHANGELOG (✅ done).** Three AC bugs fixed: `weaver export --help` listed only markdown (now includes epub); `_exit_with_error` only mapped codes 5/6 (now adds 3/4/7 per AC-9); `weaver glossary review` was missing example sentences (now shows up to 2). Added `weaver.core.config.load_project_config` to centralize TOML parsing across 8 call-sites with `ConfigError` messages carrying field + expected type. Added `provider.healthcheck()` preflight at the start of `translate_project` so a dead provider exits `3` cleanly. README rewritten end-to-end against the bundled fixture using the `fake` provider. `CHANGELOG.md` seeded with `[Unreleased]` + `[0.1.0]` entries. 142 tests pass (was 136).
 - **Sprint 10b — five ADRs in `docs/decisions/` (✅ done).** ADRs `0001-provider-interface.md`, `0002-ir-shape.md`, `0003-segment-id.md`, `0004-glossary-algorithm.md`, `0005-epub-roundtrip.md` written per [ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md) §Documentation Of Decisions format (Context / Decision / Consequences, one page each). Each cites the implementing module and references the spec source. Documentation Map updated.
-- **Sprint 10c — `docs/benchmarks.md` + 200-chapter synthetic fixture + perf budget verification** ([SECURITY_AND_PERFORMANCE.md](docs/SECURITY_AND_PERFORMANCE.md) budgets).
-- **Sprint 10d — MkDocs site + GitHub Pages workflow.**
-- **Sprint 10e — Phase 10.5 AC-1..AC-9 hands-on pass, version bump to `0.1.0`, `Development Status :: 3 - Alpha`, `uv publish`, tag `v0.1.0`.**
+- **Sprint 10c — benchmarks + scale fixture (✅ done).** Added `bench/generate_synthetic_fixture.py`, `bench/run_performance_budgets.py`, `tests/fixtures/synthetic_200_chapter.epub`, and [docs/benchmarks.md](docs/benchmarks.md). Latest budget run: init `2.25s`, glossary extraction `1.95s`, inspect `0.01s`, resume scan `0.08s`, fake translate `5.63 ms/segment`, markdown export `0.43s`, EPUB export `0.71s`, validate `0.09s`, DB size `5.95 MB`; all measured budgets pass. `weaver status` remains N/A because MVP-0 ships `weaver inspect` as the status surface.
+- **Sprint 10d — MkDocs + GitHub Pages (✅ done).** Added [mkdocs.yml](mkdocs.yml), [docs/index.md](docs/index.md), [docs/quickstart.md](docs/quickstart.md), and [.github/workflows/pages.yml](.github/workflows/pages.yml). `uv run --extra dev mkdocs build --strict` passes.
+- **Sprint 10e — release gate (✅ code/docs done; publish/tag pending credentials).** Added [docs/release_acceptance.md](docs/release_acceptance.md) from `bench/run_acceptance_gate.py`; AC-1 through AC-9 all PASS in the hands-on gate. Version bumped to `0.1.0`; classifier moved to `Development Status :: 3 - Alpha`; package build produced `dist/weaver-0.1.0.tar.gz` and `dist/weaver-0.1.0-py3-none-any.whl`.
 
 **Exit criteria:** seeded from [BLUEPRINT_EXECUTION_PLAN.md](docs/BLUEPRINT_EXECUTION_PLAN.md) §Phase 10 when work begins. Plus the [PRD_v2.md](docs/PRD_v2.md) §10 acceptance criteria (AC-1 through AC-9) verified hands-on per the §Phase 10.5 gate.
 
-**Blockers / open questions:** none.
+**Blockers / open questions:** PyPI publish and `v0.1.0` tag require final credential-backed `uv publish` success before tag/push.
 
 **Update protocol when phase closes:**
 1. Flip roadmap status: `⏳ Next` (or `🟡 In Progress`) → `✅ Complete`.
@@ -541,6 +543,7 @@ Usability:
 | 7 | Manual Edit | Local sprint | `weaver edit <project.toml> <segment-id>` opens `$EDITOR`, writes a new translation row with `provider='manual'`, sets `segments.status='manual'`, and survives `--retry-failed`; missing-id surfaces `SegmentNotFoundError` with exit code 5; 109-test verification. |
 | 8 | EPUB Renderer | Local sprint | `weaver export --mode epub` rewrites translated block text by `markup_context.xpath`, preserves metadata/spine/assets, falls back to source text when no translation exists, and adds an `EpubNcx` item so `ebooklib`/EPUB 2 readers can reopen the output; 115-test verification. |
 | 9 | QA Engine | Local sprint | `weaver validate <project.toml>` runs six deterministic pure-function checks (empty, untranslated Japanese, length ratio, glossary mismatch, failed, stale); critical (empty / JP-leak / failed) exits `1`, warnings exit `0`; `--json` mode with stable shape and `ensure_ascii=True` for codepage safety; Rich table render captured through `_safe_echo` for Windows console safety; stateless (no `qa_warnings` writes); 136-test verification. |
+| 10 | Hardening, Docs, Release | Local sprint | Benchmarks, MkDocs/GitHub Pages, release acceptance gate, v0.1.0 metadata, and package build completed; 142-test verification, Ruff, Pyright, MkDocs strict build, perf budgets, and AC-1..AC-9 gate passed. PyPI publish/tag remain credential-gated. |
 
 ---
 
