@@ -1,0 +1,32 @@
+#!/usr/bin/env sh
+set -eu
+
+# Scan the staged diff for common API key shapes. Prevents accidentally
+# committing credentials like the Gemini key incident logged in the
+# Phase 10 audit (see plans/semua-phase-log-1-10-hazy-lovelace.md §1.1).
+
+diff_added="$(git diff --cached --diff-filter=ACMR -U0 -- ':!*.lock' ':!uv.lock' \
+  | grep -E '^\+[^+]' || true)"
+
+if [ -z "$diff_added" ]; then
+  exit 0
+fi
+
+secret_pattern='AIzaSy[0-9A-Za-z_-]{33}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36}'
+
+matches="$(printf '%s\n' "$diff_added" | grep -E "$secret_pattern" || true)"
+
+if [ -n "$matches" ]; then
+  cat >&2 <<'EOF'
+Commit rejected: staged diff contains a value that looks like an API key.
+
+Matched lines:
+EOF
+  printf '%s\n' "$matches" >&2
+  cat >&2 <<'EOF'
+
+Move the secret to an environment variable, remove it from the staged diff,
+and rotate the credential if it was ever committed or shared.
+EOF
+  exit 1
+fi

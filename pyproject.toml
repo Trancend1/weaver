@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "weaver"
-version = "0.1.0"
+version = "0.4.0"
 description = "Offline-capable, glossary-aware JP-EN novel translation workbench."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -40,7 +40,15 @@ dev = [
     "pytest>=8",
     "ruff>=0.6",
     "pyright>=1.1",
-    "mkdocs>=1.6",
+]
+tui = [
+    "textual>=0.60",
+]
+wizard = [
+    "questionary>=2.0",
+]
+all = [
+    "weaver[tui,wizard]",
 ]
 
 [project.scripts]
@@ -61,6 +69,9 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["typer.Argument"]
 
 [tool.ruff.format]
 quote-style = "double"

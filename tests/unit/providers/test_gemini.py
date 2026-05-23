@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from weaver.errors import ProviderResponseError, ProviderTimeout, ProviderUnavailable
+from weaver.providers import gemini as gemini_module
 from weaver.providers.gemini import GeminiConfig, GeminiProvider
 from weaver.providers.types import TranslationContext, TranslationRequest
 
@@ -126,3 +127,11 @@ def test_gemini_constructor_without_client_or_env_raises(monkeypatch) -> None:
 
     with pytest.raises(ProviderUnavailable):
         GeminiProvider(config=GeminiConfig())
+
+
+def test_gemini_env_api_key_constant_is_the_env_var_name_not_a_literal_key() -> None:
+    # Regression guard: ENV_API_KEY must hold the *name* of the env var
+    # (e.g. "GEMINI_API_KEY"), never a literal API key value. A literal key
+    # in source breaks `os.environ.get(ENV_API_KEY)` and leaks the credential
+    # on any commit.
+    assert gemini_module.ENV_API_KEY == "GEMINI_API_KEY"
