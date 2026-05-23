@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterable, Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from weaver.core.config import load_project_config
 from weaver.core.ir import BlockIR, DocumentIR
@@ -32,8 +33,11 @@ from weaver.storage.translations import (
 MAX_GLOSSARY_TERMS_PER_SEGMENT = 20
 MAX_CONTEXT_SEGMENTS = 5
 MAX_CONTEXT_TOKENS = 600
+DRY_RUN_TOKENS_PER_CHAR = 0.25  # 1 token ≈ 4 source characters
 
 VALID_HONORIFIC_POLICIES = frozenset({"preserve", "localize", "hybrid"})
+
+ProgressCallback = Callable[[int, int, SegmentRecord, bool, int | None, int | None], None]
 
 
 @dataclass(frozen=True)
@@ -132,8 +136,11 @@ def translate_project(
     *,
     cwd: Path | None = None,
     retry_failed: bool = False,
+    dry_run: bool = False,
+    first_n: int | None = None,
     provider: LLMProvider | None = None,
-    progress_callback: Callable[[int, int, SegmentRecord, bool], None] | None = None,
+    provider_override: dict[str, Any] | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> TranslationRunSummary:
     """Translate selected project segments through the configured provider.
 
@@ -141,8 +148,22 @@ def translate_project(
         project_toml: Weaver project file.
         cwd: Working directory used to resolve relative project paths.
         retry_failed: Select failed segments instead of pending segments.
+        dry_run: When True, count selected segments and estimate input tokens
+            without contacting the provider or mutating the database. Returned
+            `input_tokens` is an estimate (1 token ≈ 4 source characters);
+            `translated_segments` is always 0.
         provider: Optional provider injection for tests.
-        progress_callback: Optional callback invoked after each selected segment.
+        provider_override: Optional dict merged onto the configured `[provider]`
+            section (e.g. `{"type": "gemini", "model": "gemini-1.5-flash"}`) so
+            a single run can target a different provider/model without editing
+            project.toml. Ignored when `provider` is supplied directly.
+        first_n: When set, translate only the first N selected segments. The
+            remaining segments stay in their current status. Composes with
+            ``retry_failed`` and ``dry_run``.
+        progress_callback: Optional callback invoked after each selected segment
+            with `(index, total, segment, translated, input_tokens,
+            output_tokens)`. In dry-run mode the callback receives
+            `translated=False` and the per-segment estimated input tokens.
 
     Returns:
         TranslationRunSummary with current database counts and token totals.
@@ -151,14 +172,24 @@ def translate_project(
     base_dir = cwd or Path.cwd()
     data = load_project_config(project_toml)
     project_config = data["project"]
-    provider_config = data["provider"]
+    provider_config = _merge_provider_config(data["provider"], provider_override)
     translation_config = data["translation"]
     db_path = _resolve_path(str(project_config["database_path"]), base_dir, project_toml.parent)
     source_path = _resolve_path(str(project_config["source_file"]), base_dir, project_toml.parent)
 
     document = read_epub(source_path)
     block_by_id = _index_blocks(document)
-    active_provider = provider or build_provider(provider_config)
+
+    if dry_run:
+        return _dry_run_summary(
+            db_path=db_path,
+            block_by_id=block_by_id,
+            retry_failed=retry_failed,
+            first_n=first_n,
+            progress_callback=progress_callback,
+        )
+
+    active_provider = build_provider(provider_config) if provider is None else provider
     status = active_provider.healthcheck()
     if not status.healthy:
         detail = status.message or "no detail returned"
@@ -170,6 +201,13 @@ def translate_project(
         )
     provider_model = str(provider_config["model"])
     honorific_policy = str(translation_config.get("honorifics", "preserve"))
+    if honorific_policy not in VALID_HONORIFIC_POLICIES:
+        valid = ", ".join(sorted(VALID_HONORIFIC_POLICIES))
+        raise ConfigError(
+            f"Invalid honorifics value `{honorific_policy}`. "
+            f"Likely cause: project.toml [translation] honorifics must be one of: {valid}. "
+            "Next command: edit project.toml and correct the value."
+        )
 
     translated_count = 0
     input_tokens = 0
@@ -185,6 +223,8 @@ def translate_project(
         selected = list_segments_for_translation(
             connection, project_id=project.id, retry_failed=retry_failed
         )
+        if first_n is not None:
+            selected = selected[:first_n]
         total_selected = len(selected)
 
         for index, segment in enumerate(selected, start=1):
@@ -211,7 +251,14 @@ def translate_project(
                 input_tokens += response_input_tokens or 0
                 output_tokens += response_output_tokens or 0
             if progress_callback is not None:
-                progress_callback(index, total_selected, segment, translated)
+                progress_callback(
+                    index,
+                    total_selected,
+                    segment,
+                    translated,
+                    response_input_tokens,
+                    response_output_tokens,
+                )
 
         counts = _read_segment_counts(connection)
 
@@ -224,6 +271,51 @@ def translate_project(
         stale_segments=counts["stale"],
         input_tokens=input_tokens,
         output_tokens=output_tokens,
+    )
+
+
+def _merge_provider_config(base: dict[str, Any], override: dict[str, Any] | None) -> dict[str, Any]:
+    if not override:
+        return base
+    return {**base, **{k: v for k, v in override.items() if v is not None}}
+
+
+def _dry_run_summary(
+    *,
+    db_path: Path,
+    block_by_id: dict[str, BlockIR],
+    retry_failed: bool,
+    first_n: int | None,
+    progress_callback: ProgressCallback | None,
+) -> TranslationRunSummary:
+    with closing(connect_database(db_path)) as connection:
+        project = _load_single_project(connection)
+        selected = list_segments_for_translation(
+            connection, project_id=project.id, retry_failed=retry_failed
+        )
+        if first_n is not None:
+            selected = selected[:first_n]
+        counts = _read_segment_counts(connection)
+
+    total_selected = len(selected)
+    estimated_input_tokens = 0
+    for index, segment in enumerate(selected, start=1):
+        block = block_by_id.get(segment.id)
+        source_chars = len(block.normalized_source_text) if block is not None else 0
+        segment_estimate = int(source_chars * DRY_RUN_TOKENS_PER_CHAR)
+        estimated_input_tokens += segment_estimate
+        if progress_callback is not None:
+            progress_callback(index, total_selected, segment, False, segment_estimate, None)
+
+    return TranslationRunSummary(
+        total_segments=counts["total"],
+        selected_segments=total_selected,
+        translated_segments=0,
+        failed_segments=counts["failed"],
+        pending_segments=counts["pending"],
+        stale_segments=counts["stale"],
+        input_tokens=estimated_input_tokens,
+        output_tokens=0,
     )
 
 

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from weaver.core.config import load_project_config
+from weaver.core.templates import get_template
 from weaver.errors import ProviderError, WeaverError
 from weaver.providers import ProviderStatus, build_provider
 from weaver.readers.epub import read_epub
@@ -58,12 +59,37 @@ class InspectSummary:
     provider_status: ProviderStatus | None = None
 
 
-def initialize_project(source_epub: Path, *, cwd: Path | None = None) -> InitResult:
+def project_exists(source_epub: Path, *, cwd: Path | None = None) -> bool:
+    """Check whether a Weaver project already exists for this EPUB.
+
+    Args:
+        source_epub: Input EPUB path.
+        cwd: Working directory used for generated project paths.
+
+    Returns:
+        True when the target ``project.toml`` already exists on disk.
+    """
+
+    base_dir = cwd or Path.cwd()
+    project_name = source_epub.resolve().stem
+    project_toml = base_dir / ".weaver" / project_name / "project.toml"
+    return project_toml.exists()
+
+
+def initialize_project(
+    source_epub: Path,
+    *,
+    cwd: Path | None = None,
+    template: str | None = None,
+) -> InitResult:
     """Create project state for a source EPUB.
 
     Args:
         source_epub: Input EPUB path.
         cwd: Working directory used for generated project paths.
+        template: Optional template preset name (``light-novel``,
+            ``web-novel``, ``aozora-classic``). Overrides ``[glossary]``
+            and ``[qa]`` sections in the generated ``project.toml``.
 
     Returns:
         InitResult with created project locations and counts.
@@ -102,6 +128,7 @@ def initialize_project(source_epub: Path, *, cwd: Path | None = None) -> InitRes
             )
         connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
+    template_overrides = get_template(template) if template else None
     _write_project_toml(
         project_toml,
         project_name=project_name,
@@ -109,6 +136,7 @@ def initialize_project(source_epub: Path, *, cwd: Path | None = None) -> InitRes
         project_dir=_posix_relative(project_dir, base_dir),
         database_path=_posix_relative(db_path, base_dir),
         output_dir=_posix_relative(output_dir, base_dir),
+        template_overrides=template_overrides,
     )
     return InitResult(
         project_name=project_name,
@@ -201,7 +229,22 @@ def _write_project_toml(
     project_dir: str,
     database_path: str,
     output_dir: str,
+    template_overrides: dict[str, dict[str, object]] | None = None,
 ) -> None:
+    glossary_defaults: dict[str, object] = {
+        "require_review": True,
+        "max_terms_per_segment": 20,
+    }
+    qa_defaults: dict[str, object] = {
+        "detect_untranslated_japanese": True,
+        "detect_empty_output": True,
+        "detect_glossary_mismatch": True,
+        "minimum_length_ratio": 0.3,
+    }
+    if template_overrides:
+        glossary_defaults.update(template_overrides.get("glossary", {}))
+        qa_defaults.update(template_overrides.get("qa", {}))
+
     content = f"""[project]
 name = "{project_name}"
 source_file = "{_escape_toml(source_file)}"
@@ -229,18 +272,18 @@ max_retries = 2
 [glossary]
 candidate_path = "{project_dir}/glossary_candidates.tsv"
 approved_path = "{project_dir}/glossary.tsv"
-require_review = true
-max_terms_per_segment = 20
+require_review = {_toml_bool(glossary_defaults["require_review"])}
+max_terms_per_segment = {glossary_defaults["max_terms_per_segment"]}
 
 [output]
 default_mode = "markdown"
 epub_enabled = true
 
 [qa]
-detect_untranslated_japanese = true
-detect_empty_output = true
-detect_glossary_mismatch = true
-minimum_length_ratio = 0.3
+detect_untranslated_japanese = {_toml_bool(qa_defaults["detect_untranslated_japanese"])}
+detect_empty_output = {_toml_bool(qa_defaults["detect_empty_output"])}
+detect_glossary_mismatch = {_toml_bool(qa_defaults["detect_glossary_mismatch"])}
+minimum_length_ratio = {qa_defaults["minimum_length_ratio"]}
 
 [logging]
 level = "info"
@@ -297,3 +340,7 @@ def _posix_relative(path: Path, start: Path) -> str:
 
 def _escape_toml(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _toml_bool(value: object) -> str:
+    return "true" if value else "false"

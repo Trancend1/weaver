@@ -7,16 +7,19 @@ import tempfile
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from weaver.core.config import load_project_config
 from weaver.errors import ConfigError, SegmentNotFoundError
-from weaver.storage.db import connect_database, transaction
+from weaver.storage.db import connect_database, connect_readonly_database, transaction
 from weaver.storage.projects import get_project
 from weaver.storage.segments import get_segment, update_segment_status
 from weaver.storage.translations import get_latest_translation_text, record_translation
 
 MANUAL_PROVIDER_NAME = "manual"
 MANUAL_PROVIDER_MODEL = "manual"
+
+SegmentSelector = Literal["first-failed", "next-stale", "recent"]
 
 
 @dataclass(frozen=True)
@@ -142,6 +145,65 @@ def edit_segment(
 
     edited = _open_editor_with_text(editor, starting_text)
     return apply_manual_translation(project_toml, segment.id, edited, cwd=cwd)
+
+
+def resolve_segment_id(
+    project_toml: Path,
+    *,
+    selector: SegmentSelector,
+    cwd: Path | None = None,
+) -> str:
+    """Resolve a segment id from a shortcut predicate.
+
+    Args:
+        project_toml: Weaver project file.
+        selector: Which segment to surface. `first-failed` and `next-stale`
+            return the earliest segment in EPUB order (chapter spine, then block
+            order) matching the corresponding status. `recent` returns the
+            segment whose most recent translation row has the latest
+            `created_at` timestamp.
+        cwd: Working directory used to resolve relative project paths.
+
+    Returns:
+        Segment id string.
+
+    Raises:
+        SegmentNotFoundError: When no segment matches the predicate.
+    """
+
+    db_path = _resolve_database_path(project_toml, cwd or Path.cwd())
+    with closing(connect_readonly_database(db_path)) as connection:
+        if selector in ("first-failed", "next-stale"):
+            status = "failed" if selector == "first-failed" else "stale"
+            row = connection.execute(
+                """
+                SELECT s.id
+                FROM segments s
+                JOIN chapters c ON c.id = s.chapter_id
+                WHERE s.status = ?
+                ORDER BY c.spine_order, s.block_order
+                LIMIT 1
+                """,
+                (status,),
+            ).fetchone()
+        else:
+            row = connection.execute(
+                """
+                SELECT segment_id AS id
+                FROM translations
+                ORDER BY created_at DESC, attempt DESC
+                LIMIT 1
+                """
+            ).fetchone()
+
+    if row is None:
+        raise SegmentNotFoundError(
+            f"No segment matches `{selector}`. "
+            "Likely cause: no segment has the requested status yet "
+            "(or no translation has been recorded for `--recent`). "
+            "Next command: run `weaver inspect <project.toml>` to see segment counts."
+        )
+    return str(row["id"])
 
 
 def _open_editor_with_text(editor: str, initial_text: str) -> str:

@@ -19,6 +19,7 @@ DEFAULT_DETECT_EMPTY = True
 DEFAULT_DETECT_JAPANESE = True
 DEFAULT_DETECT_GLOSSARY_MISMATCH = True
 DEFAULT_MINIMUM_LENGTH_RATIO = 0.3
+QA_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -92,6 +93,7 @@ def format_report_json(report: ValidationReport) -> str:
     """Serialize a ValidationReport as stable-shape JSON."""
 
     payload = {
+        "schema_version": QA_SCHEMA_VERSION,
         "project": report.project_name,
         "total_segments": report.total_segments,
         "summary": {
@@ -110,6 +112,49 @@ def format_report_json(report: ValidationReport) -> str:
         ],
     }
     return json.dumps(payload, ensure_ascii=True, indent=2)
+
+
+def qa_report_schema() -> dict[str, object]:
+    """Return a JSON-serializable description of the `weaver validate --json` shape.
+
+    The shape is intentionally minimal — keys, types, and severity enum only.
+    Phase A documents the contract; Phase B6 (ADR 0010) will version it via a
+    `schema_version` integer included in the payload.
+    """
+
+    return {
+        "current_version": QA_SCHEMA_VERSION,
+        "fields": {
+            "schema_version": "integer",
+            "project": "string",
+            "total_segments": "integer",
+            "summary": {
+                "info": "integer",
+                "warning": "integer",
+                "critical": "integer",
+            },
+            "findings": [
+                {
+                    "segment_id": "string",
+                    "check": "string",
+                    "severity": "info | warning | critical",
+                    "message": "string",
+                }
+            ],
+        },
+        "check_names": [
+            "empty_translation",
+            "untranslated_japanese",
+            "length_ratio",
+            "glossary_mismatch",
+            "failed_segment",
+            "stale_segment",
+        ],
+        "exit_codes": {
+            "0": "no critical findings",
+            "1": "at least one critical finding",
+        },
+    }
 
 
 def _load_segments(connection: sqlite3.Connection) -> list[SegmentInput]:

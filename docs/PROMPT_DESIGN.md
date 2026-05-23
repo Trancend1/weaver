@@ -69,7 +69,7 @@ localize   — convert honorifics to natural English equivalents where possible
 hybrid     — preserve relationship-defining honorifics (様, 殿), localize casual ones (ちゃん, くん)
 ```
 
-MVP-0 ships `preserve` only. Template supports all three so the policy field never requires a template change.
+All three values are user-configurable via `[translation] honorifics` in `project.toml`. The template outputs the value verbatim; the LLM interprets the policy string from the definitions above.
 
 #### `{glossary_block}`
 
