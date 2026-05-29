@@ -14,7 +14,7 @@ from weaver.core.config import load_project_config
 from weaver.core.templates import get_template
 from weaver.errors import ConfigError, ProviderError, WeaverError
 from weaver.providers import ProviderStatus, build_provider
-from weaver.readers.epub import read_epub
+from weaver.readers import detect_format, read_source
 from weaver.services.glossary import extract_and_store_project_glossary
 from weaver.storage.db import (
     SCHEMA_VERSION,
@@ -133,7 +133,8 @@ def initialize_project(
     db_path = project_dir / "weaver.db"
     project_toml = project_dir / "project.toml"
 
-    document = read_epub(source_epub)
+    source_format = detect_format(source_epub)
+    document = read_source(source_epub)
     project_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
     chapter_count = len(document.chapters)
@@ -153,7 +154,7 @@ def initialize_project(
                 project_id=project_id,
                 title=document.metadata.title or project_name,
                 source_path=str(source_epub),
-                source_format="epub",
+                source_format=source_format,
                 volume_order=0,
             )
             sync_document_segments(

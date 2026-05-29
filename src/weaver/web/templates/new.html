@@ -12,7 +12,7 @@
     <p class="muted">Books directory: <code>{{ books_dir }}</code></p>
 
     <form method="post" action="{{ url_for('new.init') }}" enctype="multipart/form-data">
-      <h2>1. Pick an EPUB</h2>
+      <h2>1. Pick a source (EPUB / TXT / HTML)</h2>
 
       <h3>Browse</h3>
       <p id="browse-path" class="muted">/</p>
@@ -21,7 +21,7 @@
       <input type="hidden" name="epub_path" id="epub_path">
 
       <h3>…or upload</h3>
-      <input type="file" name="epub_file" accept=".epub">
+      <input type="file" name="epub_file" accept=".epub,.txt,.html,.htm">
 
       <h2>2. Options</h2>
       <label>Provider

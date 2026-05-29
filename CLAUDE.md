@@ -41,7 +41,7 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 
 | Sprint | Scope | Status |
 |---|---|---|
-| 1 | Project structure & novel mgmt (Novel/Volume/Chapter; TXT/EPUB/HTML import) | 🟡 1a+1b done (schema v3 + volumes; EPUB/TXT/HTML readers via `read_source`); 1c UI pending |
+| 1 | Project structure & novel mgmt (Novel/Volume/Chapter; TXT/EPUB/HTML import) | 🟡 1a+1b+1c done (schema v3 + volumes; EPUB/TXT/HTML readers; Flask project-tree + multi-format import) — Gate 1c review pending |
 | 2 | Translation workspace (JP/EN two-column, edit, auto-save, revisions) | ⬜ |
 | 3 | Provider & AI translation (config, translate chapter/selection, safe retranslate) | ⬜ |
 | 4 | Glossary & character database (project-scoped, prompt injection) | ⬜ |

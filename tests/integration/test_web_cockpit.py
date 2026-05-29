@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 
 from weaver.cli.main import app
 from weaver.services.project import initialize_project
+from weaver.storage.db import connect_readonly_database
 from weaver.web.app import create_app
 from weaver.web.job_manager import JobManager
 
@@ -251,6 +252,60 @@ def test_glossary_diff_renders(cockpit) -> None:
     response = cockpit.get("/project/aozora_sample/glossary?diff_a=1&diff_b=1")
     assert response.status_code == 200
     assert "In both" in response.get_data(as_text=True)
+
+
+# --- Sprint 1c: project tree + multi-format import ---------------------------
+
+
+def test_cockpit_shows_volume_tree(cockpit) -> None:
+    response = cockpit.get("/project/aozora_sample")
+    body = response.get_data(as_text=True)
+    assert "Volumes" in body
+    assert "[epub]" in body
+    assert "Import volume" in body
+
+
+def test_new_init_from_txt_upload_creates_novel(web_env) -> None:
+    client, books_dir = web_env
+    data = {
+        "provider": "fake",
+        "epub_file": (io.BytesIO("第一章 はじまり\n本文。\n".encode()), "story.txt"),
+    }
+    response = client.post("/new/init", data=data, content_type="multipart/form-data")
+    assert response.status_code == 302
+    assert "/project/story" in response.headers["Location"]
+    assert (books_dir / ".weaver" / "story" / "project.toml").is_file()
+
+
+def test_import_volume_route_adds_txt_volume(web_env) -> None:
+    client, books_dir = web_env
+    data = {"epub_file": (io.BytesIO("第二巻\n続き。\n".encode()), "vol2.txt")}
+    response = client.post(
+        "/project/aozora_sample/import", data=data, content_type="multipart/form-data"
+    )
+    assert response.status_code == 302
+    assert "imported=vol2.txt" in response.headers["Location"]
+
+    db_path = books_dir / ".weaver" / "aozora_sample" / "weaver.db"
+    with connect_readonly_database(db_path) as connection:
+        count = connection.execute("SELECT COUNT(*) AS n FROM volumes").fetchone()["n"]
+    assert count == 2
+
+
+def test_import_volume_route_missing_project_404(cockpit) -> None:
+    data = {"epub_file": (io.BytesIO(b"x"), "v.txt")}
+    response = cockpit.post(
+        "/project/nope/import", data=data, content_type="multipart/form-data"
+    )
+    assert response.status_code == 404
+
+
+def test_api_browse_lists_txt_source(web_env) -> None:
+    client, books_dir = web_env
+    (books_dir / "extra.txt").write_text("本文。\n", encoding="utf-8")
+    payload = client.get("/api/browse?dir=").get_json()
+    entries = {e["name"]: e["kind"] for e in payload["entries"]}
+    assert entries.get("extra.txt") == "txt"
 
 
 def test_glossary_conflicts_surfaced(web_env) -> None:

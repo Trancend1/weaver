@@ -14,7 +14,7 @@ from weaver.core.ir import BlockIR, DocumentIR
 from weaver.errors import ConfigError, ProviderError, ProviderUnavailable
 from weaver.providers import LLMProvider, build_provider
 from weaver.providers.types import GlossaryTerm, TranslationContext, TranslationRequest
-from weaver.readers.epub import read_epub
+from weaver.readers import read_source
 from weaver.services.glossary import raise_on_glossary_conflicts
 from weaver.storage.db import connect_database, transaction
 from weaver.storage.glossary import list_glossary_terms
@@ -184,7 +184,7 @@ def translate_project(
     db_path = _resolve_path(str(project_config["database_path"]), base_dir, project_toml.parent)
     source_path = _resolve_path(str(project_config["source_file"]), base_dir, project_toml.parent)
 
-    document = read_epub(source_path)
+    document = read_source(source_path)
     block_by_id = _index_blocks(document)
 
     if dry_run:
