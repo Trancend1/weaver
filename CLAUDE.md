@@ -41,7 +41,7 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 
 | Sprint | Scope | Status |
 |---|---|---|
-| 1 | Project structure & novel mgmt (Novel/Volume/Chapter; TXT/EPUB/HTML import) | 🟡 1a+1b+1c done (schema v3 + volumes; EPUB/TXT/HTML readers; Flask project-tree + multi-format import) — Gate 1c review pending |
+| 1 | Project structure & novel mgmt (Novel/Volume/Chapter; TXT/EPUB/HTML import) | ✅ |
 | 2 | Translation workspace (JP/EN two-column, edit, auto-save, revisions) | ⬜ |
 | 3 | Provider & AI translation (config, translate chapter/selection, safe retranslate) | ⬜ |
 | 4 | Glossary & character database (project-scoped, prompt injection) | ⬜ |
@@ -101,6 +101,7 @@ MVP acceptance gate (full checklist in `docs/MVP_SCOPE.md`, Task 5). At minimum,
 |---|---|
 | Phases 0–13 (v0.6.0) | CLI + Flask web cockpit shipped. Detail in git history + `docs/archive/`. |
 | Reset Tasks 1–5 | Controlled reset to MVP Web Cockpit Foundation + FastAPI direction. ADRs reset to `001`–`005`; MVP gap finalized + 8-sprint plan locked (Task 5). Gate 5 pending review. |
+| Sprint 1 | Novel/Volume/Chapter model (schema v3, v2→v3 migration); EPUB/TXT/HTML import; `weaver import` CLI; Flask project-detail tree + multi-format import UI; ADR 006. 345 tests green. |
 
 ---
 
