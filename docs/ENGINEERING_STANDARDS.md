@@ -259,7 +259,7 @@ ADRs are not retrospective documentation; they capture decisions when made.
 
 1. Clone repo, run `uv sync`.
 2. Run `pytest -m "not requires_ollama and not requires_cloud"` — must pass.
-3. Read `PRD_v2.md`, `SYSTEM_ARCHITECTURE.md`, this file.
+3. Read [ARCHITECTURE.md](ARCHITECTURE.md), [MVP_SCOPE.md](MVP_SCOPE.md), this file (deep pre-reset specs in `archive/SYSTEM_ARCHITECTURE.md`, `archive/PRD_v2.md`).
 4. Run `weaver init tests/fixtures/sample.epub` against the bundled fixture.
 5. Read three ADRs in `docs/decisions/`.
 6. First PR should be docs, fixture data, or a small fix. Architecture changes after at least one merged PR.

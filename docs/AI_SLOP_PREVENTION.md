@@ -49,7 +49,7 @@ Adding features by adding prompts is the cheapest form of product development. W
 
 ### Template UI Syndrome
 
-The `weaver-landing-wireframe.html` file is a textbook example: glass-morphic gradients, "Currently in development" pill, floating chapter mockup. It exists, but it shouldn't be the brand surface. See `BRAND_DIRECTION.md` and `DESIGN_SYSTEM.md` for replacement direction.
+The `weaver-landing-wireframe.html` file is a textbook example: glass-morphic gradients, "Currently in development" pill, floating chapter mockup. It exists, but it shouldn't be the brand surface. For cockpit UI direction see [decisions/005-cockpit-ui-ux-direction.md](decisions/005-cockpit-ui-ux-direction.md) (archived brand/design notes: `archive/strategy/BRAND_DIRECTION.md`, `archive/strategy/DESIGN_SYSTEM.md`).
 
 Visual patterns to reject when building Weaver's surfaces:
 
@@ -198,7 +198,7 @@ Failing any of these blocks release.
 
 | Risk | Mitigation |
 |------|------------|
-| Glossary candidate extraction unspecified | Algorithm pinned in `PRD_v2.md` |
+| Glossary candidate extraction unspecified | Algorithm pinned in `archive/PRD_v2.md` (archived ADR `0004-glossary-algorithm`) |
 | "Careful mode" config flag pre-implementation | Removed from MVP-0 |
 | "Chapter-level context placeholder" hand-wave | Replaced with concrete 5-segment rolling window |
 | "Hosted scalability" section in MVP PRD | Removed |

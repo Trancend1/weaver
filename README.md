@@ -192,7 +192,7 @@ pip install 'weaver[all]'     # all of the above
 
 `weaver serve` runs a local, single-user web cockpit for managing projects in
 the browser. It binds **`127.0.0.1` only** (no remote access, no authentication —
-see ADR `0017`), defaults to port `8765`, and discovers every project under
+see [docs/COCKPIT_WORKFLOW.md](docs/COCKPIT_WORKFLOW.md) and ADR `004`), defaults to port `8765`, and discovers every project under
 `--books-dir` (default: current directory) so you never type a project path.
 API keys are read from environment variables only — never entered, written to
 disk, or rendered in the UI.
