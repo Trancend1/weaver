@@ -21,6 +21,7 @@ from weaver.storage.segments import (
     update_segment_status,
 )
 from weaver.storage.translations import record_translation
+from weaver.storage.volumes import create_volume
 
 
 def test_sync_document_segments_inserts_chapters_and_pending_segments(tmp_path) -> None:
@@ -35,7 +36,10 @@ def test_sync_document_segments_inserts_chapters_and_pending_segments(tmp_path) 
             source_lang="ja",
             target_lang="en",
         )
-        sync_document_segments(connection, project_id=project_id, document=document)
+        volume_id = _default_volume(connection, project_id)
+        sync_document_segments(
+            connection, project_id=project_id, volume_id=volume_id, document=document
+        )
         segments = connection.execute(
             "SELECT id, source_hash, status FROM segments ORDER BY block_order"
         ).fetchall()
@@ -59,9 +63,11 @@ def test_sync_document_segments_marks_existing_changed_segment_stale(tmp_path) -
             source_lang="ja",
             target_lang="en",
         )
+        volume_id = _default_volume(connection, project_id)
         sync_document_segments(
             connection,
             project_id=project_id,
+            volume_id=volume_id,
             document=_document_with_text("吾輩は猫である。"),
         )
         update_segment_status(connection, segment_id="seg-1", status="translated")
@@ -76,6 +82,7 @@ def test_sync_document_segments_marks_existing_changed_segment_stale(tmp_path) -
         sync_document_segments(
             connection,
             project_id=project_id,
+            volume_id=volume_id,
             document=_document_with_text("吾輩は犬である。"),
         )
         segment = connection.execute(
@@ -97,9 +104,11 @@ def test_repository_functions_update_status_record_translation_and_list_pending(
             source_lang="ja",
             target_lang="en",
         )
+        volume_id = _default_volume(connection, project_id)
         sync_document_segments(
             connection,
             project_id=project_id,
+            volume_id=volume_id,
             document=_document_with_text("一。"),
         )
         insert_segment(
@@ -168,6 +177,17 @@ def test_reset_in_progress_and_10000_segment_pending_scan_stays_under_budget(tmp
 
     assert len(pending) == 10_000
     assert elapsed < 5
+
+
+def _default_volume(connection, project_id: int) -> int:
+    return create_volume(
+        connection,
+        project_id=project_id,
+        title="Volume 1",
+        source_path="fixture.epub",
+        source_format="epub",
+        volume_order=0,
+    )
 
 
 def _document_with_text(source_text: str) -> DocumentIR:

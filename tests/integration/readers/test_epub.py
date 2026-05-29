@@ -32,8 +32,12 @@ def test_read_epub_fixture_end_to_end_produces_document_ir() -> None:
     ]
     assert document.chapters[0].blocks[1].source_text == "吾輩は猫である。"
     assert document.chapters[0].blocks[1].normalized_source_text == "吾輩は猫である。"
-    assert document.chapters[0].blocks[1].markup_context.xpath.endswith("/p[1]")
-    assert document.chapters[0].blocks[3].markup_context.tag == "blockquote"
+    ctx1 = document.chapters[0].blocks[1].markup_context
+    assert ctx1 is not None
+    assert ctx1.xpath.endswith("/p[1]")
+    ctx3 = document.chapters[0].blocks[3].markup_context
+    assert ctx3 is not None
+    assert ctx3.tag == "blockquote"
     assert document.assets
 
 

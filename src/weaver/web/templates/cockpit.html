@@ -20,6 +20,12 @@
   {% if request.args.get('export_error') %}
   <section class="panel error"><p>{{ request.args.get('export_error') }}</p></section>
   {% endif %}
+  {% if request.args.get('imported') %}
+  <section class="panel ok"><p>Imported volume <code>{{ request.args.get('imported') }}</code>.</p></section>
+  {% endif %}
+  {% if request.args.get('import_error') %}
+  <section class="panel error"><p>{{ request.args.get('import_error') }}</p></section>
+  {% endif %}
 
   {% if project.summary %}
   {% set s = project.summary %}
@@ -39,6 +45,35 @@
         <tr><th>Glossary terms</th><td>{{ s.glossary_term_count }}</td></tr>
       </tbody>
     </table>
+  </section>
+
+  <section class="panel">
+    <h2>Volumes</h2>
+    {% if tree and tree.volumes %}
+    <ol class="volumes">
+      {% for v in tree.volumes %}
+      <li>
+        <strong>{{ v.title }}</strong>
+        <span class="muted">[{{ v.source_format }}] — {{ v.chapter_count }} chapters, {{ v.segment_count }} segments</span>
+        {% if v.chapters %}
+        <ul class="chapters">
+          {% for c in v.chapters %}
+          <li>{{ c.title or "(untitled)" }} <span class="muted">{{ c.translated_count }}/{{ c.segment_count }}</span></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="muted">No volumes yet. Import a source file below.</p>
+    {% endif %}
+
+    <h3>Import volume</h3>
+    <form method="post" action="{{ url_for('new.import_volume_route', name=project.name) }}" enctype="multipart/form-data" class="row">
+      <input type="file" name="epub_file" accept=".epub,.txt,.html,.htm">
+      <button class="btn" type="submit">Import EPUB / TXT / HTML</button>
+    </form>
   </section>
 
   <section class="panel">

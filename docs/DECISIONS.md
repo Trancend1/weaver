@@ -11,6 +11,7 @@ Active ADRs only. Active numbering was reset to `001` during the controlled rese
 | [003](decisions/003-mvp-baseline-for-light-novel-translator.md) | MVP Baseline | Eight MVP areas; consistency machinery (glossary, character DB, TM) is first-class. |
 | [004](decisions/004-fastapi-cockpit-technical-direction.md) | FastAPI Cockpit Direction | FastAPI is the target; Flask stays the working baseline until migration parity. Supersedes archived `0016`. |
 | [005](decisions/005-cockpit-ui-ux-direction.md) | Cockpit UI/UX Direction | Calm, semantic-color, two-column workspace; HTMX-light, not SPA. |
+| [006](decisions/006-novel-volume-chapter-data-model.md) | Novel/Volume/Chapter Data Model | Project=Novel, import=Volume; schema v3 + v2→v3 migration; `init` preserved. |
 
 ## ADR rules
 

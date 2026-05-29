@@ -1,9 +1,9 @@
 """Sandboxed directory listing for the new-project file picker (ADR ``0017``).
 
-Lists sub-directories and ``.epub`` files under the cockpit's ``--books-dir``
-root. Every requested path is resolved and confirmed to stay inside the root —
-``..`` traversal escapes are rejected. The web layer never exposes paths outside
-the sandbox.
+Lists sub-directories and importable source files (``.epub``/``.txt``/``.html``)
+under the cockpit's ``--books-dir`` root. Every requested path is resolved and
+confirmed to stay inside the root — ``..`` traversal escapes are rejected. The
+web layer never exposes paths outside the sandbox.
 """
 
 from __future__ import annotations
@@ -13,15 +13,15 @@ from pathlib import Path
 
 from weaver.errors import ConfigError
 
-EPUB_SUFFIX = ".epub"
+SOURCE_SUFFIXES = {".epub", ".txt", ".html", ".htm"}
 
 
 @dataclass(frozen=True)
 class BrowseEntry:
-    """One listed item: a sub-directory or an ``.epub`` file."""
+    """One listed item: a sub-directory or an importable source file."""
 
     name: str
-    kind: str  # "dir" | "epub"
+    kind: str  # "dir" | "epub" | "txt" | "html"
     rel_path: str  # POSIX path relative to the books-dir root
 
 
@@ -65,8 +65,8 @@ def list_directory(books_dir: Path, rel_dir: str = "") -> BrowseListing:
         rel = child.relative_to(root).as_posix()
         if child.is_dir():
             dirs.append(BrowseEntry(name=child.name, kind="dir", rel_path=rel))
-        elif child.is_file() and child.suffix.lower() == EPUB_SUFFIX:
-            files.append(BrowseEntry(name=child.name, kind="epub", rel_path=rel))
+        elif child.is_file() and child.suffix.lower() in SOURCE_SUFFIXES:
+            files.append(BrowseEntry(name=child.name, kind=_kind(child), rel_path=rel))
 
     dirs.sort(key=lambda e: e.name.casefold())
     files.sort(key=lambda e: e.name.casefold())
@@ -79,30 +79,38 @@ def list_directory(books_dir: Path, rel_dir: str = "") -> BrowseListing:
     return BrowseListing(rel_dir=rel_norm, parent=parent, entries=tuple(dirs + files))
 
 
-def resolve_epub(books_dir: Path, rel_path: str) -> Path:
-    """Resolve a browsed ``.epub`` path, confirming it stays in the sandbox.
+def resolve_source(books_dir: Path, rel_path: str) -> Path:
+    """Resolve a browsed source path, confirming it stays in the sandbox.
 
     Args:
         books_dir: Sandbox root.
-        rel_path: EPUB path relative to ``books_dir``.
+        rel_path: Source path relative to ``books_dir``.
 
     Returns:
-        The absolute, sandbox-confirmed path to the ``.epub`` file.
+        The absolute, sandbox-confirmed path to the source file.
 
     Raises:
-        ConfigError: When the path escapes the sandbox, is missing, or is not an
-            ``.epub`` file.
+        ConfigError: When the path escapes the sandbox, is missing, or is not a
+            supported source file.
     """
 
     root = books_dir.resolve()
     target = _safe_join(root, rel_path)
-    if not target.is_file() or target.suffix.lower() != EPUB_SUFFIX:
+    if not target.is_file() or target.suffix.lower() not in SOURCE_SUFFIXES:
+        supported = ", ".join(sorted(SOURCE_SUFFIXES))
         raise ConfigError(
-            f"Not an EPUB file: {rel_path}. "
-            "Likely cause: the file was moved or is not a .epub. "
-            "Next command: pick a .epub file from the browser."
+            f"Not a supported source file: {rel_path}. "
+            f"Likely cause: the file was moved or is not one of: {supported}. "
+            "Next command: pick a supported source file from the browser."
         )
     return target
+
+
+def _kind(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix in {".html", ".htm"}:
+        return "html"
+    return suffix.lstrip(".")
 
 
 def _safe_join(root: Path, rel: str) -> Path:

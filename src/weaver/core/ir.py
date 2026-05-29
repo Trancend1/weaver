@@ -42,7 +42,11 @@ class EpubMarkupContext:
 
 @dataclass(frozen=True)
 class BlockIR:
-    """Single translatable source block."""
+    """Single translatable source block.
+
+    ``markup_context`` carries EPUB write-back location data and is present only
+    for EPUB-sourced blocks; TXT/HTML readers leave it ``None``.
+    """
 
     id: str
     chapter_id: str
@@ -50,7 +54,7 @@ class BlockIR:
     kind: BlockKind
     source_text: str
     normalized_source_text: str
-    markup_context: EpubMarkupContext
+    markup_context: EpubMarkupContext | None = None
 
 
 @dataclass(frozen=True)

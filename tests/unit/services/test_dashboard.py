@@ -39,6 +39,7 @@ def test_run_dashboard_percent_done_zero_when_no_segments(tmp_path: Path) -> Non
         source_file="test.epub",
         provider="fake",
         model="fake-1",
+        volume_count=1,
         chapter_count=1,
         segment_count=0,
         pending_count=0,

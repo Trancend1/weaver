@@ -15,6 +15,7 @@ from weaver.core.global_config import load_global_config, resolve_config_value
 from weaver.core.secret_store import list_secret_names
 from weaver.providers.registry import known_provider_types
 from weaver.services.project_discovery import discover_projects, find_project
+from weaver.services.project_tree import NovelTree, project_tree
 
 projects_bp = Blueprint("projects", __name__)
 
@@ -63,9 +64,13 @@ def cockpit(name: str) -> str:
         and job_manager.current is not None
         and job_manager.current.project_name == name
     )
+    tree: NovelTree | None = None
+    if project.summary is not None:
+        tree = project_tree(project.project_toml, cwd=_books_dir())
     return render_template(
         "cockpit.html",
         project=project,
+        tree=tree,
         running_here=running_here,
         provider_types=known_provider_types(),
         secret_names=list_secret_names(),

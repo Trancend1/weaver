@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
@@ -14,7 +13,6 @@ from ebooklib.epub import EpubBook, EpubException, EpubItem
 from weaver.core.ir import (
     AssetIR,
     BlockIR,
-    BlockKind,
     ChapterIR,
     DocumentIR,
     DocumentMetadata,
@@ -22,8 +20,13 @@ from weaver.core.ir import (
 )
 from weaver.core.segment import compute_chapter_id, compute_segment_id, normalize_japanese_text
 from weaver.errors import EpubReadError
+from weaver.readers.html_blocks import (
+    TEXT_BLOCK_TAGS,
+    block_kind,
+    collapse_whitespace,
+    local_name,
+)
 
-TEXT_BLOCK_TAGS = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"}
 DOCUMENT_MEDIA_TYPES = {"application/xhtml+xml", "text/html"}
 
 
@@ -125,8 +128,8 @@ def _item_media_type(item: EpubItem) -> str:
 
 
 def _iter_text_blocks(root: ElementTree.Element) -> Iterable[tuple[ElementTree.Element, str]]:
-    for element, xpath in _walk_with_xpath(root, f"/{_local_name(root.tag)}"):
-        if _local_name(element.tag) in TEXT_BLOCK_TAGS and _element_text(element):
+    for element, xpath in _walk_with_xpath(root, f"/{local_name(root.tag)}"):
+        if local_name(element.tag) in TEXT_BLOCK_TAGS and _element_text(element):
             yield element, xpath
 
 
@@ -138,7 +141,7 @@ def _element_to_block(
     block_order: int,
 ) -> BlockIR:
     source_text = _element_text(element)
-    tag = _local_name(element.tag)
+    tag = local_name(element.tag)
     return BlockIR(
         id=compute_segment_id(
             chapter_href=chapter_href,
@@ -147,7 +150,7 @@ def _element_to_block(
         ),
         chapter_id=chapter_id,
         order=block_order,
-        kind=_block_kind(tag),
+        kind=block_kind(tag),
         source_text=source_text,
         normalized_source_text=normalize_japanese_text(source_text),
         markup_context=EpubMarkupContext(
@@ -161,15 +164,7 @@ def _element_to_block(
 
 
 def _element_text(element: ElementTree.Element) -> str:
-    return _collapse_whitespace("".join(element.itertext()))
-
-
-def _collapse_whitespace(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def _local_name(tag: str) -> str:
-    return tag.rsplit("}", maxsplit=1)[-1]
+    return collapse_whitespace("".join(element.itertext()))
 
 
 def _walk_with_xpath(
@@ -178,20 +173,10 @@ def _walk_with_xpath(
     yield element, xpath
     tag_counts: dict[str, int] = defaultdict(int)
     for child in list(element):
-        tag = _local_name(child.tag)
+        tag = local_name(child.tag)
         tag_counts[tag] += 1
         child_xpath = f"{xpath}/{tag}[{tag_counts[tag]}]"
         yield from _walk_with_xpath(child, child_xpath)
-
-
-def _block_kind(tag: str) -> BlockKind:
-    if tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
-        return "heading"
-    if tag == "p":
-        return "paragraph"
-    if tag == "blockquote":
-        return "quote"
-    return "other"
 
 
 def _chapter_title(blocks: list[BlockIR]) -> str | None:

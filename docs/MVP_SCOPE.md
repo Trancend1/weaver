@@ -2,7 +2,7 @@
 
 The MVP target is a **consistency-first JP→EN light-novel translator**, web-cockpit-first (ADR 003). For long novels the hard problem is consistency (names, terms, honorifics, tone) across chapters — so glossary, character DB, and translation memory are first-class, not optional.
 
-> This is the Task-3 baseline of the scope. The full gap evidence + sprint detail is finalized in reset **Task 5**; the active phase/sprint table lives in [CLAUDE.md §2](../CLAUDE.md).
+> **Task 5 finalized (2026-05-29).** The gap table below is verified against `src/weaver/` (module listing + grep for character DB, translation memory, Volume tier, readers/renderers). The active phase/sprint table lives in [CLAUDE.md §2](../CLAUDE.md).
 
 ## Required MVP features
 
@@ -21,20 +21,20 @@ Glossary · Character database · Translation memory · Context-aware translatio
 ## Advanced (not MVP blockers)
 Translation style presets · honorific rules (partial: `preserve`/`localize`/`hybrid` exists) · consistency checker · terminology checker · cost estimator · AI quality review.
 
-## Gap analysis (from reset Task 1 audit)
+## Gap analysis (finalized Task 5, verified against `src/weaver/`)
 
-| MVP Area | Status | Evidence | Gap | Sprint |
-|---|---|---|---|---|
-| Project management | partial | `services/project.py`, `storage/projects.py`, `readers/epub.py` | EPUB-only import; no Volume tier; no TXT/HTML | 1 |
-| Translation workspace | partial | `services/translation.py`, `manual_edit.py` | no 2-col UI, no auto-save, no revisions | 2 |
-| AI translation | exists | `providers/registry.py` (deepseek/gemini/ollama/custom/fake) | native OpenAI/Groq/OpenRouter (custom covers) | 3 |
-| Glossary | exists | `services/glossary*.py`, web review | strong | 4 (polish) |
-| Character database | **missing** | char-string ops only | full feature absent | 4 |
-| Translation memory | **missing** | none | absent | 5 |
-| Batch translation | partial | resumable loop; web single-job | no volume/novel batch, no job hierarchy | 6 |
-| Export | partial | `services/export.py` (md), `renderers/epub.py` | no TXT/HTML/DOCX | 7 |
+| MVP Area | Status | Evidence | Gap | Priority | Sprint |
+|---|---|---|---|---|---|
+| Project management | partial | `services/project.py`, `storage/projects.py`, `readers/epub.py` (only reader) | EPUB-only import; no Volume tier (grep `Volume` = 0); no TXT/HTML reader | P0 | 1 |
+| Translation workspace | partial | `services/translation.py`, `services/manual_edit.py` | no 2-col UI; no auto-save; no revision store | P0 | 2 |
+| AI translation | exists | `providers/registry.py` → `fake/deepseek/gemini/ollama/custom` | native OpenAI/Groq/OpenRouter absent but OpenAI-compatible `custom` covers them | P0 | 3 |
+| Glossary | exists | `services/glossary.py`, `glossary_review.py`, `glossary_diff.py`, web review | strong; prompt-injection wiring to confirm in sprint | P0 | 4 (polish) |
+| Character database | **missing** | only char-string ops (`core/segment.py`, `providers/parser.py`) | full feature absent — net-new model + storage + injection | P0 | 4 |
+| Translation memory | **missing** | none (grep `translation_memory`/`Memory` = 0) | absent — net-new store + lookup-before-AI | P0 | 5 |
+| Batch translation | partial | resumable orchestrator in `services/translation.py`; web single-job (`web/job_manager.py`) | no volume/novel scope; no job hierarchy | P1 | 6 |
+| Export | partial | `services/export.py` (Markdown), `renderers/epub.py` | no TXT/HTML/DOCX renderer | P1 | 7 |
 
-Status: `exists` = usable · `partial` = some structure, not complete · `missing` = no meaningful support.
+Status: `exists` = usable · `partial` = some structure, not complete · `missing` = no meaningful support. Priority: `P0` = MVP blocker · `P1` = MVP-required, lower risk.
 
 ## Sprint mapping (MVP Web Cockpit Foundation)
 

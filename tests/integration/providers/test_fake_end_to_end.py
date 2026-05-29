@@ -18,6 +18,7 @@ from weaver.storage.glossary import list_glossary_terms
 from weaver.storage.projects import create_project
 from weaver.storage.segments import sync_document_segments, update_segment_status
 from weaver.storage.translations import record_translation
+from weaver.storage.volumes import create_volume
 
 FIXTURE_EPUB = Path(__file__).resolve().parents[2] / "fixtures" / "aozora_sample.epub"
 
@@ -34,7 +35,17 @@ def test_fake_provider_runs_end_to_end_through_fixture_epub(tmp_path) -> None:
             source_lang="ja",
             target_lang="en",
         )
-        sync_document_segments(connection, project_id=project_id, document=document)
+        volume_id = create_volume(
+            connection,
+            project_id=project_id,
+            title="Volume 1",
+            source_path=str(FIXTURE_EPUB),
+            source_format="epub",
+            volume_order=0,
+        )
+        sync_document_segments(
+            connection, project_id=project_id, volume_id=volume_id, document=document
+        )
 
     provider = FakeProvider(pattern="EN: {source}")
     translations_recorded = 0

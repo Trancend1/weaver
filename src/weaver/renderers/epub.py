@@ -92,7 +92,7 @@ def render_translated_epub(
 
         for block in blocks:
             translation = translations_by_segment_id.get(block.id)
-            if translation is None:
+            if translation is None or block.markup_context is None:
                 fallback += 1
                 continue
             element = _resolve_xpath(root, block.markup_context.xpath)
@@ -165,6 +165,8 @@ def _group_blocks_by_href(document: DocumentIR) -> dict[str, list[BlockIR]]:
     grouped: dict[str, list[BlockIR]] = defaultdict(list)
     for chapter in document.chapters:
         for block in chapter.blocks:
+            if block.markup_context is None:
+                continue
             grouped[block.markup_context.file_href].append(block)
     return grouped
 
