@@ -52,7 +52,7 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 
 Legend: ✅ complete · 🟡 in progress · ⏳ next · ⬜ pending · 🚫 blocked.
 
-> Sprint detail + MVP gap analysis land in `docs/MVP_SCOPE.md` (reset Task 5). Sprint ordering is dependency-driven, not calendar.
+> Sprint detail + MVP gap analysis finalized in [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md) (reset Task 5, verified against `src/weaver/`). Sprint ordering is dependency-driven, not calendar.
 
 ### 2.2 Reusable Phase Gate
 
@@ -79,7 +79,7 @@ Rules:
 - UI polish starts only after MVP baseline is clear (ADR `005`).
 - MVP gaps must map to actionable sprints (ADR `003`).
 
-Reset status: Tasks 1–4 done (audit · cleanup/ADR reset · docs rewrite · fresh baseline — all checks green). **Task 5 next** (MVP gap finalize + sprint lock; gap draft already in [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md)) — runs in a fresh session. Sprints begin after Task 5.
+Reset status: Tasks 1–5 done (audit · cleanup/ADR reset · docs rewrite · fresh baseline · MVP gap finalize + sprint lock — all checks green; gap table verified against `src/weaver/` in [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md)). **Gate 5 pending maintainer review.** Sprint 1 begins only after Gate 5 passes.
 
 ### 2.4 Exit Criteria
 
@@ -100,7 +100,7 @@ MVP acceptance gate (full checklist in `docs/MVP_SCOPE.md`, Task 5). At minimum,
 | Era | Outcome |
 |---|---|
 | Phases 0–13 (v0.6.0) | CLI + Flask web cockpit shipped. Detail in git history + `docs/archive/`. |
-| Reset (active) | Controlled reset to MVP Web Cockpit Foundation + FastAPI direction. ADRs reset to `001`–`005`. |
+| Reset Tasks 1–5 | Controlled reset to MVP Web Cockpit Foundation + FastAPI direction. ADRs reset to `001`–`005`; MVP gap finalized + 8-sprint plan locked (Task 5). Gate 5 pending review. |
 
 ---
 
