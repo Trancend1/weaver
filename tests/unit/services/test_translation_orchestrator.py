@@ -52,6 +52,25 @@ def test_translate_project_sends_previous_chapter_window_to_provider(tmp_path, m
     )
 
 
+def test_translate_project_stops_on_cooperative_cancel(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    provider = CapturingProvider()
+    checks = {"n": 0}
+
+    def should_cancel() -> bool:
+        # Allow the first segment through; cancel before the second.
+        cancel = checks["n"] >= 1
+        checks["n"] += 1
+        return cancel
+
+    summary = translate_project(init.project_toml, provider=provider, should_cancel=should_cancel)
+
+    assert summary.translated_segments == 1
+    assert len(provider.requests) == 1  # worker stopped after one segment
+    assert summary.pending_segments >= 1  # remaining segments left consistent
+
+
 def test_translate_project_injects_approved_glossary_terms_into_matching_prompt(
     tmp_path, monkeypatch
 ) -> None:
@@ -231,7 +250,7 @@ def _set_fake_provider(project_toml: Path) -> None:
     text = project_toml.read_text(encoding="utf-8")
     text = text.replace('type = "deepseek"', 'type = "fake"')
     text = text.replace('model = "deepseek-chat"', 'model = "fake-1"')
-    text = text.replace('base_url = "http://localhost:11434"', 'pattern = "EN: {source}"')
+    text = text.replace('model = "fake-1"', 'model = "fake-1"\npattern = "EN: {source}"')
     project_toml.write_text(text, encoding="utf-8")
 
 

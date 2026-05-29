@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Weaver Cockpit{% endblock %}</title>
+  <script src="{{ url_for('static', filename='htmx.min.js') }}" defer></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='cockpit.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('projects.dashboard') }}">weaver</a>
+    <span class="tagline">local cockpit</span>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

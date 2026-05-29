@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — Weaver Cockpit{% endblock %}
+{% block content %}
+  <p><a href="{{ url_for('projects.dashboard') }}">&larr; All projects</a></p>
+
+  {% if request.args.get('busy') %}
+  <section class="panel warn">
+    <p>A translate job is already running. One job runs at a time — watch its progress below.</p>
+  </section>
+  {% endif %}
+  {% if request.args.get('config_saved') %}
+  <section class="panel ok"><p>Saved provider/model to {{ request.args.get('config_saved') }} scope.</p></section>
+  {% endif %}
+  {% if request.args.get('config_error') %}
+  <section class="panel error"><p>{{ request.args.get('config_error') }}</p></section>
+  {% endif %}
+  {% if request.args.get('exported') %}
+  <section class="panel ok"><p>Exported {{ request.args.get('exported') }} → <code>{{ request.args.get('output') }}</code></p></section>
+  {% endif %}
+  {% if request.args.get('export_error') %}
+  <section class="panel error"><p>{{ request.args.get('export_error') }}</p></section>
+  {% endif %}
+
+  {% if project.summary %}
+  {% set s = project.summary %}
+  <section class="panel">
+    <h1>{{ project.name }}</h1>
+    <p class="muted"><code>{{ s.source_file }}</code></p>
+    <p>Provider <strong>{{ s.provider }}</strong> / model <strong>{{ s.model }}</strong></p>
+    <table class="grid status">
+      <tbody>
+        <tr><th>Chapters</th><td>{{ s.chapter_count }}</td></tr>
+        <tr><th>Segments</th><td>{{ s.segment_count }}</td></tr>
+        <tr><th>Translated</th><td>{{ s.translated_count }}</td></tr>
+        <tr><th>Pending</th><td>{{ s.pending_count }}</td></tr>
+        <tr><th>Failed</th><td>{{ s.failed_count }}</td></tr>
+        <tr><th>Stale</th><td>{{ s.stale_count }}</td></tr>
+        <tr><th>Glossary candidates</th><td>{{ s.glossary_candidate_count }}</td></tr>
+        <tr><th>Glossary terms</th><td>{{ s.glossary_term_count }}</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>Provider / model</h2>
+    <form method="post" action="{{ url_for('config.update', name=project.name) }}">
+      <div class="row">
+        <label>Provider
+          <select name="provider_type">
+            <option value="">(unchanged)</option>
+            {% for t in provider_types %}
+            <option value="{{ t }}">{{ t }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Model <input type="text" name="model" placeholder="(unchanged)"></label>
+        <label>Scope
+          <select name="scope">
+            <option value="project">this project</option>
+            <option value="global">global default</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>Base URL <input type="text" name="base_url" placeholder="https://api.example.com (custom)"></label>
+        <label>Key env var <input type="text" name="api_key_env" placeholder="e.g. MY_API_KEY (custom)"></label>
+      </div>
+      <div class="row">
+        <label>API key <input type="password" name="api_key" autocomplete="off" placeholder="stored in ~/.weaver/secrets.toml, never shown"></label>
+        <button class="btn" type="submit">Save</button>
+      </div>
+    </form>
+    <p class="muted">
+      Custom = any OpenAI-compatible endpoint (set base URL + model + key env var).
+      The key value is written only to the local secret store (<code>~/.weaver/secrets.toml</code>, mode 600),
+      never to <code>project.toml</code> and never shown.
+    </p>
+    {% if secret_names %}
+    <p class="muted">Stored keys: {% for n in secret_names %}<code>{{ n }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>Translate</h2>
+    <form method="post" action="{{ url_for('translate.start', name=project.name) }}" class="row">
+      <label>First N <input type="number" name="first_n" min="1" placeholder="all"></label>
+      <label><input type="checkbox" name="retry_failed"> retry failed</label>
+      <button class="btn primary" type="submit" {% if running_here %}disabled{% endif %}>Start translate</button>
+    </form>
+    {% if running_here %}
+    <form method="post" action="{{ url_for('translate.stop', name=project.name) }}" class="row">
+      <button class="btn danger" type="submit">Stop</button>
+    </form>
+    {% endif %}
+
+    <h3>Live progress</h3>
+    <div id="progress-bar"><div id="progress-fill"></div></div>
+    <p id="progress-text" class="muted">{% if running_here %}Connecting…{% else %}Idle.{% endif %}</p>
+    <pre id="progress-log" class="log"></pre>
+  </section>
+
+  <section class="panel">
+    <h2>Glossary</h2>
+    <p><a class="btn" href="{{ url_for('glossary.review', name=project.name) }}">Review glossary ({{ s.glossary_candidate_count }} candidates, {{ s.glossary_term_count }} approved)</a></p>
+  </section>
+
+  <section class="panel">
+    <h2>Export</h2>
+    <form method="post" action="{{ url_for('export.run_export', name=project.name) }}" class="row">
+      <button class="btn" type="submit" name="mode" value="markdown">Export Markdown</button>
+      <button class="btn" type="submit" name="mode" value="epub">Export EPUB</button>
+    </form>
+  </section>
+
+  <section class="panel hint">
+    <h2>Next</h2>
+    <ul>
+      {% if s.glossary_candidate_count > s.glossary_term_count %}
+      <li>Review {{ s.glossary_candidate_count - s.glossary_term_count }} glossary candidates (CLI: <code>weaver glossary review</code>; browser UI lands in 12c).</li>
+      {% endif %}
+      {% if s.pending_count > 0 %}
+      <li>{{ s.pending_count }} segments pending — start a translate above.</li>
+      {% endif %}
+      {% if s.failed_count > 0 %}
+      <li>{{ s.failed_count }} failed — translate with “retry failed” checked.</li>
+      {% endif %}
+      {% if s.pending_count == 0 and s.failed_count == 0 and s.segment_count > 0 %}
+      <li>All segments translated — export Markdown or EPUB above.</li>
+      {% endif %}
+    </ul>
+  </section>
+
+  <script>
+    (function () {
+      const source = new EventSource("{{ url_for('translate.events', name=project.name) }}");
+      const fill = document.getElementById("progress-fill");
+      const text = document.getElementById("progress-text");
+      const log = document.getElementById("progress-log");
+      source.addEventListener("progress", function (e) {
+        const d = JSON.parse(e.data);
+        const pct = d.total ? Math.round((d.current / d.total) * 100) : 0;
+        fill.style.width = pct + "%";
+        text.textContent = d.current + " / " + d.total + " — " + d.segment_id + " (" + d.status + ")";
+        log.textContent += d.current + "/" + d.total + " " + d.segment_id + " " + d.status + "\n";
+      });
+      source.addEventListener("done", function (e) {
+        const d = JSON.parse(e.data);
+        fill.style.width = "100%";
+        const lead = d.cancelled ? "Cancelled" : "Done";
+        text.textContent = lead + " — " + d.translated + " translated, " + d.failed + " failed, " + d.pending + " pending.";
+        source.close();
+      });
+      source.addEventListener("error", function (e) {
+        if (e.data) {
+          const d = JSON.parse(e.data);
+          text.textContent = "Error: " + d.message;
+        }
+        source.close();
+      });
+    })();
+  </script>
+  {% else %}
+  <section class="panel error">
+    <h1>{{ project.name }}</h1>
+    <p>Project state is unreadable: {{ project.error }}</p>
+  </section>
+  {% endif %}
+{% endblock %}

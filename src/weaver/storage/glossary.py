@@ -108,6 +108,75 @@ def list_glossary_candidates(
     return [_candidate_from_row(row) for row in rows]
 
 
+def list_pending_glossary_candidates(
+    connection: sqlite3.Connection,
+    *,
+    project_id: int,
+    offset: int = 0,
+    limit: int = 20,
+    find: str | None = None,
+) -> list[GlossaryCandidateRecord]:
+    """List pending candidates in review order, paginated.
+
+    Order matches `get_pending_glossary_candidate` (frequency desc, source, id)
+    so browser pagination and the CLI loop agree on sequence. When `find` is
+    given, only candidates whose source contains it (case-insensitive) are
+    returned.
+    """
+
+    needle = (find or "").strip()
+    if needle:
+        rows = connection.execute(
+            """
+            SELECT id, project_id, source, target, category, notes, status, frequency
+            FROM glossary_candidates
+            WHERE project_id = ? AND status = 'pending' AND source LIKE ?
+            ORDER BY frequency DESC, source, id
+            LIMIT ? OFFSET ?
+            """,
+            (project_id, f"%{needle}%", limit, offset),
+        ).fetchall()
+    else:
+        rows = connection.execute(
+            """
+            SELECT id, project_id, source, target, category, notes, status, frequency
+            FROM glossary_candidates
+            WHERE project_id = ? AND status = 'pending'
+            ORDER BY frequency DESC, source, id
+            LIMIT ? OFFSET ?
+            """,
+            (project_id, limit, offset),
+        ).fetchall()
+    return [_candidate_from_row(row) for row in rows]
+
+
+def count_pending_glossary_candidates(
+    connection: sqlite3.Connection, *, project_id: int, find: str | None = None
+) -> int:
+    """Count pending candidates, optionally filtered by a source substring."""
+
+    needle = (find or "").strip()
+    if needle:
+        row = connection.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM glossary_candidates
+            WHERE project_id = ? AND status = 'pending' AND source LIKE ?
+            """,
+            (project_id, f"%{needle}%"),
+        ).fetchone()
+    else:
+        row = connection.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM glossary_candidates
+            WHERE project_id = ? AND status = 'pending'
+            """,
+            (project_id,),
+        ).fetchone()
+    return int(row["count"])
+
+
 def get_pending_glossary_candidate(
     connection: sqlite3.Connection, *, project_id: int
 ) -> GlossaryCandidateRecord | None:

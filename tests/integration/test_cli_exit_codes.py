@@ -58,7 +58,7 @@ def test_weaver_translate_provider_unhealthy_exits_code_three(tmp_path, monkeypa
     text = (
         text.replace('type = "deepseek"', 'type = "fake"')
         .replace('model = "deepseek-chat"', 'model = "fake-1"')
-        .replace('base_url = "http://localhost:11434"', 'pattern = "EN translation."')
+        .replace('model = "fake-1"', 'model = "fake-1"\npattern = "EN translation."')
     )
     project_toml.write_text(text, encoding="utf-8")
 

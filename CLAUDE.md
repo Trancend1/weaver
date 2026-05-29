@@ -32,6 +32,7 @@ User-facing docs live in [README.md](README.md). Internal specs live in [docs/](
 | [api/](docs/api/) | Stable JSON API shapes (`qa_json_schema.md`) |
 | [benchmarks.md](docs/benchmarks.md) | Phase 10 performance budget evidence |
 | [release_acceptance.md](docs/release_acceptance.md) | Phase 10.5 AC-1 through AC-9 evidence |
+| [feature_plan/](docs/feature_plan/) | Phase 12 Web Cockpit planning: [feature plan](docs/feature_plan/web-feature-plan.md), [architecture](docs/feature_plan/web-architecture.md), [execution blueprint](docs/feature_plan/web-execution-blueprint.md), [master plan](docs/feature_plan/2026-05-29-web-cockpit-phase-12.md) |
 
 **Rule:** docs are the spec. Code follows docs. If code contradicts docs, ask first.
 
@@ -59,10 +60,14 @@ Single source of truth for build status. Update at end of every phase/sprint. Ro
 | 11a | CLI UX Sprint A — flags, completion, doctor, aliases (0.2.x)                                       | 10         | ✅ Complete     |
 | 11b | CLI UX Sprint B — global config, templates, preview, sampled translate, JSON schema (0.3.0)        | 11a        | ✅ Complete     |
 | 11c | CLI UX Sprint C — `weaver new` wizard, TUI dashboard, glossary diff, EPUBCheck, honorific modes    | 11b        | ✅ Complete     |
+| 12a | Web Cockpit A — `weaver serve`, project discovery, read-only monitor + SSE (0.5.0)                 | 11c        | ✅ Complete     |
+| 12b | Web Cockpit B — file input (browse/upload), provider/model config, translate controls, export      | 12a        | ✅ Complete     |
+| 12c | Web Cockpit C — glossary review UI                                                                 | 12b        | ✅ Complete     |
+| 13  | Configurable Providers + Secret Store — `custom` OpenAI-compatible provider, `~/.weaver/secrets.toml` (0.6.0) | 12c        | ✅ Complete     |
 
 Legend: ✅ complete · 🟡 in progress · ⏳ next · ⬜ pending · 🚫 blocked.
 
-Critical path: Phases 1→4 strict. Phases 5/6/7/9 may overlap once 4 ships. CLI UX 11a→11b→11c is strict: B layers global config, C consumes both.
+Critical path: Phases 1→4 strict. Phases 5/6/7/9 may overlap once 4 ships. CLI UX 11a→11b→11c is strict: B layers global config, C consumes both. Web Cockpit 12a→12b→12c is strict: A lays Flask app + discovery + JobManager, B layers write actions, C moves glossary review into the browser. Phase 12 is planned (not scheduled) — see [docs/feature_plan/web-feature-plan.md](docs/feature_plan/web-feature-plan.md), [web-architecture.md](docs/feature_plan/web-architecture.md), [web-execution-blueprint.md](docs/feature_plan/web-execution-blueprint.md). ADRs `0016`–`0019` author first.
 
 ### 2.2 Reusable Phase Gate
 
@@ -77,35 +82,135 @@ Before starting any next phase/sprint, always run this gate:
 
 Required reminder before phase transition: **"Check exit criteria first. No next phase until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Sprint — Phase 11c: CLI UX Sprint C
+### 2.3 Active Sprint — none (Phase 12 complete)
 
-**Goal:** ship wizard-driven project creation (`weaver new`), read-only TUI dashboard (`weaver dashboard`), per-chapter glossary diff, optional EPUBCheck integration, and honorific-mode extensions. Every change is additive — 11b wire compatibility holds.
+Phase 12 (Web Cockpit A/B/C) shipped in `0.5.0`. The local cockpit now covers the full workflow in the browser: project discovery + creation (browse/upload), provider/model config, translate with live SSE progress + stop, export, and glossary review (approve/edit/reject + conflicts + diff). CLI stays fully wire-compatible.
 
-**Sub-sprint deliverables** (ADRs land before matching implementation):
-
-| Row | ADR | Implementation |
-| --- | --- | -------------- |
-| C1  | `0012-textual-tui.md`              | `weaver dashboard` read-only TUI mirror of `weaver inspect`; `--no-color` honored |
-| C2  | `0013-epubcheck-optional-dep.md`   | `weaver validate --epub` invokes EPUBCheck (optional Java dep) |
-| C3  | `0014-questionary-wizard.md`       | `weaver new` interactive wizard (provider → template → output → init) |
-| C4  | `0015-tui-aesthetic.md`            | TUI aesthetic policy (color palette, spacing, layout) |
-| C5  | *(none)*                           | `weaver glossary diff <chapter-A> <chapter-B>` read-only per-chapter term diff |
-| C6  | *(none)*                           | `[translation] honorifics` accepts `localize` and `hybrid` in addition to `preserve` |
-
-**Exit criteria:**
-1. All ADRs land in `docs/decisions/` per ENGINEERING_STANDARDS format.
-2. All implementation PRs land green; one PR = one concern.
-3. AC-1..AC-9 acceptance gate stays PASS.
-4. Ruff lint + format clean. Pyright `0 errors`.
-5. README + `docs/quickstart.md` updated for new commands.
-
-**Blockers / open questions:** none. Sprint scope from `plans/semua-phase-log-1-10-hazy-lovelace.md` §5 C.
-
-**Update protocol when sprint closes:** flip §2.1 row to ✅; log outcome in §2.5; mark 11c as last planned UX sprint.
+No active sprint. Next phase TBD — candidates live in [FUTURE_ROADMAP.md](docs/FUTURE_ROADMAP.md). On starting a new phase: run the §2.2 phase gate, set this section to the new sprint, and add its row to §2.1.
 
 ### 2.4 Exit Criteria
 
 Compact evidence ledger. Inspection notes for completed phases live in this section; deep-dive detail for legacy phases lives in git history and `plans/`. Active sprint keeps full detail.
+
+#### Phase 12c — Web Cockpit C (Glossary Review UI)
+
+Status: `✅ Passed`
+
+Plain-language criteria (mirror of [web-execution-blueprint.md](docs/feature_plan/web-execution-blueprint.md) §5 global exit + §3 12c exit):
+
+1. Stateless glossary ops are additive — the CLI `GlossaryReviewSession` loop works unchanged (no new ADR; no new dep).
+2. One PR = one concern; all implementation lands green.
+3. AC-1..AC-9 acceptance gate stays PASS.
+4. Ruff lint + format clean. Pyright `0 errors`.
+5. CLI stays wire-compatible — every Phase 11 command + flag works unchanged.
+6. README + `docs/quickstart.md` document browser glossary review.
+7. All web deps stay behind `weaver[web]`; core install pulls no Flask.
+8. **12c usable surface:** full glossary review done in the browser (paginated approve/edit/reject); approved-term conflicts + per-chapter coverage diff visible read-only before translate.
+
+Evidence:
+
+| Criterion | Proof | Status |
+| --------- | ----- | ------ |
+| Stateless ops, session untouched (gate) | `src/weaver/services/glossary_review.py` (`list_pending`, `act_on_candidate`, `PendingPage`, cwd-aware resolver); `GlossaryReviewSession` unchanged; `tests/unit/services/test_glossary_review_stateless.py` (8) | ✅ |
+| Storage pagination | `src/weaver/storage/glossary.py::list_pending_glossary_candidates` | ✅ |
+| Paginated review route + UI (approve/edit/reject) | `src/weaver/web/routes_glossary.py`, `templates/glossary.html`; `test_web_cockpit.py::test_glossary_page_renders`, `::test_glossary_approve_decrements_pending` | ✅ |
+| Find (source substring filter, PP5) | `list_pending(find=)` + `storage/glossary.py::{list_pending,count_pending}_glossary_candidates(find=)`; `test_glossary_review_stateless.py::test_list_pending_find_*`, `test_web_cockpit.py::test_glossary_find_filters` | ✅ |
+| Conflicts surfaced read-only | `routes_glossary.review` → `list_project_glossary_conflicts`; `test_web_cockpit.py::test_glossary_conflicts_surfaced` | ✅ |
+| Per-chapter diff surfaced read-only | `routes_glossary._maybe_diff` → `glossary_diff`; `test_web_cockpit.py::test_glossary_diff_renders` | ✅ |
+| Cockpit glossary link + blueprint wired | `templates/cockpit.html` glossary panel; `web/app.py` `glossary_bp` | ✅ |
+| Web assets ship in wheel | `uv build --wheel` → `dist/weaver-0.5.0-py3-none-any.whl` contains `templates/glossary.html` | ✅ |
+| Acceptance gate | `bench/run_acceptance_gate.py` → AC-1..AC-9 PASS | ✅ |
+
+Latest observed result: `309 passed, 3 deselected`; Ruff lint+format clean; Pyright `0 errors`; AC-1..AC-9 PASS.
+
+New modules: `src/weaver/web/routes_glossary.py`, `src/weaver/web/templates/glossary.html`.
+Changed (additive): `storage/glossary.py` (`list_pending_glossary_candidates` + `count_pending_glossary_candidates`, both `find=`), `services/glossary_review.py` (`list_pending`/`act_on_candidate`/`PendingPage`, find filter, cwd-aware resolver, conflicts `cwd=`), `web/app.py` (`glossary_bp`), `templates/cockpit.html` (glossary link).
+
+Usability:
+
+- Usable now: full glossary review in the browser — paginated pending list, approve/edit/reject per candidate, queue counts, conflicts + per-chapter coverage diff read-only. Phase 12 web cockpit is now end-to-end (create → config → translate → review → export) with no CLI required.
+- Internal-only: `PendingPage`, `list_pending`, `act_on_candidate`, `list_pending_glossary_candidates`.
+- Not user-facing: none for Phase 12 — cockpit feature set complete.
+
+#### Phase 12b — Web Cockpit B (File Input + Write Actions)
+
+Status: `✅ Passed`
+
+Plain-language criteria (mirror of [web-execution-blueprint.md](docs/feature_plan/web-execution-blueprint.md) §5 global exit + §3 12b exit):
+
+1. ADR `0018` (config-writer) merged **before** any config-write code (gate held).
+2. One PR = one concern; all implementation lands green.
+3. AC-1..AC-9 acceptance gate stays PASS.
+4. Ruff lint + format clean. Pyright `0 errors`.
+5. CLI stays wire-compatible — every Phase 11 command + flag works unchanged. `translate_project` gains only the additive optional `should_cancel` hook (CLI passes `None`).
+6. README + `docs/quickstart.md` document the 12b browser actions.
+7. All web deps stay behind `weaver[web]`; core install pulls no Flask.
+8. **12b usable surface:** create a project from the browser (browse a sandboxed folder or upload an EPUB), set its provider/model from a dropdown, translate with stop/retry/first-N, and export — without touching the CLI. API keys never written/rendered.
+
+Evidence:
+
+| Criterion | Proof | Status |
+| --------- | ----- | ------ |
+| ADR `0018` config-writer (gate) | `docs/decisions/0018-config-writer-service.md` (accepted); `src/weaver/services/config_writer.py`; `tests/unit/services/test_config_writer.py` (5) | ✅ |
+| Cancel hook in `translate_project` (additive) | `src/weaver/services/translation.py` `should_cancel`; `tests/unit/services/test_translation_orchestrator.py::test_translate_project_stops_on_cooperative_cancel` | ✅ |
+| JobManager cancel + stop route | `src/weaver/web/job_manager.py` (`request_cancel`/`should_cancel`, status `cancelled`), `src/weaver/web/routes_translate.py::stop`; `tests/unit/web/test_job_manager.py` (6), `test_web_cockpit.py::test_translate_stop_redirects_when_idle` | ✅ |
+| Sandboxed file browser + upload + init (PP1/PP2) | `src/weaver/web/file_browser.py`, `src/weaver/web/routes_new.py`, `templates/new.html`; `tests/unit/web/test_file_browser.py` (4), `test_web_cockpit.py` browse/traversal/init/upload tests | ✅ |
+| Provider-discard fix (PP2) | `initialize_project(provider=)` + stray ollama `base_url` removed (`src/weaver/services/project.py`); wizard wired (`cli/main.py`); `test_web_cockpit.py::test_new_init_*` | ✅ |
+| Config-write route (project + global scope, keys env-only) | `src/weaver/web/routes_config.py`; `test_web_cockpit.py::test_config_updates_provider_project_scope` | ✅ |
+| Export trigger | `src/weaver/web/routes_export.py`; `test_web_cockpit.py::test_export_markdown_redirects` | ✅ |
+| Web assets ship in wheel | `uv build --wheel` → `dist/weaver-0.5.0-py3-none-any.whl` contains `templates/new.html` + all 12a assets | ✅ |
+| Acceptance gate | `bench/run_acceptance_gate.py` → AC-1..AC-9 PASS | ✅ |
+
+Latest observed result: `294 passed, 3 deselected`; Ruff lint+format clean; Pyright `0 errors`; AC-1..AC-9 PASS.
+
+New modules: `src/weaver/services/config_writer.py`, `src/weaver/web/{file_browser,routes_new,routes_config,routes_export}.py`, `src/weaver/web/templates/new.html`.
+Changed (additive): `services/translation.py` (`should_cancel`), `services/project.py` (`initialize_project(provider=)` + base_url fix), `web/job_manager.py` (cancel), `web/routes_translate.py` (stop), `web/app.py` (blueprints + `MAX_CONTENT_LENGTH`), `cli/main.py` (wizard provider wired).
+
+Usability:
+
+- Usable now: browser project creation (browse/upload), provider/model config (project + global), translate with stop/retry/first-N + live SSE, Markdown/EPUB export — no CLI needed.
+- Internal-only: `set_provider`, `list_directory`/`resolve_epub`, `BrowseListing`/`BrowseEntry`, `JobManager.request_cancel`.
+- Not user-facing yet: browser glossary review (approve/edit/reject/find) + conflicts/diff — land in 12c.
+
+#### Phase 12a — Web Cockpit A (Monitor + Project Discovery)
+
+Status: `✅ Passed`
+
+Plain-language criteria (mirror of [web-execution-blueprint.md](docs/feature_plan/web-execution-blueprint.md) §5 global exit + §3 12a exit):
+
+1. ADR `0016` lands and is merged **before** any Flask/cockpit code enters the codebase (gate rule). ADRs `0017`–`0019` land in `docs/decisions/` per ENGINEERING_STANDARDS format.
+2. All implementation PRs land green; one PR = one concern (no bundled refactor + feature).
+3. AC-1..AC-9 acceptance gate stays PASS.
+4. Ruff lint + format clean. Pyright `0 errors`.
+5. Existing CLI stays wire-compatible — every Phase 11 command + flag works unchanged. `translate_project` keeps its existing `progress_callback`; web reuses it (the `should_cancel` hook defers to 12b).
+6. README + `docs/quickstart.md` document `weaver serve` (loopback bind, `--port`, `--books-dir`, `weaver[web]` install).
+7. All web dependencies sit behind the `weaver[web]` optional extra; core install pulls no Flask.
+8. **12a usable surface:** browse to `http://127.0.0.1:8765`, see all discovered projects with no path typing; start a translate job from the cockpit and watch live SSE progress stream to completion.
+
+Evidence:
+
+| Criterion | Proof | Status |
+| --------- | ----- | ------ |
+| ADRs `0016`–`0019` merged before code (gate) | `docs/decisions/0016`–`0019`; committed `1e8142a` ahead of Flask code | ✅ |
+| `weaver serve` + Flask app factory + vendored htmx + `weaver[web]` | `src/weaver/web/app.py`, `src/weaver/cli/main.py` `serve_command`, `src/weaver/web/static/htmx.min.js`, `pyproject.toml` `[project.optional-dependencies] web`; `tests/integration/test_web_cockpit.py::test_serve_help_mentions_loopback` | ✅ |
+| `services/project_discovery.py` + dashboard project list | `src/weaver/services/project_discovery.py`, `src/weaver/web/routes_projects.py`; `tests/unit/services/test_project_discovery.py` (4), `test_web_cockpit.py` dashboard test | ✅ |
+| Loopback `127.0.0.1` bind, no auth (ADR `0017`) | `app.py` `HOST = "127.0.0.1"`; no secret rendering in templates; live smoke confirmed bind | ✅ |
+| `web/job_manager.py` single-job registry + SSE stream (ADR `0019`) | `src/weaver/web/job_manager.py`, `src/weaver/web/routes_translate.py`; `tests/unit/web/test_job_manager.py` (4), `test_web_cockpit.py` SSE stream test | ✅ |
+| Read-only cockpit view mirroring `weaver inspect` | `src/weaver/web/routes_projects.py::cockpit`, `templates/cockpit.html`; `test_web_cockpit.py` cockpit + 404 tests | ✅ |
+| Web assets ship in wheel | `uv build --wheel` → `dist/weaver-0.5.0-py3-none-any.whl` contains `weaver/web/templates/*.html` + `weaver/web/static/{htmx.min.js,cockpit.css}` | ✅ |
+| Acceptance gate | `bench/run_acceptance_gate.py` → AC-1..AC-9 PASS | ✅ |
+
+Latest observed result: `273 passed, 3 deselected`; Ruff lint+format clean; Pyright `0 errors`; AC-1..AC-9 PASS. Live smoke: GET `/` → 200 (project listed), cockpit → 200, POST translate → 302, SSE `text/event-stream` streamed `progress×3 + done`.
+
+New modules: `src/weaver/services/project_discovery.py`, `src/weaver/web/{__init__,app,job_manager,routes_projects,routes_translate}.py`, `src/weaver/web/templates/{base,dashboard,cockpit}.html`, `src/weaver/web/static/{htmx.min.js,cockpit.css}`.
+New docs: ADRs `0016`–`0019`; README + quickstart `weaver serve` sections.
+Optional extra: `weaver[web]` (flask). Version bumped to `0.5.0`.
+
+Usability:
+
+- Usable now: `pip install weaver[web]` → `weaver serve` opens a browser dashboard listing every discovered project (no typed paths, kills PP1); click into a read-only cockpit mirroring `weaver inspect`; start a translate run and watch live SSE progress to completion.
+- Internal-only: `DiscoveredProject` dataclass, `JobManager`/`TranslationJob` registry, `format_sse` helper, `JobRunner` closure pattern.
+- Not user-facing yet: browser file input (browse/upload), provider/model config editing, translate cancel button, export trigger, glossary review UI — land in 12b / 12c.
 
 #### Phases 0–10 — All Passed
 
@@ -270,6 +375,9 @@ Version bumped to `0.4.0`.
 | 11a | CLI UX Sprint A             | Local sprint, plan `plans/semua-phase-log-1-10-hazy-lovelace.md` §5 A   | 14 wire-compatible changes: shell completion, `--help` examples, `--provider`/`--model`/`--dry-run`/`--verbose`/batch on translate, `--first-failed`/`--next-stale`/`--recent` on edit, `Reviewed N of M` + `[f]ind` + `--find` on glossary review, `weaver doctor`, `weaver validate --schema`, hidden `tx`/`ins`/`gl` aliases, global `--debug`, inspect percentages. 201 tests, 0 lint/type errors, AC-1..AC-9 PASS. |
 | 11b | CLI UX Sprint B             | Local sprint, plan `plans/semua-phase-log-1-10-hazy-lovelace.md` §5 B   | 7 additive features: `~/.weaver/config.toml` precedence chain + env vars, `weaver init --from-template` (3 presets), `weaver preview` with `--segment`/`--chapter`/`--pager`, `weaver translate --first-N`, `schema_version: 1` in `--json` payload + `docs/api/qa_json_schema.md`, destructive-confirm on init overwrite + glossary edit. 6 ADRs (`0006`–`0011`). 231 tests (+30), 0 lint/type errors, AC-1..AC-9 PASS. Version `0.3.0`. |
 | 11c | CLI UX Sprint C             | Local sprint, plan `plans/semua-phase-log-1-10-hazy-lovelace.md` §5 C   | 5 additive features: `weaver new` questionary wizard, `weaver dashboard` Textual TUI, `weaver glossary diff`, `weaver validate --epub` (EPUBCheck, graceful degradation), `honorifics = localize\|hybrid` validation. 4 ADRs (`0012`–`0015`). Optional extras `[tui]`/`[wizard]`/`[all]`. 258 tests (+27), 0 lint/type errors, AC-1..AC-9 PASS. Version `0.4.0`. |
+| 12a | Web Cockpit A               | Local sprint, plan [docs/feature_plan/web-execution-blueprint.md](docs/feature_plan/web-execution-blueprint.md) §3 | Local web cockpit foundation: `weaver serve` (Flask app factory, `127.0.0.1` bind, `--port`/`--books-dir`/`--no-browser`), `services/project_discovery.py` + dashboard listing discovered `.weaver/*` projects (kills PP1), read-only cockpit mirroring `weaver inspect`, `web/job_manager.py` single-job registry + SSE endpoint streaming live translate progress (PP3 start; cancel defers to 12b). Vendored `htmx.min.js`; all behind `weaver[web]` extra (core install pulls no Flask). ADRs `0016`–`0019` merged before code (gate held). 273 tests (+15), 0 lint/type errors, AC-1..AC-9 PASS; web assets verified in wheel; live SSE smoke confirmed. Version `0.5.0`. |
+| 12b | Web Cockpit B               | Local sprint, plan [docs/feature_plan/web-execution-blueprint.md](docs/feature_plan/web-execution-blueprint.md) §3 (12b) | Browser write actions: sandboxed file browser (`file_browser.py`, reject `..`) + upload (→ `.weaver/_uploads/`) + init (`routes_new.py`, kills PP1 file picker); `config_writer.py` atomic comment-preserving provider/model writer for `project.toml [provider]` + global `[defaults]` (ADR `0018`, keys env-only); `initialize_project(provider=)` + stray ollama `base_url` removed (fixes PP2 discarded-provider bug; wizard wired); translate controls incl. cooperative **stop** (`should_cancel` hook in `translation.py`, JobManager cancel, status `cancelled`); export trigger (`routes_export.py`). `new.html` template; cockpit gains config/stop/export/next-action UI. All additive — CLI wire-compatible. 294 tests (+21), 0 lint/type errors, AC-1..AC-9 PASS; web assets (incl. `new.html`) verified in wheel. Version `0.5.0`. |
+| 12c | Web Cockpit C               | Local sprint, plan [docs/feature_plan/web-execution-blueprint.md](docs/feature_plan/web-execution-blueprint.md) §3 (12c) | Browser glossary review (PP5): stateless cwd-aware ops `list_pending`/`act_on_candidate` + `PendingPage` in `services/glossary_review.py` (CLI `GlossaryReviewSession` untouched — gate held); `storage/glossary.py` pagination + `find` filter (`list_pending`/`count_pending_glossary_candidates`); `routes_glossary.py` (paginated approve/edit/reject + find) + `glossary.html`; approved-term conflicts + per-chapter coverage diff surfaced read-only; cockpit glossary link. All additive — CLI wire-compatible. Phase 12 web cockpit now end-to-end (create → config → translate → review → export). 309 tests (+15), 0 lint/type errors, AC-1..AC-9 PASS; `glossary.html` verified in wheel. Version `0.5.0`. |
 
 ---
 
@@ -277,7 +385,9 @@ Version bumped to `0.4.0`.
 
 **Use:** Python 3.11+ · uv · pyproject.toml · ruff · pyright (basic) · pytest · typer · rich · pydantic v2 · tomllib · sqlite3 (WAL, no ORM) · ebooklib · fugashi + ipadic-neologd · openai SDK · google-generativeai · Jinja2.
 
-**Rejected (no reintroduction without ADR):** Django · Flask · FastAPI · SQLAlchemy · Celery · RQ · Docker · asyncio · Sentry · OpenTelemetry.
+**Rejected (no reintroduction without ADR):** Django · FastAPI · SQLAlchemy · Celery · RQ · Docker · asyncio · Sentry · OpenTelemetry.
+
+**Reopened (ADR `0016`, landed 0.5.0):** **Flask (sync only)** + vendored HTMX for the Phase 12 local web cockpit. Behind optional extra `weaver[web]`; core install pulls no Flask. asyncio / FastAPI / React-Node build remain rejected. See [docs/feature_plan/web-architecture.md](docs/feature_plan/web-architecture.md).
 
 **Providers (MVP-0):**
 
@@ -286,7 +396,10 @@ Version bumped to `0.4.0`.
 | `deepseek` | Default cloud | `DEEPSEEK_API_KEY` |
 | `gemini` | Free-tier cloud | `GEMINI_API_KEY` |
 | `ollama` | Local, optional | None (local) |
+| `custom` | Any OpenAI-compatible endpoint (`base_url`+`model`+`api_key_env`) | env var named by `api_key_env` |
 | `fake` | CI/dev default | None |
+
+Provider types are **registry-driven** (`providers/registry.py` `known_provider_types()`) — no hardcoded enum. API keys resolve from env vars or the local secret store `~/.weaver/secrets.toml` (ADR `0020`, `core/secret_store.py`, mode `0o600`, env wins); never in `project.toml`/global config, never logged. `project.toml [provider]` stores only `type`/`model`/`base_url`/`api_key_env`.
 
 ---
 
@@ -312,7 +425,7 @@ Source: [ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md).
 - User-facing errors: **what failed / likely cause / next command**.
 - State writes go through services. CLI never touches SQLite directly.
 - One segment translation = one transaction.
-- API keys via env vars only, never config files. Never log keys.
+- API keys via env vars or the dedicated local secret store `~/.weaver/secrets.toml` (ADR `0020`, mode `0o600`, outside the repo) — **never** in `project.toml` / `~/.weaver/config.toml`, never logged, never rendered. Shell env vars take precedence over the secret store.
 - `@dataclass(frozen=True)` for value types. Mutability only for state machines.
 - File paths via `pathlib.Path`. Atomic writes (`tempfile` + `replace`) for valuable state.
 - Tests mirror source tree. Use `FakeProvider`, never live LLMs in CI. Fixtures = public domain only.

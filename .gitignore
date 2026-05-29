@@ -41,5 +41,8 @@ Thumbs.db
 .weaver/
 .tmp_*/
 
+# Secret store (ADR 0020) — should live in ~/.weaver, never in a repo
+secrets.toml
+
 #
 The Insipid Prince's.epub

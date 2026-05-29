@@ -19,7 +19,12 @@ def _require_questionary() -> None:
         ) from exc
 
 
-_PROVIDERS = ["deepseek", "gemini", "ollama", "fake"]
+def _scaffoldable_providers() -> list[str]:
+    """Built-in providers `weaver init` can scaffold (custom is set post-init)."""
+
+    from weaver.services.project import DEFAULT_MODELS
+
+    return sorted(DEFAULT_MODELS)
 
 
 @dataclass(frozen=True)
@@ -57,7 +62,7 @@ def run_new_wizard() -> WizardAnswers:
 
     provider: str = questionary.select(
         "Translation provider:",
-        choices=_PROVIDERS,
+        choices=_scaffoldable_providers(),
     ).ask()
     if provider is None:
         raise ConfigError(

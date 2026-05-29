@@ -4,7 +4,7 @@
 
 Weaver is a local CLI that turns a Japanese EPUB into a translated EPUB and a Markdown review file. It manages glossary consistency, resumable translation runs, and deterministic QA — no GUI, no accounts, no telemetry.
 
-**Status:** v0.3.0 alpha · single maintainer · MIT license
+**Status:** v0.6.0 alpha · single maintainer · MIT license
 
 ---
 
@@ -19,6 +19,7 @@ Weaver is a local CLI that turns a Japanese EPUB into a translated EPUB and a Ma
 - **Global config** — `~/.weaver/config.toml` with env-var overrides; no repeated flags
 - **Preview** — display source + translation pairs inline without opening an EPUB viewer
 - **Sampled translate** — `--first-N` for fast provider/glossary sanity checks
+- **Web cockpit** — `weaver serve` creates projects (browse/upload), sets provider/model, runs and stops translates with live progress, reviews the glossary, and exports — all in the browser (loopback only, no auth)
 
 ---
 
@@ -37,7 +38,7 @@ git clone https://github.com/Trancend1/weaver.git
 cd weaver
 uv sync --extra dev
 uv run weaver --version
-# weaver 0.3.0
+# weaver 0.6.0
 ```
 
 Once published to PyPI, end users install with:
@@ -83,14 +84,36 @@ Real translation with `deepseek` or `gemini` requires the corresponding API key 
 
 ## Providers
 
-| Provider   | When to use                              | Auth                 |
-|------------|------------------------------------------|----------------------|
-| `deepseek` | Default cloud (~$2–4 per novel)          | `DEEPSEEK_API_KEY`   |
-| `gemini`   | Free-tier cloud (15 req/min, 1M tok/day) | `GEMINI_API_KEY`     |
-| `ollama`   | Local inference, requires GPU            | none                 |
-| `fake`     | Development and CI                       | none                 |
+| Provider   | When to use                              | Auth                          |
+|------------|------------------------------------------|-------------------------------|
+| `deepseek` | Default cloud (~$2–4 per novel)          | `DEEPSEEK_API_KEY`            |
+| `gemini`   | Free-tier cloud (15 req/min, 1M tok/day) | `GEMINI_API_KEY`              |
+| `ollama`   | Local inference, requires GPU            | none                          |
+| `custom`   | Any OpenAI-compatible endpoint           | your `api_key_env` (any name) |
+| `fake`     | Development and CI                       | none                          |
 
-API keys come from environment variables only. Weaver never reads them from `project.toml`.
+The `custom` provider points the OpenAI-compatible engine at any `base_url` + `model`, with the key read from an env var you name via `api_key_env` — e.g. in `project.toml`:
+
+```toml
+[provider]
+type        = "custom"
+base_url    = "https://api.example.com/v1"
+model       = "your-model"
+api_key_env = "MY_API_KEY"
+```
+
+### API keys & the secret store
+
+Keys come from **environment variables** or the dedicated **local secret store** `~/.weaver/secrets.toml` (mode `0o600`, outside any repo). Keys are **never** written to `project.toml` / `~/.weaver/config.toml`, never logged, never rendered. A shell env var always wins over the stored value.
+
+```bash
+weaver secrets set DEEPSEEK_API_KEY   # prompts with hidden input
+weaver secrets set MY_API_KEY --value sk-...   # non-interactive
+weaver secrets list                   # names only — values never shown
+weaver secrets rm MY_API_KEY
+```
+
+In the web cockpit, the provider form has an API-key field that writes only to the secret store. (Override the store location with `WEAVER_SECRETS_PATH`.)
 
 ---
 
@@ -153,13 +176,47 @@ weaver init my_novel.epub --from-template light-novel
 | `weaver new [--yes]` | Interactive wizard: pick EPUB, provider, template, working dir, then run init |
 | `weaver dashboard <project.toml> [--no-color]` | Read-only TUI mirror of `weaver inspect` (requires `pip install 'weaver[tui]'`) |
 | `weaver glossary diff <project.toml> <A> <B>` | Show which approved terms appear in chapter A but not B, and vice versa |
+| `weaver serve [--port 8765] [--books-dir PATH] [--no-browser]` | Launch the local web cockpit; binds `127.0.0.1` only (requires `pip install 'weaver[web]'`) |
+| `weaver secrets set <ENV_VAR> [--value V]` / `list` / `rm <ENV_VAR>` | Manage API keys in the local secret store (`~/.weaver/secrets.toml`); values never printed |
 
 ### Optional extras
 
 ```bash
 pip install 'weaver[tui]'     # weaver dashboard (Textual TUI)
 pip install 'weaver[wizard]'  # weaver new (interactive questionary wizard)
-pip install 'weaver[all]'     # both
+pip install 'weaver[web]'     # weaver serve (local web cockpit)
+pip install 'weaver[all]'     # all of the above
+```
+
+### Web cockpit
+
+`weaver serve` runs a local, single-user web cockpit for managing projects in
+the browser. It binds **`127.0.0.1` only** (no remote access, no authentication —
+see ADR `0017`), defaults to port `8765`, and discovers every project under
+`--books-dir` (default: current directory) so you never type a project path.
+API keys are read from environment variables only — never entered, written to
+disk, or rendered in the UI.
+
+From the browser you can:
+
+- **Create a project** — browse the sandboxed books directory or upload an EPUB,
+  pick a provider and template, and run `init` (no `..` traversal; uploads land
+  in `.weaver/_uploads/`).
+- **Set provider/model** — write the project `[provider]` table or the global
+  `~/.weaver/config.toml` default from a dropdown (keys stay in env).
+- **Translate** — start with first-N / retry-failed, watch live Server-Sent
+  Events progress, and **stop** a run cooperatively (already-translated segments
+  stay committed).
+- **Export** — trigger Markdown or EPUB export.
+- **Review the glossary** — paginated approve / edit / reject of pending
+  candidates, with approved-term conflicts and per-chapter coverage diff surfaced
+  read-only.
+
+```bash
+pip install 'weaver[web]'
+weaver serve                          # http://127.0.0.1:8765, opens a browser
+weaver serve --port 9000 --no-browser # custom port, no auto-open
+weaver serve --books-dir ~/novels     # discover projects under another root
 ```
 
 ### Shortcuts

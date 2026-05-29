@@ -25,16 +25,24 @@ ENV_API_KEY = "DEEPSEEK_API_KEY"
 
 @dataclass(frozen=True)
 class DeepSeekConfig:
-    """Configuration for `DeepSeekProvider`."""
+    """Configuration for `DeepSeekProvider`.
+
+    The same provider class serves both the built-in ``deepseek`` endpoint and a
+    generic ``custom`` OpenAI-compatible endpoint (ADR `0020`): ``base_url``,
+    ``api_key_env`` (which env var holds the key), and ``name`` (for logs /
+    status) are all configurable.
+    """
 
     model: str = DEFAULT_MODEL
     base_url: str = DEFAULT_BASE_URL
     temperature: float = DEFAULT_TEMPERATURE
     timeout_seconds: float = 180.0
+    api_key_env: str = ENV_API_KEY
+    name: str = "deepseek"
 
 
 class DeepSeekProvider(LLMProvider):
-    """OpenAI-compatible chat-completions client pointed at DeepSeek."""
+    """OpenAI-compatible chat-completions client (DeepSeek or custom endpoint)."""
 
     name = "deepseek"
 
@@ -46,12 +54,14 @@ class DeepSeekProvider(LLMProvider):
         client: Any | None = None,
     ) -> None:
         self._config = config or DeepSeekConfig()
-        resolved_key = api_key if api_key is not None else os.environ.get(ENV_API_KEY)
+        self.name = self._config.name
+        api_key_env = self._config.api_key_env
+        resolved_key = api_key if api_key is not None else os.environ.get(api_key_env)
         if client is None and not resolved_key:
             raise ProviderUnavailable(
-                f"{ENV_API_KEY} environment variable is not set. "
-                "Likely cause: DeepSeek API key missing from the shell environment. "
-                f"Next command: set ${ENV_API_KEY} before running `weaver translate`."
+                f"{api_key_env} environment variable is not set. "
+                "Likely cause: API key missing from the environment / secret store. "
+                f"Next command: set ${api_key_env} or run `weaver secrets set {api_key_env}`."
             )
         self._client = (
             client

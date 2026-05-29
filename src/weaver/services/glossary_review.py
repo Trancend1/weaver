@@ -20,9 +20,11 @@ from weaver.storage.glossary import (
     GlossaryCandidateRecord,
     approve_glossary_candidate,
     count_glossary_candidates_by_status,
+    count_pending_glossary_candidates,
     edit_glossary_candidate,
     get_pending_glossary_candidate,
     list_glossary_conflicts,
+    list_pending_glossary_candidates,
     reject_glossary_candidate,
     restore_glossary_candidate,
 )
@@ -38,6 +40,26 @@ class GlossaryReviewState:
     pending: int
     approved: int
     rejected: int
+
+
+@dataclass(frozen=True)
+class PendingPage:
+    """One page of pending candidates plus queue counts (web review).
+
+    ``total_pending`` reflects the current filter (matched count when ``find`` is
+    set, else the full pending queue) so pagination is correct; ``counts`` always
+    carries the unfiltered queue totals for display.
+    """
+
+    items: tuple[GlossaryCandidateRecord, ...]
+    total_pending: int
+    offset: int
+    limit: int
+    counts: GlossaryReviewState
+    find: str | None = None
+
+
+VALID_REVIEW_ACTIONS = frozenset({"approve", "edit", "reject"})
 
 
 class GlossaryReviewSession:
@@ -173,22 +195,126 @@ def open_glossary_review_session(project_toml: Path) -> Iterator[GlossaryReviewS
 
 
 def list_project_glossary_conflicts(
-    project_toml: Path,
+    project_toml: Path, *, cwd: Path | None = None
 ) -> list[tuple[str, tuple[str, ...]]]:
     """Return approved glossary target conflicts for a project (read-only)."""
 
-    db_path = _resolve_database_path(project_toml)
+    db_path = _resolve_database_path(project_toml, cwd)
     with closing(connect_readonly_database(db_path)) as connection:
         project = _load_single_project(connection)
         return list_glossary_conflicts(connection, project_id=project.id)
 
 
-def _resolve_database_path(project_toml: Path) -> Path:
+def list_pending(
+    project_toml: Path,
+    *,
+    cwd: Path | None = None,
+    offset: int = 0,
+    limit: int = 20,
+    find: str | None = None,
+) -> PendingPage:
+    """Return one page of pending candidates plus queue counts (read-only).
+
+    Stateless counterpart to ``GlossaryReviewSession`` for per-request web use.
+    When ``find`` is set, only candidates whose source contains it are returned
+    (and ``total_pending`` reflects that filtered count). The CLI interactive
+    loop is unchanged.
+    """
+
+    offset = max(offset, 0)
+    limit = max(limit, 1)
+    needle = (find or "").strip() or None
+    db_path = _resolve_database_path(project_toml, cwd)
+    with closing(connect_readonly_database(db_path)) as connection:
+        project = _load_single_project(connection)
+        items = list_pending_glossary_candidates(
+            connection, project_id=project.id, offset=offset, limit=limit, find=needle
+        )
+        matched = count_pending_glossary_candidates(connection, project_id=project.id, find=needle)
+        counts = count_glossary_candidates_by_status(connection, project_id=project.id)
+    state = GlossaryReviewState(
+        pending=counts.get("pending", 0),
+        approved=counts.get("approved", 0) + counts.get("edited", 0),
+        rejected=counts.get("rejected", 0),
+    )
+    return PendingPage(
+        items=tuple(items),
+        total_pending=matched,
+        offset=offset,
+        limit=limit,
+        counts=state,
+        find=needle,
+    )
+
+
+def act_on_candidate(
+    project_toml: Path,
+    candidate_id: int,
+    action: str,
+    *,
+    cwd: Path | None = None,
+    target: str | None = None,
+    notes: str | None = None,
+) -> None:
+    """Apply one review action to a candidate in its own transaction.
+
+    Args:
+        project_toml: Weaver project file.
+        candidate_id: Candidate row id.
+        action: One of ``approve`` | ``edit`` | ``reject``.
+        cwd: Working directory used to resolve the database path.
+        target: Required for ``edit`` — the translator-provided wording.
+        notes: Optional notes for ``edit``.
+
+    Raises:
+        ConfigError: When ``action`` is unknown, ``edit`` lacks a target, or the
+            candidate id does not exist.
+    """
+
+    if action not in VALID_REVIEW_ACTIONS:
+        valid = ", ".join(sorted(VALID_REVIEW_ACTIONS))
+        raise ConfigError(
+            f"Unknown glossary action `{action}`. "
+            f"Likely cause: action must be one of: {valid}. "
+            "Next command: use approve, edit, or reject."
+        )
+    if action == "edit" and not (target and target.strip()):
+        raise ConfigError(
+            "Edit requires a target. "
+            "Likely cause: the edit form was submitted with an empty target. "
+            "Next command: enter the translated term and resubmit."
+        )
+
+    db_path = _resolve_database_path(project_toml, cwd)
+    with closing(connect_database(db_path)) as connection:
+        try:
+            with transaction(connection):
+                if action == "approve":
+                    approve_glossary_candidate(connection, candidate_id=candidate_id)
+                elif action == "edit":
+                    edit_glossary_candidate(
+                        connection,
+                        candidate_id=candidate_id,
+                        target=target,  # type: ignore[arg-type]  # guarded above
+                        notes=notes,
+                    )
+                else:
+                    reject_glossary_candidate(connection, candidate_id=candidate_id)
+        except LookupError as exc:
+            raise ConfigError(
+                f"Glossary candidate not found: {candidate_id}. "
+                "Likely cause: stale page or the candidate was already actioned. "
+                "Next command: reload the glossary page."
+            ) from exc
+
+
+def _resolve_database_path(project_toml: Path, cwd: Path | None = None) -> Path:
     data = load_project_config(project_toml)
     path = Path(str(data["project"]["database_path"]))
     if path.is_absolute():
         return path
-    cwd_path = Path.cwd() / path
+    base_dir = cwd or Path.cwd()
+    cwd_path = base_dir / path
     if cwd_path.exists():
         return cwd_path
     return project_toml.parent / path

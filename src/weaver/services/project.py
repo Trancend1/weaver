@@ -12,7 +12,7 @@ from typing import Any
 
 from weaver.core.config import load_project_config
 from weaver.core.templates import get_template
-from weaver.errors import ProviderError, WeaverError
+from weaver.errors import ConfigError, ProviderError, WeaverError
 from weaver.providers import ProviderStatus, build_provider
 from weaver.readers.epub import read_epub
 from weaver.services.glossary import extract_and_store_project_glossary
@@ -76,11 +76,22 @@ def project_exists(source_epub: Path, *, cwd: Path | None = None) -> bool:
     return project_toml.exists()
 
 
+DEFAULT_PROVIDER = "deepseek"
+DEFAULT_MODELS = {
+    "deepseek": "deepseek-chat",
+    "gemini": "gemini-1.5-flash",
+    "ollama": "llama3",
+    "fake": "fake-1",
+}
+OLLAMA_BASE_URL = "http://localhost:11434"
+
+
 def initialize_project(
     source_epub: Path,
     *,
     cwd: Path | None = None,
     template: str | None = None,
+    provider: str | None = None,
 ) -> InitResult:
     """Create project state for a source EPUB.
 
@@ -90,10 +101,26 @@ def initialize_project(
         template: Optional template preset name (``light-novel``,
             ``web-novel``, ``aozora-classic``). Overrides ``[glossary]``
             and ``[qa]`` sections in the generated ``project.toml``.
+        provider: Optional provider type for the generated ``[provider]`` table
+            (``deepseek`` | ``gemini`` | ``ollama`` | ``fake``). Defaults to
+            ``deepseek``. The model defaults to that provider's standard model;
+            ``base_url`` is emitted only for ``ollama`` (ADR ``0018`` — fixes the
+            stray localhost ``base_url`` that the deepseek default carried).
 
     Returns:
         InitResult with created project locations and counts.
     """
+
+    provider_type = provider or DEFAULT_PROVIDER
+    if provider_type not in DEFAULT_MODELS:
+        valid = ", ".join(sorted(DEFAULT_MODELS))
+        raise ConfigError(
+            f"`weaver init` cannot scaffold provider `{provider_type}`. "
+            f"Likely cause: init supports the built-in providers ({valid}); a "
+            "custom OpenAI-compatible endpoint needs base_url + api_key_env. "
+            "Next command: init with a built-in provider, then set the custom "
+            "endpoint via the cockpit or `weaver` config."
+        )
 
     base_dir = cwd or Path.cwd()
     source_epub = source_epub.resolve()
@@ -136,6 +163,7 @@ def initialize_project(
         project_dir=_posix_relative(project_dir, base_dir),
         database_path=_posix_relative(db_path, base_dir),
         output_dir=_posix_relative(output_dir, base_dir),
+        provider_type=provider_type,
         template_overrides=template_overrides,
     )
     return InitResult(
@@ -229,6 +257,7 @@ def _write_project_toml(
     project_dir: str,
     database_path: str,
     output_dir: str,
+    provider_type: str = DEFAULT_PROVIDER,
     template_overrides: dict[str, dict[str, object]] | None = None,
 ) -> None:
     glossary_defaults: dict[str, object] = {
@@ -245,6 +274,16 @@ def _write_project_toml(
         glossary_defaults.update(template_overrides.get("glossary", {}))
         qa_defaults.update(template_overrides.get("qa", {}))
 
+    provider_model = DEFAULT_MODELS.get(provider_type, DEFAULT_MODELS[DEFAULT_PROVIDER])
+    provider_lines = [
+        "[provider]",
+        f'type = "{provider_type}"',
+        f'model = "{provider_model}"',
+    ]
+    if provider_type == "ollama":
+        provider_lines.append(f'base_url = "{OLLAMA_BASE_URL}"')
+    provider_section = "\n".join(provider_lines)
+
     content = f"""[project]
 name = "{project_name}"
 source_file = "{_escape_toml(source_file)}"
@@ -257,10 +296,7 @@ schema_version = {SCHEMA_VERSION}
 source = "ja"
 target = "en"
 
-[provider]
-type = "deepseek"
-model = "deepseek-chat"
-base_url = "http://localhost:11434"
+{provider_section}
 
 [translation]
 quality = "balanced"
