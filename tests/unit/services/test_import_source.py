@@ -38,10 +38,28 @@ def test_import_volume_adds_a_second_volume_with_its_own_chapters(tmp_path) -> N
     assert orders == [0, 1]
 
 
-def test_import_volume_rejects_not_yet_supported_txt(tmp_path) -> None:
+def test_import_volume_accepts_a_txt_source(tmp_path) -> None:
     init = initialize_project(FIXTURE_EPUB_A, cwd=tmp_path, provider="fake")
     txt_source = tmp_path / "volume.txt"
-    txt_source.write_text("第一章\n本文。\n", encoding="utf-8")
+    txt_source.write_text("第一章 はじまり\n本文。\n", encoding="utf-8")
 
-    with pytest.raises(WeaverError, match="not available yet"):
-        import_volume(init.project_toml, txt_source, cwd=tmp_path)
+    result = import_volume(init.project_toml, txt_source, cwd=tmp_path)
+
+    with connect_readonly_database(init.database_path) as connection:
+        fmt = connection.execute(
+            "SELECT source_format FROM volumes WHERE id = ?", (result.volume_id,)
+        ).fetchone()["source_format"]
+        volume_count = connection.execute("SELECT COUNT(*) AS n FROM volumes").fetchone()["n"]
+
+    assert fmt == "txt"
+    assert volume_count == 2
+    assert result.chapter_count >= 1
+
+
+def test_import_volume_rejects_unsupported_format(tmp_path) -> None:
+    init = initialize_project(FIXTURE_EPUB_A, cwd=tmp_path, provider="fake")
+    bad_source = tmp_path / "volume.pdf"
+    bad_source.write_text("not supported", encoding="utf-8")
+
+    with pytest.raises(WeaverError, match="Unsupported source format"):
+        import_volume(init.project_toml, bad_source, cwd=tmp_path)
