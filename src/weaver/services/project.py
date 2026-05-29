@@ -24,6 +24,7 @@ from weaver.storage.db import (
 )
 from weaver.storage.projects import create_project
 from weaver.storage.segments import sync_document_segments
+from weaver.storage.volumes import create_volume
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class InspectSummary:
     source_file: str
     provider: str
     model: str
+    volume_count: int
     chapter_count: int
     segment_count: int
     pending_count: int
@@ -146,7 +148,20 @@ def initialize_project(
                 source_lang=document.metadata.language,
                 target_lang="en",
             )
-            sync_document_segments(connection, project_id=project_id, document=document)
+            volume_id = create_volume(
+                connection,
+                project_id=project_id,
+                title=document.metadata.title or project_name,
+                source_path=str(source_epub),
+                source_format="epub",
+                volume_order=0,
+            )
+            sync_document_segments(
+                connection,
+                project_id=project_id,
+                volume_id=volume_id,
+                document=document,
+            )
             glossary_result = extract_and_store_project_glossary(
                 connection=connection,
                 project_id=project_id,
@@ -211,6 +226,7 @@ def inspect_project(
         source_file=str(project["source_file"]),
         provider=str(provider["type"]),
         model=str(provider["model"]),
+        volume_count=counts["volumes"],
         chapter_count=counts["chapters"],
         segment_count=counts["segments"],
         pending_count=counts["pending"],
@@ -344,6 +360,7 @@ def _read_counts(connection: sqlite3.Connection) -> dict[str, int]:
         ).fetchall()
     }
     return {
+        "volumes": _count(connection, "volumes"),
         "chapters": _count(connection, "chapters"),
         "segments": _count(connection, "segments"),
         "pending": status_counts.get("pending", 0),

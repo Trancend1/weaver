@@ -41,7 +41,7 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 
 | Sprint | Scope | Status |
 |---|---|---|
-| 1 | Project structure & novel mgmt (Novel/Volume/Chapter; TXT/EPUB/HTML import) | ⏳ next |
+| 1 | Project structure & novel mgmt (Novel/Volume/Chapter; TXT/EPUB/HTML import) | 🟡 1a done (schema v3 + volumes + EPUB-as-volume); 1b readers / 1c UI pending |
 | 2 | Translation workspace (JP/EN two-column, edit, auto-save, revisions) | ⬜ |
 | 3 | Provider & AI translation (config, translate chapter/selection, safe retranslate) | ⬜ |
 | 4 | Glossary & character database (project-scoped, prompt injection) | ⬜ |

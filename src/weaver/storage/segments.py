@@ -34,13 +34,14 @@ class SegmentRecord:
 
 
 def sync_document_segments(
-    connection: sqlite3.Connection, *, project_id: int, document: DocumentIR
+    connection: sqlite3.Connection, *, project_id: int, volume_id: int, document: DocumentIR
 ) -> None:
     """Persist chapters and segments from DocumentIR.
 
     Args:
         connection: Open writable SQLite connection.
-        project_id: Project row id.
+        project_id: Project (novel) row id.
+        volume_id: Owning volume row id; chapters are attached to this volume.
         document: Source document IR emitted by a reader.
 
     Returns:
@@ -50,15 +51,16 @@ def sync_document_segments(
     for chapter in document.chapters:
         connection.execute(
             """
-            INSERT INTO chapters (id, project_id, title, href, spine_order)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO chapters (id, project_id, volume_id, title, href, spine_order)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
               project_id = excluded.project_id,
+              volume_id = excluded.volume_id,
               title = excluded.title,
               href = excluded.href,
               spine_order = excluded.spine_order
             """,
-            (chapter.id, project_id, chapter.title, chapter.href, chapter.order),
+            (chapter.id, project_id, volume_id, chapter.title, chapter.href, chapter.order),
         )
         for block in chapter.blocks:
             insert_segment(

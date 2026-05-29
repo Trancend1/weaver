@@ -29,6 +29,7 @@ from weaver.storage.translations import (
     list_previous_translated_segments,
     record_translation,
 )
+from weaver.storage.volumes import list_volumes
 
 MAX_GLOSSARY_TERMS_PER_SEGMENT = 20
 MAX_CONTEXT_SEGMENTS = 5
@@ -222,8 +223,11 @@ def translate_project(
     with closing(connect_database(db_path)) as connection:
         project = _load_single_project(connection)
         raise_on_glossary_conflicts(connection, project_id=project.id)
+        volume_id = _source_volume_id(connection, project_id=project.id, source_path=source_path)
         with transaction(connection):
-            sync_document_segments(connection, project_id=project.id, document=document)
+            sync_document_segments(
+                connection, project_id=project.id, volume_id=volume_id, document=document
+            )
 
         glossary_terms = list_glossary_terms(connection, project_id=project.id)
         selected = list_segments_for_translation(
@@ -391,6 +395,27 @@ def _load_single_project(connection: sqlite3.Connection) -> ProjectRecord:
             "Next command: run `weaver init <input.epub>`."
         )
     return get_project(connection, int(row["id"]))
+
+
+def _source_volume_id(
+    connection: sqlite3.Connection, *, project_id: int, source_path: Path
+) -> int:
+    """Resolve the volume the translate source belongs to.
+
+    Translate re-reads the project's single ``source_file`` and re-syncs it; that
+    file maps to one volume. Match by source path, falling back to the first
+    volume (legacy single-source projects always have one after migration).
+    """
+
+    volumes = list_volumes(connection, project_id)
+    if not volumes:
+        raise ConfigError(
+            "Project has no volume to translate. "
+            "Likely cause: database predates the volume model and was not migrated. "
+            "Next command: run `weaver inspect <project.toml>` to migrate, then retry."
+        )
+    target = str(source_path)
+    return next((volume.id for volume in volumes if volume.source_path == target), volumes[0].id)
 
 
 def _index_blocks(document: DocumentIR) -> dict[str, BlockIR]:

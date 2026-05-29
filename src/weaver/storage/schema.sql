@@ -10,13 +10,27 @@ CREATE TABLE IF NOT EXISTS projects (
   schema_version INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS volumes (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  title TEXT NOT NULL,
+  source_path TEXT NOT NULL,
+  source_format TEXT NOT NULL CHECK (source_format IN ('epub', 'txt', 'html')),
+  volume_order INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS chapters (
   id TEXT PRIMARY KEY,
   project_id INTEGER REFERENCES projects(id),
+  volume_id INTEGER REFERENCES volumes(id),
   title TEXT,
   href TEXT,
   spine_order INTEGER NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_volumes_project ON volumes(project_id, volume_order);
+CREATE INDEX IF NOT EXISTS idx_chapters_volume ON chapters(volume_id, spine_order);
 
 CREATE TABLE IF NOT EXISTS segments (
   id TEXT PRIMARY KEY,

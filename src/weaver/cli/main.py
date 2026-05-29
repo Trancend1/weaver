@@ -38,6 +38,7 @@ from weaver.services.glossary_review import (
     list_project_glossary_conflicts,
     open_glossary_review_session,
 )
+from weaver.services.import_source import import_volume
 from weaver.services.manual_edit import SegmentSelector, edit_segment, resolve_segment_id
 from weaver.services.preview import PreviewBlock, preview_project
 from weaver.services.project import initialize_project, inspect_project, project_exists
@@ -199,6 +200,30 @@ def new_project_command(
 
 
 @app.command(
+    "import",
+    epilog="Examples:\n  weaver import .weaver/novel/project.toml volume-2.epub",
+)
+def import_volume_command(
+    project_toml: Path,
+    source: Path,
+) -> None:
+    """Import a source file as a new volume in an existing novel."""
+
+    try:
+        result = import_volume(project_toml, source)
+    except WeaverError as exc:
+        _exit_with_error(exc)
+
+    typer.echo(f"Importing {source}...")
+    typer.echo(f"Added volume: {result.volume_title}")
+    typer.echo(f"Detected: {result.chapter_count} chapters, {result.segment_count} segments")
+    typer.echo(f"Extracted {result.glossary_candidate_count} glossary candidates")
+    typer.echo("")
+    typer.echo("Next:")
+    typer.echo(f"  weaver glossary review {project_toml}")
+
+
+@app.command(
     "inspect",
     epilog=(
         "Examples:\n"
@@ -227,6 +252,7 @@ def inspect_project_command(
     table.add_column("Value")
     table.add_row("Source", summary.source_file)
     table.add_row("Provider", f"{summary.provider} / {summary.model}")
+    table.add_row("Volumes", str(summary.volume_count))
     table.add_row("Chapters", str(summary.chapter_count))
     table.add_row("Segments", str(summary.segment_count))
     table.add_row("Pending", _count_with_percent(summary.pending_count, summary.segment_count))

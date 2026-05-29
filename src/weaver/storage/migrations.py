@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 from weaver.errors import DatabaseError
 
@@ -73,6 +74,86 @@ def _migrate_to_v2(connection: sqlite3.Connection) -> None:
         connection.execute("ALTER TABLE translations ADD COLUMN output_tokens INTEGER")
 
 
+def _migrate_to_v3(connection: sqlite3.Connection) -> None:
+    """Introduce the Volume tier (schema v3).
+
+    Adds the ``volumes`` table and ``chapters.volume_id``, then wraps every
+    existing project's chapters in one synthesized default volume so legacy
+    (project = one EPUB) databases gain a Novel -> Volume -> Chapter shape
+    without losing data.
+    """
+
+    tables = {
+        str(row["name"])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    if "volumes" not in tables:
+        connection.execute(
+            """
+            CREATE TABLE volumes (
+              id INTEGER PRIMARY KEY,
+              project_id INTEGER NOT NULL REFERENCES projects(id),
+              title TEXT NOT NULL,
+              source_path TEXT NOT NULL,
+              source_format TEXT NOT NULL CHECK (source_format IN ('epub', 'txt', 'html')),
+              volume_order INTEGER NOT NULL,
+              created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_volumes_project ON volumes(project_id, volume_order)"
+        )
+
+    if "chapters" not in tables:
+        # Partial/legacy database without the chapters table; nothing to backfill.
+        return
+
+    chapter_columns = {
+        str(row["name"]) for row in connection.execute("PRAGMA table_info(chapters)").fetchall()
+    }
+    if "volume_id" not in chapter_columns:
+        connection.execute("ALTER TABLE chapters ADD COLUMN volume_id INTEGER")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chapters_volume ON chapters(volume_id, spine_order)"
+        )
+
+    if "projects" not in tables:
+        return
+
+    created_at = datetime.now(UTC).isoformat()
+    for project in connection.execute("SELECT id, name, source_path FROM projects").fetchall():
+        project_id = int(project["id"])
+        has_orphan_chapters = connection.execute(
+            "SELECT 1 FROM chapters WHERE project_id = ? AND volume_id IS NULL LIMIT 1",
+            (project_id,),
+        ).fetchone()
+        if has_orphan_chapters is None:
+            continue
+        cursor = connection.execute(
+            """
+            INSERT INTO volumes (
+              project_id, title, source_path, source_format, volume_order, created_at
+            )
+            VALUES (?, ?, ?, 'epub', 0, ?)
+            """,
+            (project_id, str(project["name"]), str(project["source_path"]), created_at),
+        )
+        if cursor.lastrowid is None:
+            raise DatabaseError(
+                "Default volume insert did not return a row id during v3 migration. "
+                "Likely cause: SQLite did not report lastrowid. "
+                "Next command: report this as a Weaver bug."
+            )
+        connection.execute(
+            "UPDATE chapters SET volume_id = ? WHERE project_id = ? AND volume_id IS NULL",
+            (int(cursor.lastrowid), project_id),
+        )
+
+
 _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _migrate_to_v2,
+    3: _migrate_to_v3,
 }
