@@ -41,6 +41,9 @@ Thumbs.db
 .weaver/
 .tmp_*/
 
+# Accidental nested clone (root-level only; never src/weaver)
+/weaver/
+
 # Secret store (ADR 0020) — should live in ~/.weaver, never in a repo
 secrets.toml
 
