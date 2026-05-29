@@ -75,7 +75,7 @@ Decision categories:
 | EN→ID target | 4 | 4 | 3 | 0 | 1 | Real audience exists in Indonesia. Defer until JP→EN proves out. |
 | Web Novel ingestion (scraper) | 3 | 5 | 3 | 0 | 2 | Legal exposure high. Build careful or skip. |
 | Bilingual EPUB output | 3 | 3 | 3 | 0 | 1 | Niche-but-real audience. |
-| Local Web UI | 2 | 5 | 2 | 0 | 4 | High Slop risk. CLI is enough. |
+| Local Web UI | 4 | 5 | 4 | 0 | 2 | **Promoted to Phase 12 (Local Web Cockpit).** Maintainer-confirmed daily friction (PP1–PP4) outweighs prior "CLI is enough" call. Slop risk mitigated by Flask+HTMX, local-only, thin layer over existing services. See [feature_plan/web-feature-plan.md](feature_plan/web-feature-plan.md). |
 | Translation memory diffing against published official translations | 4 | 4 | 4 | 0 | 1 | Signature feature if executed right. |
 | EPUB roundtrip fidelity report | 4 | 3 | 3 | 0 | 0 | Trust through measurement. |
 | Project versioning (compare multiple translation runs) | 4 | 3 | 4 | 0 | 0 | Power-user feature, real value. |

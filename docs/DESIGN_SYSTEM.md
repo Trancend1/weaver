@@ -155,9 +155,9 @@ If a TUI is added in MVP-1+, follow these constraints:
 - Keyboard-driven; mouse optional.
 - All CLI functionality reachable via TUI; TUI does not introduce new business logic.
 
-If a web GUI is built in some hypothetical Phase 2:
+The web GUI is no longer hypothetical: **Phase 12 (Local Web Cockpit)** adopts these constraints (Flask + HTMX, local-only). See [feature_plan/web-feature-plan.md](feature_plan/web-feature-plan.md) and [feature_plan/web-architecture.md](feature_plan/web-architecture.md). Constraints for the Phase 12 web cockpit:
 
-- Single-page, minimal-framework (HTMX or vanilla TS).
+- Single-page, minimal-framework (**HTMX** — chosen; no React/Node build step).
 - Light theme default. Dark theme follows system.
 - No glass morphism. No gradients on primary surfaces. No "AI shimmer" effects.
 - Monospace where text is data (translations, segment IDs).

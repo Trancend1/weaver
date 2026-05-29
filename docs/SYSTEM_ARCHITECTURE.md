@@ -7,7 +7,7 @@ Production architecture for MVP-0. Optimized for a local CLI tool maintained by 
 1. **Local-first, no network required.** Network is opt-in via cloud provider.
 2. **SQLite is the source of truth for run state.** No external state services.
 3. **Intermediate Representation decouples source format from translation logic.** EPUB readers swap out; translator does not care.
-4. **Synchronous-by-default execution.** No asyncio, no queues, no workers at MVP-0.
+4. **Synchronous-by-default execution.** No asyncio, no queues, no workers at MVP-0. (Post-MVP **Phase 12** adds a single background **thread** for the web cockpit's translate job — still no asyncio, no queue/worker framework. See [feature_plan/web-architecture.md](feature_plan/web-architecture.md).)
 5. **Pluggable providers behind a single interface.** Cloud providers added without touching orchestrator.
 6. **Plain text formats wherever possible.** TSV for glossary, TOML for config, Markdown for review.
 
@@ -25,13 +25,13 @@ Production architecture for MVP-0. Optimized for a local CLI tool maintained by 
 | LLM SDK | openai + google-generativeai | DeepSeek uses OpenAI-compat; Gemini uses native SDK |
 | CLI | typer | Pleasant ergonomics, generates --help |
 | Terminal output | rich | Progress bars, color, tables |
-| Testing | pytest + pytest-asyncio | Standard |
+| Testing | pytest | Standard. No pytest-asyncio — codebase is synchronous (no asyncio). |
 | Lint/format | ruff | Single tool replaces flake8 + isort + black |
 | Type check | pyright (basic mode) | Faster than mypy, good enough |
 
-Explicitly rejected:
+Explicitly rejected (MVP-0):
 
-- Django, Flask, FastAPI — no web server in MVP.
+- Django, Flask, FastAPI — no web server in MVP. **Update:** post-MVP **Phase 12** reopens **Flask (sync only)** for a local web cockpit via ADR `0016`. Django, FastAPI, and asyncio stay rejected. See [feature_plan/web-architecture.md](feature_plan/web-architecture.md).
 - SQLAlchemy ORM — query patterns are simple; raw SQL is clearer.
 - Celery, RQ, Dramatiq — no background workers in MVP.
 - Docker — CLI installs via pip/uv; containers add friction.

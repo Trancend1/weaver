@@ -32,6 +32,7 @@ User-facing docs live in [README.md](README.md). Internal specs live in [docs/](
 | [api/](docs/api/) | Stable JSON API shapes (`qa_json_schema.md`) |
 | [benchmarks.md](docs/benchmarks.md) | Phase 10 performance budget evidence |
 | [release_acceptance.md](docs/release_acceptance.md) | Phase 10.5 AC-1 through AC-9 evidence |
+| [feature_plan/](docs/feature_plan/) | Phase 12 Web Cockpit planning: [feature plan](docs/feature_plan/web-feature-plan.md), [architecture](docs/feature_plan/web-architecture.md), [execution blueprint](docs/feature_plan/web-execution-blueprint.md), [master plan](docs/feature_plan/2026-05-29-web-cockpit-phase-12.md) |
 
 **Rule:** docs are the spec. Code follows docs. If code contradicts docs, ask first.
 
@@ -59,10 +60,13 @@ Single source of truth for build status. Update at end of every phase/sprint. Ro
 | 11a | CLI UX Sprint A — flags, completion, doctor, aliases (0.2.x)                                       | 10         | ✅ Complete     |
 | 11b | CLI UX Sprint B — global config, templates, preview, sampled translate, JSON schema (0.3.0)        | 11a        | ✅ Complete     |
 | 11c | CLI UX Sprint C — `weaver new` wizard, TUI dashboard, glossary diff, EPUBCheck, honorific modes    | 11b        | ✅ Complete     |
+| 12a | Web Cockpit A — `weaver serve`, project discovery, read-only monitor + SSE (0.5.0)                 | 11c        | ⏳ Planned      |
+| 12b | Web Cockpit B — file input (browse/upload), provider/model config, translate controls, export      | 12a        | ⬜ Pending      |
+| 12c | Web Cockpit C — glossary review UI                                                                 | 12b        | ⬜ Pending      |
 
 Legend: ✅ complete · 🟡 in progress · ⏳ next · ⬜ pending · 🚫 blocked.
 
-Critical path: Phases 1→4 strict. Phases 5/6/7/9 may overlap once 4 ships. CLI UX 11a→11b→11c is strict: B layers global config, C consumes both.
+Critical path: Phases 1→4 strict. Phases 5/6/7/9 may overlap once 4 ships. CLI UX 11a→11b→11c is strict: B layers global config, C consumes both. Web Cockpit 12a→12b→12c is strict: A lays Flask app + discovery + JobManager, B layers write actions, C moves glossary review into the browser. Phase 12 is planned (not scheduled) — see [docs/feature_plan/web-feature-plan.md](docs/feature_plan/web-feature-plan.md), [web-architecture.md](docs/feature_plan/web-architecture.md), [web-execution-blueprint.md](docs/feature_plan/web-execution-blueprint.md). ADRs `0016`–`0019` author first.
 
 ### 2.2 Reusable Phase Gate
 
@@ -77,35 +81,58 @@ Before starting any next phase/sprint, always run this gate:
 
 Required reminder before phase transition: **"Check exit criteria first. No next phase until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Sprint — Phase 11c: CLI UX Sprint C
+### 2.3 Active Sprint — Phase 12a: Web Cockpit A (Monitor + Project Discovery)
 
-**Goal:** ship wizard-driven project creation (`weaver new`), read-only TUI dashboard (`weaver dashboard`), per-chapter glossary diff, optional EPUBCheck integration, and honorific-mode extensions. Every change is additive — 11b wire compatibility holds.
+**Goal:** stand up the local web cockpit foundation — `weaver serve` (Flask, `127.0.0.1`, `threaded=True`), project discovery (no more typed paths, PP1), a read-only project cockpit mirroring `weaver inspect`, and live translate progress via a `JobManager` + SSE (PP3 starts). Every change is additive — CLI stays wire-compatible. Plan source: [docs/feature_plan/web-execution-blueprint.md](docs/feature_plan/web-execution-blueprint.md) §3.
+
+**Gate:** no Flask or cockpit code enters the codebase until ADR `0016` is merged.
 
 **Sub-sprint deliverables** (ADRs land before matching implementation):
 
 | Row | ADR | Implementation |
 | --- | --- | -------------- |
-| C1  | `0012-textual-tui.md`              | `weaver dashboard` read-only TUI mirror of `weaver inspect`; `--no-color` honored |
-| C2  | `0013-epubcheck-optional-dep.md`   | `weaver validate --epub` invokes EPUBCheck (optional Java dep) |
-| C3  | `0014-questionary-wizard.md`       | `weaver new` interactive wizard (provider → template → output → init) |
-| C4  | `0015-tui-aesthetic.md`            | TUI aesthetic policy (color palette, spacing, layout) |
-| C5  | *(none)*                           | `weaver glossary diff <chapter-A> <chapter-B>` read-only per-chapter term diff |
-| C6  | *(none)*                           | `[translation] honorifics` accepts `localize` and `hybrid` in addition to `preserve` |
+| A1  | `0016-web-cockpit-framework.md`          | `weaver serve [--port 8765] [--books-dir PATH] [--no-browser]`; Flask app factory; `127.0.0.1` bind; vendored `htmx.min.js`; `weaver[web]` extra |
+| A2  | *(none — uses 0016)*                     | `services/project_discovery.py` + Dashboard listing discovered `.weaver/*` projects (PP1) |
+| A3  | `0017-localhost-security-model.md`       | loopback bind, no auth, no secret rendering (foundation for 12b file browser) |
+| A4  | `0019-job-manager-progress-streaming.md` | `web/job_manager.py` skeleton (one-job lock) + SSE endpoint streaming a read-only translate run (PP3) |
+| A5  | *(none — uses 0019)*                     | read-only project cockpit view mirroring `weaver inspect` |
 
-**Exit criteria:**
-1. All ADRs land in `docs/decisions/` per ENGINEERING_STANDARDS format.
-2. All implementation PRs land green; one PR = one concern.
-3. AC-1..AC-9 acceptance gate stays PASS.
-4. Ruff lint + format clean. Pyright `0 errors`.
-5. README + `docs/quickstart.md` updated for new commands.
+**Exit criteria:** see §2.4 → "Phase 12a". Mirrors [web-execution-blueprint.md](docs/feature_plan/web-execution-blueprint.md) §5 (global) + §3 (12a exit).
 
-**Blockers / open questions:** none. Sprint scope from `plans/semua-phase-log-1-10-hazy-lovelace.md` §5 C.
+**Blockers / open questions:** none. ADRs `0016`/`0017`/`0019` authored (accepted); merge `0016` before code. `0018` defers to 12b.
 
-**Update protocol when sprint closes:** flip §2.1 row to ✅; log outcome in §2.5; mark 11c as last planned UX sprint.
+**Update protocol when sprint closes:** flip §2.1 row `12a` to ✅; log outcome in §2.5; set §2.3 Active Sprint to 12b.
 
 ### 2.4 Exit Criteria
 
 Compact evidence ledger. Inspection notes for completed phases live in this section; deep-dive detail for legacy phases lives in git history and `plans/`. Active sprint keeps full detail.
+
+#### Phase 12a — Web Cockpit A (Monitor + Project Discovery)
+
+Status: `⏳ Planned`
+
+Plain-language criteria (mirror of [web-execution-blueprint.md](docs/feature_plan/web-execution-blueprint.md) §5 global exit + §3 12a exit):
+
+1. ADR `0016` lands and is merged **before** any Flask/cockpit code enters the codebase (gate rule). ADRs `0017`–`0019` land in `docs/decisions/` per ENGINEERING_STANDARDS format.
+2. All implementation PRs land green; one PR = one concern (no bundled refactor + feature).
+3. AC-1..AC-9 acceptance gate stays PASS.
+4. Ruff lint + format clean. Pyright `0 errors`.
+5. Existing CLI stays wire-compatible — every Phase 11 command + flag works unchanged. `translate_project` gains only the additive optional `should_cancel` hook (CLI passes `None`).
+6. README + `docs/quickstart.md` document `weaver serve` (loopback bind, `--port`, `--books-dir`, `weaver[web]` install).
+7. All web dependencies sit behind the `weaver[web]` optional extra; core install pulls no Flask.
+8. **12a usable surface:** browse to `http://127.0.0.1:8765`, see all discovered projects with no path typing; start a translate job from the cockpit and watch live SSE progress stream to completion (or clean cancel).
+
+Evidence: *(pending — fill as PRs land)*
+
+| Criterion | Proof | Status |
+| --------- | ----- | ------ |
+| ADRs `0016`–`0019` | `docs/decisions/` | ✅ authored |
+| `weaver serve` + Flask app factory + vendored htmx + `weaver[web]` | *(A1, pending)* | ⏳ |
+| `services/project_discovery.py` + dashboard project list | *(A2, pending)* | ⏳ |
+| Loopback `127.0.0.1` bind, no auth (ADR `0017`) | *(A3, pending)* | ⏳ |
+| `web/job_manager.py` single-job registry + SSE stream (ADR `0019`) | *(A4, pending)* | ⏳ |
+| Read-only cockpit view mirroring `weaver inspect` | *(A5, pending)* | ⏳ |
+| Acceptance gate | `bench/run_acceptance_gate.py` → AC-1..AC-9 PASS | ⏳ |
 
 #### Phases 0–10 — All Passed
 
@@ -277,7 +304,9 @@ Version bumped to `0.4.0`.
 
 **Use:** Python 3.11+ · uv · pyproject.toml · ruff · pyright (basic) · pytest · typer · rich · pydantic v2 · tomllib · sqlite3 (WAL, no ORM) · ebooklib · fugashi + ipadic-neologd · openai SDK · google-generativeai · Jinja2.
 
-**Rejected (no reintroduction without ADR):** Django · Flask · FastAPI · SQLAlchemy · Celery · RQ · Docker · asyncio · Sentry · OpenTelemetry.
+**Rejected (no reintroduction without ADR):** Django · FastAPI · SQLAlchemy · Celery · RQ · Docker · asyncio · Sentry · OpenTelemetry.
+
+**Conditionally reopened:** **Flask (sync only)** + HTMX for the Phase 12 local web cockpit — *pending ADR `0016`*. Until `0016` lands, Flask stays out of the codebase. Behind optional extra `weaver[web]`. asyncio / FastAPI / React-Node build remain rejected. See [docs/feature_plan/web-architecture.md](docs/feature_plan/web-architecture.md).
 
 **Providers (MVP-0):**
 
