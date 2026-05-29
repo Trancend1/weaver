@@ -53,8 +53,7 @@ def build_document(*, source_name: str, language: str, chapters: list[ChapterDra
         ),
         assets=[],
         chapters=[
-            _build_chapter(source_name, order, draft)
-            for order, draft in enumerate(chapters)
+            _build_chapter(source_name, order, draft) for order, draft in enumerate(chapters)
         ],
     )
 

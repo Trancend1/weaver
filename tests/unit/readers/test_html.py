@@ -35,9 +35,7 @@ def test_read_html_splits_on_h1_and_skips_script_style(tmp_path) -> None:
     assert ".c{color:red}" not in texts
     assert document.chapters[1].blocks[1].kind == "quote"
     assert all(
-        block.markup_context is None
-        for chapter in document.chapters
-        for block in chapter.blocks
+        block.markup_context is None for chapter in document.chapters for block in chapter.blocks
     )
 
 

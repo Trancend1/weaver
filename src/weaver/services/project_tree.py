@@ -66,8 +66,7 @@ def project_tree(project_toml: Path, *, cwd: Path | None = None) -> NovelTree:
     with closing(connect_readonly_database(db_path)) as connection:
         project_id = _single_project_id(connection)
         volumes = [
-            _volume_view(connection, volume)
-            for volume in list_volumes(connection, project_id)
+            _volume_view(connection, volume) for volume in list_volumes(connection, project_id)
         ]
     return NovelTree(project_name=project_name, volumes=volumes)
 

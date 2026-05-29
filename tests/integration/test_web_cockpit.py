@@ -294,9 +294,7 @@ def test_import_volume_route_adds_txt_volume(web_env) -> None:
 
 def test_import_volume_route_missing_project_404(cockpit) -> None:
     data = {"epub_file": (io.BytesIO(b"x"), "v.txt")}
-    response = cockpit.post(
-        "/project/nope/import", data=data, content_type="multipart/form-data"
-    )
+    response = cockpit.post("/project/nope/import", data=data, content_type="multipart/form-data")
     assert response.status_code == 404
 
 

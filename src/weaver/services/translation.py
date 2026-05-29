@@ -397,9 +397,7 @@ def _load_single_project(connection: sqlite3.Connection) -> ProjectRecord:
     return get_project(connection, int(row["id"]))
 
 
-def _source_volume_id(
-    connection: sqlite3.Connection, *, project_id: int, source_path: Path
-) -> int:
+def _source_volume_id(connection: sqlite3.Connection, *, project_id: int, source_path: Path) -> int:
     """Resolve the volume the translate source belongs to.
 
     Translate re-reads the project's single ``source_file`` and re-syncs it; that
