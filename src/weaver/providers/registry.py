@@ -28,6 +28,12 @@ def register_provider(name: str, factory: ProviderFactory) -> None:
     _REGISTRY[name] = factory
 
 
+def known_provider_types() -> list[str]:
+    """Return registered provider type names, sorted (registry-driven validation)."""
+
+    return sorted(_REGISTRY)
+
+
 def build_provider(config: Mapping[str, Any]) -> LLMProvider:
     """Instantiate a provider from a parsed `[provider]` TOML block.
 
@@ -103,7 +109,49 @@ def _build_ollama(config: Mapping[str, Any]) -> LLMProvider:
     )
 
 
+def _build_custom(config: Mapping[str, Any]) -> LLMProvider:
+    """Generic OpenAI-compatible endpoint (ADR `0020`).
+
+    Reuses the OpenAI-compatible `DeepSeekProvider` engine but takes a
+    user-supplied `base_url`, `model`, and `api_key_env` (the env var / secret
+    name holding the key). The key value itself is never read from config.
+    """
+
+    base_url = str(config.get("base_url", "")).strip()
+    if not base_url:
+        raise ConfigError(
+            "Custom provider requires `base_url`. "
+            'Likely cause: [provider] base_url is missing for type = "custom". '
+            "Next command: set the endpoint URL in project.toml or the cockpit."
+        )
+    api_key_env = str(config.get("api_key_env", "")).strip()
+    if not api_key_env:
+        raise ConfigError(
+            "Custom provider requires `api_key_env`. "
+            'Likely cause: [provider] api_key_env is missing for type = "custom". '
+            "Next command: set the env-var name that holds the key (e.g. MY_API_KEY)."
+        )
+    model = str(config.get("model", "")).strip()
+    if not model:
+        raise ConfigError(
+            "Custom provider requires `model`. "
+            'Likely cause: [provider] model is missing for type = "custom". '
+            "Next command: set the model id in project.toml or the cockpit."
+        )
+    return DeepSeekProvider(
+        config=DeepSeekConfig(
+            model=model,
+            base_url=base_url,
+            temperature=float(config.get("temperature", DeepSeekConfig.temperature)),
+            timeout_seconds=float(config.get("timeout_seconds", DeepSeekConfig.timeout_seconds)),
+            api_key_env=api_key_env,
+            name="custom",
+        )
+    )
+
+
 register_provider("fake", _build_fake)
 register_provider("deepseek", _build_deepseek)
 register_provider("gemini", _build_gemini)
 register_provider("ollama", _build_ollama)
+register_provider("custom", _build_custom)

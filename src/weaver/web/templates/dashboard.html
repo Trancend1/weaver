@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Projects — Weaver Cockpit{% endblock %}
+{% block content %}
+  <section class="panel">
+    <h1>Projects</h1>
+    <p class="muted">Discovered under <code>{{ books_dir }}</code></p>
+    <p class="muted">Global default provider: <strong>{{ default_provider }}</strong> · model <strong>{{ default_model }}</strong></p>
+    <p><a class="btn primary" href="{{ url_for('new.new_page') }}">+ New project</a></p>
+  </section>
+
+  {% if projects %}
+  <table class="grid">
+    <thead>
+      <tr>
+        <th>Project</th>
+        <th>Provider / model</th>
+        <th>Segments</th>
+        <th>Translated</th>
+        <th>Pending</th>
+        <th>Failed</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in projects %}
+      <tr>
+        <td><strong>{{ p.name }}</strong></td>
+        {% if p.summary %}
+        <td>{{ p.summary.provider }} / {{ p.summary.model }}</td>
+        <td>{{ p.summary.segment_count }}</td>
+        <td>{{ p.summary.translated_count }}</td>
+        <td>{{ p.summary.pending_count }}</td>
+        <td>{{ p.summary.failed_count }}</td>
+        <td><a class="btn" href="{{ url_for('projects.cockpit', name=p.name) }}">Open</a></td>
+        {% else %}
+        <td colspan="5" class="error">unreadable: {{ p.error }}</td>
+        <td></td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <section class="panel empty">
+    <p>No projects found. <a href="{{ url_for('new.new_page') }}">Create one</a> by browsing or uploading an EPUB.</p>
+  </section>
+  {% endif %}
+{% endblock %}

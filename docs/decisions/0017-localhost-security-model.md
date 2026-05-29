@@ -17,7 +17,7 @@ The cockpit server enforces:
 - **No authentication.** Single-user local tool; auth would add friction with no threat it mitigates on loopback.
 - **File browser sandbox.** The `/api/browse` directory listing is rooted at `--books-dir` (default: current working directory). Paths are resolved and validated to stay within the root; `..` traversal escapes are rejected. Listing is filtered to directories and `.epub` files.
 - **Upload limits.** Uploads accept `.epub` only, with a size cap. Uploaded files are copied to `.weaver/_uploads/` staging (decision D2), then `init` runs from there — never executed or extracted to arbitrary paths.
-- **Secret handling.** API keys are never written to `project.toml` or `~/.weaver/config.toml` (ADR `0018` writes only `type`/`model`/`base_url`). Keys are never rendered to a page, included in an SSE event, or written to a request/response log. Provider healthcheck/config UI shows only whether an env var is *present*, never its value.
+- **Secret handling.** API keys are never written to `project.toml` or `~/.weaver/config.toml` (ADR `0018` writes only `type`/`model`/`base_url`/`api_key_env`). Keys may be persisted **only** in the dedicated local secret store `~/.weaver/secrets.toml` (ADR `0020`, mode `0o600`, outside the repo). Keys are never rendered to a page, included in an SSE event, or written to a request/response log. Provider healthcheck/config UI shows only whether a key env var is *present*, never its value.
 
 ## Consequences
 

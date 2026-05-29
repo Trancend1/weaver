@@ -1,6 +1,6 @@
 # Quickstart
 
-Weaver is a Python CLI. The v0.4.0 release is designed for local use with a
+Weaver is a Python CLI. The v0.6.0 release is designed for local use with a
 user-owned EPUB and a user-owned provider key.
 
 ## Install From Source
@@ -40,6 +40,33 @@ uv run weaver translate .weaver/aozora_sample/project.toml --provider gemini --d
 
 `--dry-run` counts selected segments and estimates input tokens without
 contacting the provider. `--verbose` echoes per-segment token I/O.
+
+## Custom Provider & API Keys
+
+Beyond the built-ins (`deepseek`, `gemini`, `ollama`, `fake`), the `custom`
+provider targets any OpenAI-compatible endpoint:
+
+```toml
+[provider]
+type        = "custom"
+base_url    = "https://api.example.com/v1"
+model       = "your-model"
+api_key_env = "MY_API_KEY"
+```
+
+`api_key_env` names the env var holding the key. Keys live in the environment or
+the local secret store `~/.weaver/secrets.toml` (mode `0o600`) — never in
+`project.toml`, never logged, never shown. A shell env var beats the store.
+
+```powershell
+uv run weaver secrets set DEEPSEEK_API_KEY        # hidden prompt
+uv run weaver secrets set MY_API_KEY --value sk-...
+uv run weaver secrets list                        # names only
+uv run weaver secrets rm MY_API_KEY
+```
+
+Set `WEAVER_SECRETS_PATH` to relocate the store. In the web cockpit, the provider
+form has an API-key field that writes only to the secret store.
 
 ## Shell Completion
 
@@ -183,3 +210,30 @@ uv run weaver validate .weaver/aozora_sample/project.toml --epub
 If epubcheck.jar is not found, Weaver skips the check with a notice rather
 than failing. Set `EPUBCHECK_JAR=/path/to/epubcheck.jar` to point Weaver at
 a custom installation.
+
+## Web Cockpit
+
+`weaver serve` launches a local web cockpit: a browser dashboard that discovers
+every project under `--books-dir` — no typed paths — and lets you create,
+configure, translate, and export projects without leaving the browser. It binds
+**`127.0.0.1` only**, runs without authentication (single-user local tool, ADR
+`0017`), and never writes or renders API keys.
+
+```powershell
+# requires: pip install 'weaver[web]'
+uv run weaver serve                          # http://127.0.0.1:8765, opens a browser
+uv run weaver serve --port 9000 --no-browser # custom port, no auto-open
+uv run weaver serve --books-dir D:\novels    # discover projects under another root
+```
+
+In the browser:
+
+1. **New project** — browse the sandboxed books directory or upload an EPUB, pick
+   a provider and template, and create it. Uploads stage under `.weaver/_uploads/`.
+2. **Cockpit** — view status (mirrors `weaver inspect`), set provider/model
+   (project or global scope), translate with first-N / retry-failed, **stop** a
+   run cooperatively, and export Markdown or EPUB.
+3. **Glossary review** — paginated approve / edit / reject of pending candidates,
+   with approved-term conflicts and a per-chapter coverage diff shown read-only.
+
+One translate job runs at a time; live progress streams over Server-Sent Events.

@@ -60,6 +60,8 @@ app = typer.Typer(
 glossary_app = typer.Typer(help="Review and edit glossary candidates.")
 app.add_typer(glossary_app, name="glossary")
 app.add_typer(glossary_app, name="gl", hidden=True)
+secrets_app = typer.Typer(help="Manage API keys in the local secret store.")
+app.add_typer(secrets_app, name="secrets")
 console = Console()
 
 _DEBUG_MODE = False
@@ -90,6 +92,10 @@ def main(
 
     global _DEBUG_MODE
     _DEBUG_MODE = debug
+
+    from weaver.core.secret_store import apply_secrets_to_env
+
+    apply_secrets_to_env()
 
 
 @app.command(
@@ -172,6 +178,7 @@ def new_project_command(
             answers.epub_path,
             template=answers.template,
             cwd=answers.working_dir,
+            provider=answers.provider,
         )
     except WeaverError as exc:
         _exit_with_error(exc)
@@ -1101,6 +1108,105 @@ def _exit_with_error(error: WeaverError) -> NoReturn:
     else:
         code = 1
     raise typer.Exit(code=code) from error
+
+
+@app.command(
+    "serve",
+    epilog=(
+        "Examples:\n"
+        "  weaver serve\n"
+        "  weaver serve --port 9000 --books-dir ~/novels\n"
+        "  weaver serve --no-browser"
+    ),
+)
+def serve_command(
+    port: int = typer.Option(
+        8765,
+        "--port",
+        help="TCP port to bind on 127.0.0.1.",
+    ),
+    books_dir: Path | None = typer.Option(
+        None,
+        "--books-dir",
+        help="Root directory to discover projects under (default: current directory).",
+    ),
+    no_browser: bool = typer.Option(
+        False,
+        "--no-browser",
+        help="Do not open a browser window on startup.",
+    ),
+) -> None:
+    """Run the local web cockpit (binds 127.0.0.1 only)."""
+
+    root = books_dir or Path.cwd()
+    try:
+        from weaver.web.app import run_server
+    except ImportError as exc:
+        _exit_with_error(
+            ConfigError(
+                "The web cockpit requires the optional `web` extra. "
+                "Likely cause: Flask is not installed. "
+                "Next command: run `pip install weaver[web]`."
+            )
+        )
+        raise AssertionError("unreachable") from exc  # _exit_with_error never returns
+
+    console.print(f"Weaver cockpit on http://127.0.0.1:{port} (Ctrl+C to stop)")
+    run_server(books_dir=root, port=port, open_browser=not no_browser)
+
+
+@secrets_app.command(
+    "set",
+    epilog="Examples:\n  weaver secrets set DEEPSEEK_API_KEY\n  weaver secrets set MY_API_KEY",
+)
+def secrets_set_command(
+    env_var: str = typer.Argument(
+        ..., help="Env-var name that holds the key (e.g. DEEPSEEK_API_KEY)."
+    ),
+    value: str | None = typer.Option(
+        None,
+        "--value",
+        help="Key value. Omit to be prompted with hidden input (recommended).",
+    ),
+) -> None:
+    """Store an API key in ~/.weaver/secrets.toml (mode 600); never printed."""
+
+    from weaver.core.secret_store import set_secret
+
+    key_value = value if value is not None else typer.prompt(f"{env_var} value", hide_input=True)
+    try:
+        set_secret(env_var, key_value)
+    except WeaverError as exc:
+        _exit_with_error(exc)
+    typer.echo(f"Stored {env_var} in the local secret store.")
+
+
+@secrets_app.command("list", epilog="Examples:\n  weaver secrets list")
+def secrets_list_command() -> None:
+    """List stored key env-var names (values are never shown)."""
+
+    from weaver.core.secret_store import list_secret_names
+
+    names = list_secret_names()
+    if not names:
+        typer.echo("No secrets stored. Add one with `weaver secrets set <ENV_VAR>`.")
+        return
+    for name in names:
+        typer.echo(name)
+
+
+@secrets_app.command("rm", epilog="Examples:\n  weaver secrets rm DEEPSEEK_API_KEY")
+def secrets_rm_command(
+    env_var: str = typer.Argument(..., help="Env-var name to remove from the secret store."),
+) -> None:
+    """Remove a key from the local secret store."""
+
+    from weaver.core.secret_store import delete_secret
+
+    if delete_secret(env_var):
+        typer.echo(f"Removed {env_var} from the local secret store.")
+    else:
+        typer.echo(f"No stored secret named {env_var}.")
 
 
 app.command("tx", hidden=True)(translate_project_command)

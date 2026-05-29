@@ -101,8 +101,8 @@ def _init_with_fake_pattern(runner: CliRunner, tmp_path: Path, *, pattern: str) 
     text = text.replace('type = "deepseek"', 'type = "fake"')
     text = text.replace('model = "deepseek-chat"', 'model = "fake-1"')
     text = text.replace(
-        'base_url = "http://localhost:11434"',
-        f'pattern = "{pattern}"',
+        'model = "fake-1"',
+        f'model = "fake-1"\npattern = "{pattern}"',
     )
     project_toml.write_text(text, encoding="utf-8")
     return project_toml

@@ -19,7 +19,7 @@ def _set_fake_provider(project_toml: Path) -> None:
     text = project_toml.read_text(encoding="utf-8")
     text = text.replace('type = "deepseek"', 'type = "fake"')
     text = text.replace('model = "deepseek-chat"', 'model = "fake-1"')
-    text = text.replace('base_url = "http://localhost:11434"', 'pattern = "EN: {source}"')
+    text = text.replace('model = "fake-1"', 'model = "fake-1"\npattern = "EN: {source}"')
     project_toml.write_text(text, encoding="utf-8")
 
 

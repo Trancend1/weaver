@@ -141,6 +141,7 @@ def translate_project(
     provider: LLMProvider | None = None,
     provider_override: dict[str, Any] | None = None,
     progress_callback: ProgressCallback | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> TranslationRunSummary:
     """Translate selected project segments through the configured provider.
 
@@ -164,6 +165,11 @@ def translate_project(
             with `(index, total, segment, translated, input_tokens,
             output_tokens)`. In dry-run mode the callback receives
             `translated=False` and the per-segment estimated input tokens.
+        should_cancel: Optional predicate checked before each segment. When it
+            returns True the loop stops cleanly, leaving already-translated
+            segments committed and the rest in their prior status (cooperative
+            cancel, ADR `0019`). CLI passes None (no behavior change); the web
+            cockpit passes the JobManager cancel flag.
 
     Returns:
         TranslationRunSummary with current database counts and token totals.
@@ -228,6 +234,8 @@ def translate_project(
         total_selected = len(selected)
 
         for index, segment in enumerate(selected, start=1):
+            if should_cancel is not None and should_cancel():
+                break
             block = block_by_id.get(segment.id)
             if block is None:
                 raise ConfigError(
