@@ -79,7 +79,7 @@ Rules:
 - UI polish starts only after MVP baseline is clear (ADR `005`).
 - MVP gaps must map to actionable sprints (ADR `003`).
 
-Reset status: Task 2 (cleanup) in progress. Sprints begin after the reset baseline (Tasks 3–5) lands.
+Reset status: Tasks 1–4 done (audit · cleanup/ADR reset · docs rewrite · fresh baseline — all checks green). **Task 5 next** (MVP gap finalize + sprint lock; gap draft already in [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md)) — runs in a fresh session. Sprints begin after Task 5.
 
 ### 2.4 Exit Criteria
 
