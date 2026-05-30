@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from weaver.core.config import load_project_config
 from weaver.errors import ConfigError, SegmentNotFoundError
+from weaver.services.project_paths import resolve_database_path
 from weaver.storage.db import connect_database, connect_readonly_database, transaction
 from weaver.storage.projects import get_project
 from weaver.storage.segments import get_segment, update_segment_status
@@ -64,7 +64,7 @@ def apply_manual_translation(
             "and enter the translation."
         )
 
-    db_path = _resolve_database_path(project_toml, cwd or Path.cwd())
+    db_path = resolve_database_path(project_toml, cwd=cwd)
     with closing(connect_database(db_path)) as connection:
         project_row = connection.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
         if project_row is None:
@@ -131,7 +131,7 @@ def edit_segment(
             "Next command: set EDITOR, for example `set EDITOR=notepad` on Windows."
         )
 
-    db_path = _resolve_database_path(project_toml, cwd or Path.cwd())
+    db_path = resolve_database_path(project_toml, cwd=cwd)
     with closing(connect_database(db_path)) as connection:
         segment = get_segment(connection, segment_id)
         if segment is None:
@@ -171,7 +171,7 @@ def resolve_segment_id(
         SegmentNotFoundError: When no segment matches the predicate.
     """
 
-    db_path = _resolve_database_path(project_toml, cwd or Path.cwd())
+    db_path = resolve_database_path(project_toml, cwd=cwd)
     with closing(connect_readonly_database(db_path)) as connection:
         if selector in ("first-failed", "next-stale"):
             status = "failed" if selector == "first-failed" else "stale"
@@ -217,16 +217,3 @@ def _open_editor_with_text(editor: str, initial_text: str) -> str:
         return temp_path.read_text(encoding="utf-8-sig")
     finally:
         temp_path.unlink(missing_ok=True)
-
-
-def _resolve_database_path(project_toml: Path, cwd: Path) -> Path:
-    data = load_project_config(project_toml)
-    project_config = data["project"]
-    raw_path = str(project_config["database_path"])
-    path = Path(raw_path)
-    if path.is_absolute():
-        return path
-    cwd_path = cwd / path
-    if cwd_path.exists():
-        return cwd_path
-    return project_toml.parent / path

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from weaver.core.config import load_project_config
+from weaver.services.project_paths import resolve_database_path
 from weaver.storage.db import connect_readonly_database
 from weaver.storage.volumes import VolumeRecord, list_volumes
 
@@ -58,10 +59,9 @@ def project_tree(project_toml: Path, *, cwd: Path | None = None) -> NovelTree:
         A NovelTree with each volume's chapters and counts.
     """
 
-    base_dir = cwd or Path.cwd()
     data = load_project_config(project_toml)
     project_name = str(data["project"]["name"])
-    db_path = _resolve_path(str(data["project"]["database_path"]), base_dir, project_toml.parent)
+    db_path = resolve_database_path(project_toml, cwd=cwd)
 
     with closing(connect_readonly_database(db_path)) as connection:
         project_id = _single_project_id(connection)
@@ -109,13 +109,3 @@ def _volume_view(connection: sqlite3.Connection, volume: VolumeRecord) -> Volume
 def _single_project_id(connection: sqlite3.Connection) -> int:
     row = connection.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
     return int(row["id"]) if row is not None else 0
-
-
-def _resolve_path(path_value: str, cwd: Path, project_toml_dir: Path) -> Path:
-    path = Path(path_value)
-    if path.is_absolute():
-        return path
-    cwd_path = cwd / path
-    if cwd_path.exists():
-        return cwd_path
-    return project_toml_dir / path
