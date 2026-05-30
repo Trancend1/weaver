@@ -209,29 +209,28 @@ def list_segments_for_translation(
     return [_segment_from_row(row) for row in rows]
 
 
-def list_chapter_translation_targets(
+def list_chapter_segments(
     connection: sqlite3.Connection, *, chapter_id: str
 ) -> list[SegmentRecord]:
-    """List one chapter's segments that still need translation.
+    """List all of one chapter's segments in block order.
 
-    Selects segments whose status is ``pending``, ``failed``, or ``stale`` —
-    segments already ``translated`` or ``manual`` are excluded so a chapter
-    translate never overwrites existing work (overwrite is a later, explicit
-    retranslate concern).
+    Translation target selection (which statuses are eligible) is applied by the
+    caller per requested mode; this returns the full chapter so the caller can
+    also count what was skipped.
 
     Args:
         connection: Open SQLite connection.
-        chapter_id: Chapter id whose segments are selected.
+        chapter_id: Chapter id whose segments are listed.
 
     Returns:
-        Translation targets ordered by block order.
+        All chapter segments ordered by block order.
     """
 
     rows = connection.execute(
         """
         SELECT id, chapter_id, block_order, kind, source_text, source_hash, status
         FROM segments
-        WHERE chapter_id = ? AND status IN ('pending', 'failed', 'stale')
+        WHERE chapter_id = ?
         ORDER BY block_order
         """,
         (chapter_id,),

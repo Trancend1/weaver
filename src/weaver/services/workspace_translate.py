@@ -52,8 +52,15 @@ from weaver.storage.projects import ProjectRecord, get_project
 from weaver.storage.segments import (
     SegmentRecord,
     get_segment,
-    list_chapter_translation_targets,
+    list_chapter_segments,
 )
+
+# Retranslate modes (Sprint 4C). Govern which existing segments are eligible:
+#   skip_existing         — only pending/failed/stale (never overwrite; 4A default)
+#   retranslate_non_manual — also re-translate `translated`, but never `manual`
+#   force_selected        — translate every target, including `manual`
+TRANSLATE_MODES = frozenset({"skip_existing", "retranslate_non_manual", "force_selected"})
+_NEEDS_TRANSLATION = frozenset({"pending", "failed", "stale"})
 
 
 @dataclass(frozen=True)
@@ -92,6 +99,7 @@ def prepare_chapter_translation(
     chapter_id: str,
     *,
     segment_ids: Sequence[str] | None = None,
+    mode: str = "skip_existing",
     cwd: Path | None = None,
     provider_override: dict[str, Any] | None = None,
 ) -> TranslationPlan:
@@ -103,6 +111,10 @@ def prepare_chapter_translation(
         segment_ids: When ``None``, target the whole chapter. When provided, target
             exactly these segments (each must belong to ``chapter_id``); an empty
             sequence is rejected.
+        mode: One of ``skip_existing`` (only pending/failed/stale; never overwrite),
+            ``retranslate_non_manual`` (also re-translate ``translated``, never
+            ``manual``), or ``force_selected`` (translate every target, including
+            ``manual``). Segments excluded by the mode are reported as ``skipped``.
         cwd: Working directory used to resolve project-relative paths.
         provider_override: Optional ``{"type": ..., "model": ...}`` merged onto the
             configured ``[provider]`` block so one run can target a different
@@ -114,11 +126,19 @@ def prepare_chapter_translation(
     Raises:
         ChapterNotFoundError: If the chapter id does not exist.
         SegmentNotFoundError: If a selected segment is missing or not in the chapter.
-        ValueError: If ``segment_ids`` is provided but empty.
+        ValueError: If ``segment_ids`` is provided but empty, or ``mode`` is unknown.
         ConfigError: If the honorific policy or provider model is invalid.
         GlossaryConflictError: If approved glossary terms conflict.
         ProviderUnavailable: If the configured/overridden provider is unhealthy.
     """
+
+    if mode not in TRANSLATE_MODES:
+        valid = ", ".join(sorted(TRANSLATE_MODES))
+        raise ValueError(
+            f"Unknown translate mode `{mode}`. "
+            f"Likely cause: the request mode must be one of: {valid}. "
+            "Next command: resend with a valid `mode`."
+        )
 
     if segment_ids is not None and len(segment_ids) == 0:
         raise ValueError(
@@ -159,13 +179,14 @@ def prepare_chapter_translation(
             )
 
         if segment_ids is None:
-            mode = "chapter"
-            targets = list_chapter_translation_targets(connection, chapter_id=chapter_id)
-            requested_count = _chapter_segment_count(connection, chapter_id)
+            scope = "chapter"
+            chapter_segments = list_chapter_segments(connection, chapter_id=chapter_id)
+            requested_count = len(chapter_segments)
+            targets = [s for s in chapter_segments if _mode_allows(s.status, mode)]
         else:
-            mode = "selection"
+            scope = "selection"
             requested_count = len(segment_ids)
-            targets = _selected_targets(connection, chapter_id, segment_ids)
+            targets = _selected_targets(connection, chapter_id, segment_ids, mode)
 
         raise_on_glossary_conflicts(connection, project_id=project.id)
         glossary_terms = tuple(list_glossary_terms(connection, project_id=project.id))
@@ -185,7 +206,7 @@ def prepare_chapter_translation(
         project_toml=project_toml,
         db_path=db_path,
         chapter_id=chapter_id,
-        mode=mode,
+        mode=scope,
         project=project,
         provider=provider,
         provider_model=provider_model,
@@ -273,7 +294,7 @@ def run_translation(
 
 
 def _selected_targets(
-    connection: sqlite3.Connection, chapter_id: str, segment_ids: Sequence[str]
+    connection: sqlite3.Connection, chapter_id: str, segment_ids: Sequence[str], mode: str
 ) -> list[SegmentRecord]:
     targets: list[SegmentRecord] = []
     for segment_id in segment_ids:
@@ -285,9 +306,25 @@ def _selected_targets(
                 "Next command: open the chapter workspace "
                 "(GET /projects/<name>/chapters/<chapter_id>/workspace) to list segment ids."
             )
-        if segment.status in ("pending", "failed", "stale"):
+        if _mode_allows(segment.status, mode):
             targets.append(segment)
     return targets
+
+
+def _mode_allows(status: str, mode: str) -> bool:
+    """Whether a segment with ``status`` is an eligible target under ``mode``.
+
+    - ``skip_existing``: only untranslated work (pending/failed/stale).
+    - ``retranslate_non_manual``: the above plus ``translated``; ``manual`` is
+      protected and never overwritten.
+    - ``force_selected``: any status, including ``manual``.
+    """
+
+    if mode == "force_selected":
+        return True
+    if mode == "retranslate_non_manual":
+        return status in _NEEDS_TRANSLATION or status == "translated"
+    return status in _NEEDS_TRANSLATION
 
 
 def _load_single_project(connection: sqlite3.Connection) -> ProjectRecord:
@@ -304,13 +341,6 @@ def _load_single_project(connection: sqlite3.Connection) -> ProjectRecord:
 def _chapter_exists(connection: sqlite3.Connection, chapter_id: str) -> bool:
     row = connection.execute("SELECT 1 FROM chapters WHERE id = ?", (chapter_id,)).fetchone()
     return row is not None
-
-
-def _chapter_segment_count(connection: sqlite3.Connection, chapter_id: str) -> int:
-    row = connection.execute(
-        "SELECT COUNT(*) AS count FROM segments WHERE chapter_id = ?", (chapter_id,)
-    ).fetchone()
-    return int(row["count"])
 
 
 def _merge_provider_config(base: dict[str, Any], override: dict[str, Any] | None) -> dict[str, Any]:

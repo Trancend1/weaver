@@ -6,7 +6,11 @@ All types are read-only response models. Domain logic stays in
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
+
+TranslateMode = Literal["skip_existing", "retranslate_non_manual", "force_selected"]
 
 # ---------------------------------------------------------------------------
 # System (Stage 2A)
@@ -198,6 +202,26 @@ class SegmentSelectionTranslateRequest(BaseModel):
     """Request to translate a chosen set of segments within one chapter."""
 
     segment_ids: list[str]
+    provider: str | None = None
+    model: str | None = None
+
+
+class ChapterRetranslateRequest(BaseModel):
+    """Request to retranslate a chapter under an explicit overwrite mode.
+
+    ``mode`` defaults to ``skip_existing`` (safe). ``manual`` segments are only
+    overwritten when ``mode`` is ``force_selected``."""
+
+    mode: TranslateMode = "skip_existing"
+    provider: str | None = None
+    model: str | None = None
+
+
+class SegmentSelectionRetranslateRequest(BaseModel):
+    """Request to retranslate a chosen set of segments under an overwrite mode."""
+
+    segment_ids: list[str]
+    mode: TranslateMode = "skip_existing"
     provider: str | None = None
     model: str | None = None
 

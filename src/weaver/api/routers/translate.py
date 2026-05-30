@@ -19,7 +19,9 @@ from fastapi.responses import StreamingResponse
 
 from weaver.api.jobs import JobRegistry, TranslationJob, format_sse
 from weaver.api.schemas import (
+    ChapterRetranslateRequest,
     ChapterTranslateRequest,
+    SegmentSelectionRetranslateRequest,
     SegmentSelectionTranslateRequest,
     TranslationJobProgressResponse,
     TranslationJobResponse,
@@ -61,6 +63,7 @@ def _start_job(
     chapter_id: str,
     *,
     segment_ids: list[str] | None,
+    mode: str = "skip_existing",
     provider: str | None,
     model: str | None,
 ) -> TranslationJobResponse:
@@ -76,6 +79,7 @@ def _start_job(
             dp.project_toml,
             chapter_id,
             segment_ids=segment_ids,
+            mode=mode,
             cwd=base,
             provider_override=_provider_override(provider, model),
         )
@@ -156,6 +160,63 @@ def translate_segments(
         name,
         chapter_id,
         segment_ids=body.segment_ids,
+        provider=body.provider,
+        model=body.model,
+    )
+
+
+@router.post(
+    "/{name}/chapters/{chapter_id}/retranslate",
+    response_model=TranslationJobResponse,
+    status_code=202,
+)
+def retranslate_chapter(
+    name: str,
+    chapter_id: str,
+    body: ChapterRetranslateRequest,
+    request: Request,
+) -> TranslationJobResponse:
+    """Start a background job re-translating a chapter under an explicit mode.
+
+    ``mode`` controls overwrite: ``skip_existing`` (default, never overwrites),
+    ``retranslate_non_manual`` (re-translates ``translated`` but protects
+    ``manual``), or ``force_selected`` (overwrites everything, including
+    ``manual``). Each retranslated segment appends a new attempt; prior attempts
+    stay as immutable history.
+    """
+    return _start_job(
+        request,
+        name,
+        chapter_id,
+        segment_ids=None,
+        mode=body.mode,
+        provider=body.provider,
+        model=body.model,
+    )
+
+
+@router.post(
+    "/{name}/chapters/{chapter_id}/retranslate-segments",
+    response_model=TranslationJobResponse,
+    status_code=202,
+)
+def retranslate_segments(
+    name: str,
+    chapter_id: str,
+    body: SegmentSelectionRetranslateRequest,
+    request: Request,
+) -> TranslationJobResponse:
+    """Start a background job re-translating a chosen set of segments under a mode.
+
+    Same overwrite semantics as :func:`retranslate_chapter`; ``manual`` segments in
+    the selection are only overwritten when ``mode`` is ``force_selected``.
+    """
+    return _start_job(
+        request,
+        name,
+        chapter_id,
+        segment_ids=body.segment_ids,
+        mode=body.mode,
         provider=body.provider,
         model=body.model,
     )

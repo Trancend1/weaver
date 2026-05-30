@@ -185,3 +185,89 @@ def test_cancel_unknown_job_returns_404(client_with_projects: TestClient) -> Non
     name = _name(client_with_projects)
     resp = client_with_projects.post(f"/projects/{name}/jobs/deadbeef/cancel")
     assert resp.status_code == 404
+
+
+def _translate_chapter(client: TestClient, name: str, chapter_id: str) -> None:
+    job_id = client.post(
+        f"/projects/{name}/chapters/{chapter_id}/translate", json=FAKE_BODY
+    ).json()["job_id"]
+    _wait(client, job_id)
+
+
+def test_retranslate_skip_existing_does_nothing_when_translated(
+    client_with_projects: TestClient,
+) -> None:
+    name = _name(client_with_projects)
+    chapter_id = _first_chapter(client_with_projects, name)
+    _translate_chapter(client_with_projects, name, chapter_id)
+
+    resp = client_with_projects.post(
+        f"/projects/{name}/chapters/{chapter_id}/retranslate", json={**FAKE_BODY}
+    )
+    assert resp.status_code == 202
+    job_id = resp.json()["job_id"]
+    _wait(client_with_projects, job_id)
+    result = client_with_projects.get(f"/projects/{name}/jobs/{job_id}").json()["result"]
+    assert result["selected"] == 0
+
+
+def test_retranslate_non_manual_retranslates_after_full_translate(
+    client_with_projects: TestClient,
+) -> None:
+    name = _name(client_with_projects)
+    chapter_id = _first_chapter(client_with_projects, name)
+    _translate_chapter(client_with_projects, name, chapter_id)
+
+    resp = client_with_projects.post(
+        f"/projects/{name}/chapters/{chapter_id}/retranslate",
+        json={"mode": "retranslate_non_manual", **FAKE_BODY},
+    )
+    assert resp.status_code == 202
+    job_id = resp.json()["job_id"]
+    _wait(client_with_projects, job_id)
+    result = client_with_projects.get(f"/projects/{name}/jobs/{job_id}").json()["result"]
+    assert result["translated"] > 0
+
+
+def test_force_selected_overwrites_manual_and_appends_history(
+    client_with_projects: TestClient,
+) -> None:
+    name = _name(client_with_projects)
+    chapter_id = _first_chapter(client_with_projects, name)
+    workspace = client_with_projects.get(
+        f"/projects/{name}/chapters/{chapter_id}/workspace"
+    ).json()
+    segment_id = workspace["segments"][0]["id"]
+    # Make it manual via the save endpoint.
+    client_with_projects.patch(
+        f"/projects/{name}/chapters/{chapter_id}/segments/{segment_id}/translation",
+        json={"translated_text": "hand edit"},
+    )
+
+    resp = client_with_projects.post(
+        f"/projects/{name}/chapters/{chapter_id}/retranslate-segments",
+        json={"segment_ids": [segment_id], "mode": "force_selected", **FAKE_BODY},
+    )
+    assert resp.status_code == 202
+    job_id = resp.json()["job_id"]
+    _wait(client_with_projects, job_id)
+    assert client_with_projects.get(f"/projects/{name}/jobs/{job_id}").json()["result"][
+        "translated"
+    ] == 1
+
+    history = client_with_projects.get(
+        f"/projects/{name}/chapters/{chapter_id}/segments/{segment_id}/translations"
+    ).json()
+    texts = [a["translated_text"] for a in history["attempts"]]
+    assert "hand edit" in texts  # prior manual attempt preserved
+    assert len(history["attempts"]) >= 2  # append-only
+
+
+def test_retranslate_invalid_mode_returns_422(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    chapter_id = _first_chapter(client_with_projects, name)
+    resp = client_with_projects.post(
+        f"/projects/{name}/chapters/{chapter_id}/retranslate",
+        json={"mode": "nuke_everything", **FAKE_BODY},
+    )
+    assert resp.status_code == 422

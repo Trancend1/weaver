@@ -9,6 +9,7 @@ import pytest
 
 from weaver.errors import ChapterNotFoundError, SegmentNotFoundError
 from weaver.services.project import initialize_project
+from weaver.services.workspace_edit import save_segment_translation
 from weaver.services.workspace_translate import (
     prepare_chapter_translation,
     run_translation,
@@ -58,6 +59,17 @@ def _status(db_path: Path, segment_id: str) -> str:
 def _count_translations(db_path: Path) -> int:
     with sqlite3.connect(db_path) as connection:
         return int(connection.execute("SELECT COUNT(*) FROM translations").fetchone()[0])
+
+
+def _attempt_texts(db_path: Path, segment_id: str) -> list[str]:
+    with sqlite3.connect(db_path) as connection:
+        return [
+            str(row[0])
+            for row in connection.execute(
+                "SELECT text FROM translations WHERE segment_id = ? ORDER BY attempt",
+                (segment_id,),
+            ).fetchall()
+        ]
 
 
 def test_chapter_translate_translates_all_pending(tmp_path, monkeypatch) -> None:
@@ -163,3 +175,72 @@ def test_provider_override_runs_fake_without_editing_config(tmp_path, monkeypatc
     assert plan.provider_model == "fake-1"
     assert result.translated == result.selected
     assert result.translated > 0
+
+
+def test_prepare_rejects_unknown_mode(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    _set_fake_provider(init.project_toml)
+    chapter_id = _first_chapter_id(init.database_path)
+
+    with pytest.raises(ValueError):
+        prepare_chapter_translation(init.project_toml, chapter_id, mode="bogus")
+
+
+def test_skip_existing_skips_everything_once_translated(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    _set_fake_provider(init.project_toml)
+    chapter_id = _first_chapter_id(init.database_path)
+    segment_ids = _chapter_segment_ids(init.database_path, chapter_id)
+    run_translation(prepare_chapter_translation(init.project_toml, chapter_id))
+
+    plan = prepare_chapter_translation(init.project_toml, chapter_id)  # skip_existing default
+    result = run_translation(plan)
+
+    assert plan.target_segment_ids == ()
+    assert result.selected == 0
+    assert result.skipped == len(segment_ids)
+
+
+def test_retranslate_non_manual_retranslates_translated_protects_manual(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    _set_fake_provider(init.project_toml)
+    chapter_id = _first_chapter_id(init.database_path)
+    segment_ids = _chapter_segment_ids(init.database_path, chapter_id)
+    run_translation(prepare_chapter_translation(init.project_toml, chapter_id))  # all translated
+    save_segment_translation(init.project_toml, chapter_id, segment_ids[0], "hand edit")  # manual
+
+    plan = prepare_chapter_translation(
+        init.project_toml, chapter_id, mode="retranslate_non_manual"
+    )
+    run_translation(plan)
+
+    assert segment_ids[0] not in plan.target_segment_ids  # manual protected
+    assert set(segment_ids[1:]) <= set(plan.target_segment_ids)  # translated retranslated
+    assert _status(init.database_path, segment_ids[0]) == "manual"
+
+
+def test_force_selected_overwrites_manual_and_appends_attempt(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    _set_fake_provider(init.project_toml)
+    chapter_id = _first_chapter_id(init.database_path)
+    segment_ids = _chapter_segment_ids(init.database_path, chapter_id)
+    save_segment_translation(init.project_toml, chapter_id, segment_ids[0], "hand edit")
+    before = _attempt_texts(init.database_path, segment_ids[0])
+
+    plan = prepare_chapter_translation(
+        init.project_toml, chapter_id, segment_ids=[segment_ids[0]], mode="force_selected"
+    )
+    result = run_translation(plan)
+
+    assert plan.target_segment_ids == (segment_ids[0],)
+    assert result.translated == 1
+    after = _attempt_texts(init.database_path, segment_ids[0])
+    assert len(after) == len(before) + 1  # append-only
+    assert "hand edit" in after  # prior manual attempt preserved as history
+    assert _status(init.database_path, segment_ids[0]) == "translated"
