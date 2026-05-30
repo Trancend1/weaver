@@ -139,3 +139,49 @@ def test_unhealthy_provider_returns_502(client_with_projects: TestClient) -> Non
         json={"provider": "unhealthytest", "model": "x"},
     )
     assert resp.status_code == 502
+
+
+def test_job_status_reports_progress(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    chapter_id = _first_chapter(client_with_projects, name)
+    job_id = client_with_projects.post(
+        f"/projects/{name}/chapters/{chapter_id}/translate", json=FAKE_BODY
+    ).json()["job_id"]
+    _wait(client_with_projects, job_id)
+
+    status = client_with_projects.get(f"/projects/{name}/jobs/{job_id}").json()
+    progress = status["progress"]
+    assert progress["total"] > 0
+    assert progress["current"] == progress["total"]
+    assert progress["translated"] == status["result"]["translated"]
+
+
+def test_job_events_stream_emits_progress_then_terminal(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    chapter_id = _first_chapter(client_with_projects, name)
+    job_id = client_with_projects.post(
+        f"/projects/{name}/chapters/{chapter_id}/translate", json=FAKE_BODY
+    ).json()["job_id"]
+
+    # The stream blocks until the worker finishes and pushes the sentinel.
+    body = client_with_projects.get(f"/projects/{name}/jobs/{job_id}/events").text
+    assert "event: progress" in body
+    assert "event: done" in body
+
+
+def test_cancel_endpoint_returns_status(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    chapter_id = _first_chapter(client_with_projects, name)
+    job_id = client_with_projects.post(
+        f"/projects/{name}/chapters/{chapter_id}/translate", json=FAKE_BODY
+    ).json()["job_id"]
+
+    resp = client_with_projects.post(f"/projects/{name}/jobs/{job_id}/cancel")
+    assert resp.status_code == 200
+    assert resp.json()["status"] in {"running", "done", "cancelled"}
+
+
+def test_cancel_unknown_job_returns_404(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    resp = client_with_projects.post(f"/projects/{name}/jobs/deadbeef/cancel")
+    assert resp.status_code == 404

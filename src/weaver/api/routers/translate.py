@@ -11,14 +11,17 @@ the job registry lives in ``weaver.api.jobs``.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
-from weaver.api.jobs import JobRegistry, TranslationJob
+from weaver.api.jobs import JobRegistry, TranslationJob, format_sse
 from weaver.api.schemas import (
     ChapterTranslateRequest,
     SegmentSelectionTranslateRequest,
+    TranslationJobProgressResponse,
     TranslationJobResponse,
     TranslationJobResultResponse,
     TranslationJobStatusResponse,
@@ -85,13 +88,14 @@ def _start_job(
     except WeaverError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    def runner(plan: TranslationPlan = plan):  # bind plan per job
-        return run_translation(plan)
+    def runner(should_cancel, progress, plan: TranslationPlan = plan):  # bind plan per job
+        return run_translation(plan, should_cancel=should_cancel, progress_callback=progress)
 
     job = _jobs(request).submit(
         project_name=name,
         chapter_id=chapter_id,
         mode=plan.mode,
+        total=len(plan.target_segment_ids),
         runner=runner,
     )
     return TranslationJobResponse(
@@ -162,16 +166,63 @@ def translate_segments(
     response_model=TranslationJobStatusResponse,
 )
 def get_translation_job(name: str, job_id: str, request: Request) -> TranslationJobStatusResponse:
-    """Return a translate job's current status and (once finished) its result."""
+    """Return a translate job's live progress, status, and (once finished) result."""
+    return _job_status(_require_job(request, name, job_id))
+
+
+@router.post(
+    "/{name}/jobs/{job_id}/cancel",
+    response_model=TranslationJobStatusResponse,
+)
+def cancel_translation_job(
+    name: str, job_id: str, request: Request
+) -> TranslationJobStatusResponse:
+    """Request a cooperative cancel of a running job.
+
+    The worker stops after the current segment; already-translated segments stay
+    committed. Idempotent and safe to call on a finished job (no-op). Returns the
+    job's current status.
+    """
+    job = _require_job(request, name, job_id)
+    job.request_cancel()
+    return _job_status(job)
+
+
+@router.get("/{name}/jobs/{job_id}/events")
+def stream_translation_job(name: str, job_id: str, request: Request) -> StreamingResponse:
+    """Stream a job's progress as Server-Sent Events until it finishes.
+
+    Single-consumer: events are drained from the job's queue, so one client reads
+    one stream (sufficient for the local cockpit). A late subscriber still sees the
+    buffered progress events followed by the terminal event.
+    """
+    job = _require_job(request, name, job_id)
+
+    def stream() -> Iterator[str]:
+        while True:
+            event = job.queue.get()
+            if event is None:  # stream-end sentinel
+                break
+            yield format_sse(event)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def _require_job(request: Request, name: str, job_id: str) -> TranslationJob:
     job = _jobs(request).get(job_id)
     if job is None or job.project_name != name:
         raise HTTPException(
             status_code=404, detail=f"Translation job '{job_id}' not found for project '{name}'."
         )
-    return _job_status(job)
+    return job
 
 
 def _job_status(job: TranslationJob) -> TranslationJobStatusResponse:
+    progress = job.snapshot()
     result = None
     if job.result is not None:
         r = job.result
@@ -190,6 +241,12 @@ def _job_status(job: TranslationJob) -> TranslationJobStatusResponse:
         status=job.status,
         chapter_id=job.chapter_id,
         mode=job.mode,
+        progress=TranslationJobProgressResponse(
+            current=progress.current,
+            total=progress.total,
+            translated=progress.translated,
+            failed=progress.failed,
+        ),
         result=result,
         error=job.error,
     )

@@ -224,6 +224,15 @@ class TranslationJobResultResponse(BaseModel):
     cancelled: bool
 
 
+class TranslationJobProgressResponse(BaseModel):
+    """Live per-segment progress for a running (or finished) translate job."""
+
+    current: int
+    total: int
+    translated: int
+    failed: int
+
+
 class TranslationJobStatusResponse(BaseModel):
     """A translate job's current state; ``result`` is set once it finishes."""
 
@@ -231,5 +240,6 @@ class TranslationJobStatusResponse(BaseModel):
     status: str
     chapter_id: str
     mode: str
+    progress: TranslationJobProgressResponse
     result: TranslationJobResultResponse | None
     error: str | None
