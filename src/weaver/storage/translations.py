@@ -3,7 +3,19 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import dataclass
 from datetime import UTC, datetime
+
+
+@dataclass(frozen=True)
+class TranslationAttempt:
+    """One recorded translation attempt for a segment."""
+
+    attempt: int
+    text: str
+    provider: str
+    model: str
+    created_at: str
 
 
 def record_translation(
@@ -100,6 +112,41 @@ def get_latest_translation_text(connection: sqlite3.Connection, *, segment_id: s
     if row is None:
         return None
     return str(row["text"])
+
+
+def list_translation_attempts(
+    connection: sqlite3.Connection, *, segment_id: str
+) -> list[TranslationAttempt]:
+    """Return every translation attempt for one segment, oldest first.
+
+    Args:
+        connection: Open SQLite connection.
+        segment_id: Segment id to look up.
+
+    Returns:
+        Translation attempts ordered by ascending attempt number. Empty when the
+        segment has no recorded translation.
+    """
+
+    rows = connection.execute(
+        """
+        SELECT attempt, text, provider, model, created_at
+        FROM translations
+        WHERE segment_id = ?
+        ORDER BY attempt ASC
+        """,
+        (segment_id,),
+    ).fetchall()
+    return [
+        TranslationAttempt(
+            attempt=int(row["attempt"]),
+            text=str(row["text"]),
+            provider=str(row["provider"]),
+            model=str(row["model"]),
+            created_at=str(row["created_at"]),
+        )
+        for row in rows
+    ]
 
 
 def list_previous_translated_segments(

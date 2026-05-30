@@ -105,3 +105,77 @@ class ImportVolumeResponse(BaseModel):
     chapter_count: int
     segment_count: int
     glossary_candidate_count: int
+
+
+# ---------------------------------------------------------------------------
+# Translation workspace (Stage 3A — read only)
+# ---------------------------------------------------------------------------
+
+
+class WorkspaceSegmentResponse(BaseModel):
+    """One source segment paired with its latest translation, if any."""
+
+    id: str
+    block_order: int
+    kind: str
+    source_text: str
+    status: str
+    translated_text: str | None
+
+
+class ChapterWorkspaceResponse(BaseModel):
+    """JP/EN workspace payload for one chapter (read-only)."""
+
+    project_name: str
+    volume_id: int
+    volume_title: str
+    chapter_id: str
+    chapter_title: str | None
+    segment_count: int
+    translated_count: int
+    segments: list[WorkspaceSegmentResponse]
+
+
+# ---------------------------------------------------------------------------
+# Translation workspace (Stage 3B — save one segment)
+# ---------------------------------------------------------------------------
+
+
+class SegmentTranslationUpdate(BaseModel):
+    """Request body for saving one segment's translation."""
+
+    translated_text: str
+
+
+class SegmentTranslationResponse(BaseModel):
+    """Result of saving one segment's translation (status becomes ``manual``)."""
+
+    segment_id: str
+    status: str
+    translated_text: str
+    saved_at: str
+
+
+# ---------------------------------------------------------------------------
+# Translation workspace (Stage 3C — revision history)
+# ---------------------------------------------------------------------------
+
+
+class TranslationAttemptResponse(BaseModel):
+    """One recorded translation attempt for a segment."""
+
+    attempt: int
+    translated_text: str
+    provider: str
+    model: str
+    created_at: str
+
+
+class SegmentTranslationHistoryResponse(BaseModel):
+    """A segment's current translation plus its full attempt history."""
+
+    segment_id: str
+    chapter_id: str
+    status: str
+    current_translation: str | None
+    attempts: list[TranslationAttemptResponse]

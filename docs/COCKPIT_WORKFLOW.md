@@ -43,6 +43,29 @@ long jobs: routes_translate → web/job_manager (single background thread) → S
 ```
 HTMX provides liveness (progress, partial updates) without a JS build step.
 
+## FastAPI workspace API (Sprint 3 — `src/weaver/api/`)
+
+The FastAPI cockpit (`weaver serve-api`) exposes the translation workspace as JSON. Routers are thin adapters; all logic lives in `services/*` and writes go through `storage/*` + `transaction()`.
+
+| Method | Path | Service | Notes |
+|---|---|---|---|
+| GET | `/projects/{name}/chapters/{chapter_id}/workspace` | `chapter_workspace` | Source segments + **latest** translation per segment (read-only). |
+| PATCH | `/projects/{name}/chapters/{chapter_id}/segments/{segment_id}/translation` | `save_segment_translation` | Save one segment. Preserves source; one new attempt; status → `manual`; returns `saved_at`. |
+| GET | `/projects/{name}/chapters/{chapter_id}/segments/{segment_id}/translations` | `segment_translation_history` | Full revision history: all attempts oldest-first + `current_translation`. |
+
+Errors: unknown project / chapter / segment (or segment not in the named chapter) → `404`; empty save text → `422`.
+
+### Save-state & autosave contract (UI debounce deferred)
+
+Revision history needs no separate table — every save is a row in `translations` keyed by `(segment_id, attempt)`; the **latest attempt is the current translation**. The save endpoint is the contract a future autosave UI builds on:
+
+- **Idempotent shape, append semantics.** Each successful PATCH appends a new attempt (monotonic `attempt`); prior attempts are immutable history. The save response (`segment_id`, `status`, `translated_text`, `saved_at`) is what the client renders for the dirty → saving → saved transition.
+- **Client states (planned, not yet built):** `dirty` (local edit pending) → `saving` (PATCH in flight) → `saved` (200, store `saved_at`) → `error` (non-2xx, keep buffer, surface `detail`). The UI owns debounce/throttle timing; the server stays stateless per request.
+- **No coalescing server-side.** Three rapid saves = three attempts. If the UI wants to collapse keystrokes into one revision, it debounces before calling PATCH — the server does not merge.
+- **Latest-only read stays cheap.** The workspace endpoint never returns the attempt list; clients fetch `/translations` on demand (e.g. opening a revision panel).
+
+Debounce timing, conflict handling, and the revision panel UI are later work; the API surface above is stable for them to target.
+
 ## Boundary rules (ADR 002 / 004)
 - `web/` holds HTTP + templates + job lifecycle only. **Zero** translation/glossary/export logic — all of it is in `services/`, shared with the CLI.
 - No long-running translation inside a request handler — it runs behind the job/progress boundary (`job_manager`).

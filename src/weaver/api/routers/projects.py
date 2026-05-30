@@ -13,16 +13,25 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 from weaver.api.schemas import (
     ChapterResponse,
+    ChapterWorkspaceResponse,
     ImportVolumeResponse,
     NovelTreeResponse,
     ProjectListResponse,
     ProjectSummaryResponse,
+    SegmentTranslationHistoryResponse,
+    SegmentTranslationResponse,
+    SegmentTranslationUpdate,
+    TranslationAttemptResponse,
     VolumeResponse,
+    WorkspaceSegmentResponse,
 )
-from weaver.errors import WeaverError
+from weaver.errors import ChapterNotFoundError, SegmentNotFoundError, WeaverError
+from weaver.services.chapter_workspace import chapter_workspace
 from weaver.services.import_source import import_volume
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_tree import project_tree
+from weaver.services.segment_history import segment_translation_history
+from weaver.services.workspace_edit import save_segment_translation
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -98,6 +107,144 @@ def get_project_tree(name: str, request: Request) -> NovelTreeResponse:
             )
             for v in tree.volumes
         ],
+    )
+
+
+@router.get(
+    "/{name}/chapters/{chapter_id}/workspace",
+    response_model=ChapterWorkspaceResponse,
+)
+def get_chapter_workspace(name: str, chapter_id: str, request: Request) -> ChapterWorkspaceResponse:
+    """Return the read-only JP/EN workspace for one chapter.
+
+    The payload carries the chapter's source segments in block order plus the
+    latest translation text per segment (``None`` when untranslated). Navigation
+    (Novel -> Volume -> Chapter) is served by ``GET /projects/{name}/tree``.
+    """
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    if dp is None:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found.")
+    if dp.error:
+        raise HTTPException(status_code=422, detail=dp.error)
+
+    try:
+        workspace = chapter_workspace(dp.project_toml, chapter_id, cwd=base)
+    except ChapterNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return ChapterWorkspaceResponse(
+        project_name=workspace.project_name,
+        volume_id=workspace.volume_id,
+        volume_title=workspace.volume_title,
+        chapter_id=workspace.chapter_id,
+        chapter_title=workspace.chapter_title,
+        segment_count=workspace.segment_count,
+        translated_count=workspace.translated_count,
+        segments=[
+            WorkspaceSegmentResponse(
+                id=s.id,
+                block_order=s.block_order,
+                kind=s.kind,
+                source_text=s.source_text,
+                status=s.status,
+                translated_text=s.translated_text,
+            )
+            for s in workspace.segments
+        ],
+    )
+
+
+@router.get(
+    "/{name}/chapters/{chapter_id}/segments/{segment_id}/translations",
+    response_model=SegmentTranslationHistoryResponse,
+)
+def get_segment_translation_history(
+    name: str,
+    chapter_id: str,
+    segment_id: str,
+    request: Request,
+) -> SegmentTranslationHistoryResponse:
+    """Return one segment's translation revision history (all attempts).
+
+    Attempts are oldest-first; ``current_translation`` is the latest attempt's
+    text. Rejects unknown project (404), chapter (404), and segment / wrong
+    chapter (404).
+    """
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    if dp is None:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found.")
+    if dp.error:
+        raise HTTPException(status_code=422, detail=dp.error)
+
+    try:
+        history = segment_translation_history(dp.project_toml, chapter_id, segment_id, cwd=base)
+    except (ChapterNotFoundError, SegmentNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return SegmentTranslationHistoryResponse(
+        segment_id=history.segment_id,
+        chapter_id=history.chapter_id,
+        status=history.status,
+        current_translation=history.current_translation,
+        attempts=[
+            TranslationAttemptResponse(
+                attempt=a.attempt,
+                translated_text=a.text,
+                provider=a.provider,
+                model=a.model,
+                created_at=a.created_at,
+            )
+            for a in history.attempts
+        ],
+    )
+
+
+@router.patch(
+    "/{name}/chapters/{chapter_id}/segments/{segment_id}/translation",
+    response_model=SegmentTranslationResponse,
+)
+def update_segment_translation(
+    name: str,
+    chapter_id: str,
+    segment_id: str,
+    body: SegmentTranslationUpdate,
+    request: Request,
+) -> SegmentTranslationResponse:
+    """Save one segment's translation; sets its status to ``manual``.
+
+    The source text is preserved; only a new translation attempt is recorded.
+    Rejects unknown project (404), chapter (404), segment / wrong chapter (404),
+    and empty text (422).
+    """
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    if dp is None:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found.")
+    if dp.error:
+        raise HTTPException(status_code=422, detail=dp.error)
+
+    try:
+        result = save_segment_translation(
+            dp.project_toml, chapter_id, segment_id, body.translated_text, cwd=base
+        )
+    except (ChapterNotFoundError, SegmentNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return SegmentTranslationResponse(
+        segment_id=result.segment_id,
+        status=result.status,
+        translated_text=result.translated_text,
+        saved_at=result.saved_at,
     )
 
 

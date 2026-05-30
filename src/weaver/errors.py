@@ -53,5 +53,9 @@ class SegmentNotFoundError(WeaverError):
     """Requested segment id does not exist in the project database."""
 
 
+class ChapterNotFoundError(WeaverError):
+    """Requested chapter id does not exist in the project database."""
+
+
 class DatabaseError(WeaverError):
     """SQLite operation failed in an unrecoverable way."""
