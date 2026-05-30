@@ -1,24 +1,26 @@
-"""Project read endpoints: list projects and fetch the novel tree.
+"""Project endpoints: list, tree, and import.
 
-Reuses ``weaver.services.project_discovery`` and ``weaver.services.project_tree``
-without duplicating domain logic. ``base_dir`` is resolved from ``app.state``
-which the factory sets at startup.
+All endpoints are scoped to a ``base_dir`` stored in ``app.state`` at startup.
+Domain logic stays in ``weaver.services``; this module is a thin adapter layer.
 """
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 from weaver.api.schemas import (
     ChapterResponse,
+    ImportVolumeResponse,
     NovelTreeResponse,
     ProjectListResponse,
     ProjectSummaryResponse,
     VolumeResponse,
 )
 from weaver.errors import WeaverError
+from weaver.services.import_source import import_volume
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_tree import project_tree
 
@@ -96,4 +98,52 @@ def get_project_tree(name: str, request: Request) -> NovelTreeResponse:
             )
             for v in tree.volumes
         ],
+    )
+
+
+@router.post("/{name}/import", response_model=ImportVolumeResponse, status_code=201)
+async def import_volume_endpoint(
+    name: str,
+    request: Request,
+    file: UploadFile = File(..., description="Source file to import (EPUB, TXT, or HTML)."),
+) -> ImportVolumeResponse:
+    """Import a source file as a new volume in an existing project.
+
+    The file is streamed to a temporary path preserving its original suffix so
+    that format detection works correctly. The temp file is removed on completion
+    regardless of success or failure.
+    """
+    base = _base_dir(request)
+
+    dp = find_project(base, name)
+    if dp is None:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found.")
+    if dp.error:
+        raise HTTPException(status_code=422, detail=dp.error)
+
+    filename = file.filename or "upload.bin"
+    suffix = Path(filename).suffix or ".bin"
+
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+        try:
+            content = await file.read()
+            tmp.write(content)
+        except Exception as exc:
+            tmp_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=400, detail="Failed to read uploaded file.") from exc
+
+    try:
+        result = import_volume(dp.project_toml, tmp_path, cwd=base)
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    return ImportVolumeResponse(
+        volume_id=result.volume_id,
+        volume_title=result.volume_title,
+        chapter_count=result.chapter_count,
+        segment_count=result.segment_count,
+        glossary_candidate_count=result.glossary_candidate_count,
     )

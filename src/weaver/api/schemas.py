@@ -90,3 +90,18 @@ class ErrorResponse(BaseModel):
     """Generic error envelope."""
 
     detail: str
+
+
+# ---------------------------------------------------------------------------
+# Import (Stage 2C)
+# ---------------------------------------------------------------------------
+
+
+class ImportVolumeResponse(BaseModel):
+    """Result of importing a source file as a new volume."""
+
+    volume_id: int
+    volume_title: str
+    chapter_count: int
+    segment_count: int
+    glossary_candidate_count: int
