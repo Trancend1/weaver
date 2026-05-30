@@ -1,0 +1,141 @@
+"""Tests for the Stage 4A AI-translation endpoints (chapter / selection / jobs)."""
+
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+
+from weaver.providers.base import LLMProvider, ProviderStatus
+from weaver.providers.registry import register_provider
+from weaver.providers.types import TranslationRequest, TranslationResponse
+
+FAKE_BODY = {"provider": "fake", "model": "fake-1"}
+
+
+class _UnhealthyProvider(LLMProvider):
+    name = "unhealthytest"
+
+    def translate(self, request: TranslationRequest) -> TranslationResponse:  # pragma: no cover
+        raise NotImplementedError
+
+    def healthcheck(self) -> ProviderStatus:
+        return ProviderStatus(
+            healthy=False,
+            provider_name=self.name,
+            model="unhealthy",
+            message="provider down",
+            latency_ms=0,
+        )
+
+
+register_provider("unhealthytest", lambda config: _UnhealthyProvider())
+
+
+def _name(client: TestClient) -> str:
+    return str(client.get("/projects").json()["projects"][0]["name"])
+
+
+def _first_chapter(client: TestClient, name: str) -> str:
+    tree = client.get(f"/projects/{name}/tree").json()
+    return str(tree["volumes"][0]["chapters"][0]["id"])
+
+
+def _wait(client: TestClient, job_id: str) -> None:
+    job = client.app.state.jobs.get(job_id)  # type: ignore[attr-defined]
+    assert job is not None
+    job.wait(timeout=5)
+
+
+def test_translate_chapter_starts_job_and_completes(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    chapter_id = _first_chapter(client_with_projects, name)
+
+    resp = client_with_projects.post(
+        f"/projects/{name}/chapters/{chapter_id}/translate", json=FAKE_BODY
+    )
+    assert resp.status_code == 202
+    data = resp.json()
+    assert data["mode"] == "chapter"
+    job_id = data["job_id"]
+
+    _wait(client_with_projects, job_id)
+    status = client_with_projects.get(f"/projects/{name}/jobs/{job_id}").json()
+    assert status["status"] == "done"
+    assert status["result"]["translated"] == status["result"]["selected"]
+    assert status["result"]["translated"] > 0
+    assert status["error"] is None
+
+    workspace = client_with_projects.get(
+        f"/projects/{name}/chapters/{chapter_id}/workspace"
+    ).json()
+    assert any(seg["translated_text"] for seg in workspace["segments"])
+
+
+def test_translate_selection_starts_job_and_completes(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    chapter_id = _first_chapter(client_with_projects, name)
+    workspace = client_with_projects.get(
+        f"/projects/{name}/chapters/{chapter_id}/workspace"
+    ).json()
+    segment_id = workspace["segments"][0]["id"]
+
+    resp = client_with_projects.post(
+        f"/projects/{name}/chapters/{chapter_id}/translate-segments",
+        json={"segment_ids": [segment_id], **FAKE_BODY},
+    )
+    assert resp.status_code == 202
+    job_id = resp.json()["job_id"]
+    assert resp.json()["mode"] == "selection"
+
+    _wait(client_with_projects, job_id)
+    result = client_with_projects.get(f"/projects/{name}/jobs/{job_id}").json()["result"]
+    assert result["selected"] == 1
+    assert result["translated"] == 1
+
+
+def test_translate_unknown_project_returns_404(client_with_projects: TestClient) -> None:
+    resp = client_with_projects.post("/projects/nope/chapters/ch/translate", json=FAKE_BODY)
+    assert resp.status_code == 404
+
+
+def test_translate_unknown_chapter_returns_404(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    resp = client_with_projects.post(
+        f"/projects/{name}/chapters/missing/translate", json=FAKE_BODY
+    )
+    assert resp.status_code == 404
+
+
+def test_translate_segments_unknown_segment_returns_404(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    chapter_id = _first_chapter(client_with_projects, name)
+    resp = client_with_projects.post(
+        f"/projects/{name}/chapters/{chapter_id}/translate-segments",
+        json={"segment_ids": ["does-not-exist"], **FAKE_BODY},
+    )
+    assert resp.status_code == 404
+
+
+def test_translate_segments_empty_selection_returns_422(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    chapter_id = _first_chapter(client_with_projects, name)
+    resp = client_with_projects.post(
+        f"/projects/{name}/chapters/{chapter_id}/translate-segments",
+        json={"segment_ids": [], **FAKE_BODY},
+    )
+    assert resp.status_code == 422
+
+
+def test_unknown_job_returns_404(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    resp = client_with_projects.get(f"/projects/{name}/jobs/deadbeef")
+    assert resp.status_code == 404
+
+
+def test_unhealthy_provider_returns_502(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    chapter_id = _first_chapter(client_with_projects, name)
+    resp = client_with_projects.post(
+        f"/projects/{name}/chapters/{chapter_id}/translate",
+        json={"provider": "unhealthytest", "model": "x"},
+    )
+    assert resp.status_code == 502

@@ -44,7 +44,7 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 | 1      | Project structure & novel management (Novel/Volume/Chapter; TXT/EPUB/HTML import) |       4/10 | 🟢 Low       | ✅      |
 | 2      | FastAPI cockpit foundation (2A app+`/health`+`/version` · 2B project read APIs · 2C import API) |       5/10 | 🟢 Low       | ✅      |
 | 3      | Translation workspace, FastAPI (JP/EN two-column read, edit, save, revision history) |       7/10 | 🟡 Medium    | ✅      |
-| 4      | Provider & AI translation (config, translate chapter/selection, safe retranslate) |     9.5/10 | 🔴 Very High | ⬜      |
+| 4      | Provider & AI translation (config, translate chapter/selection, safe retranslate) |     9.5/10 | 🔴 Very High | 🟡 (4A) |
 | 5      | Glossary & character database (project-scoped, prompt injection)                  |       8/10 | 🔴 High      | ⬜      |
 | 6      | Translation memory (source→target store, lookup-before-AI, reuse)                 |      10/10 | 🔴 Very High | ⬜      |
 | 7      | Batch translation & progress (chapter/volume/novel, job status)                   |       9/10 | 🔴 Very High | ⬜      |
@@ -84,7 +84,7 @@ Rules:
 
 Reset status: Tasks 1–5 done (audit · cleanup/ADR reset · docs rewrite · fresh baseline · MVP gap finalize + sprint lock — all checks green; gap table verified against `src/weaver/` in [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md)).
 
-Sprint status: Sprints 1–2 complete (novel model + multi-format import; FastAPI cockpit foundation with project read APIs + import). **Sprint 3 (Translation Workspace, FastAPI) complete** — 3A read-only workspace APIs · 3B segment save API (status→`manual`) · 3C revision-history API + save-state/autosave contract (UI debounce deferred). Next: Sprint 4 — Provider & AI translation.
+Sprint status: Sprints 1–3 complete (novel model + multi-format import; FastAPI cockpit foundation; translation workspace read/save/history). **Sprint 4A (Provider & AI translation foundation) complete** — `POST …/chapters/{id}/translate` + `POST …/chapters/{id}/translate-segments` start background jobs; `GET …/jobs/{job_id}` reads terminal status/result; per-request `provider`/`model` override; skip-already-translated (no overwrite). Next: **Sprint 4B** (translation progress, cancellation, status polling) → **4C** (safe retranslate, overwrite protection, preserve manual edits).
 
 ### 2.4 Exit Criteria
 
@@ -109,6 +109,7 @@ MVP acceptance gate (full checklist in `docs/MVP_SCOPE.md`, Task 5). At minimum,
 | Sprint 1 | Novel/Volume/Chapter model (schema v3, v2→v3 migration); EPUB/TXT/HTML import; `weaver import` CLI; Flask project-detail tree + multi-format import UI; ADR 006. 345 tests green. |
 | Sprint 2 | FastAPI cockpit (`src/weaver/api/`, own namespace, no Flask import): `create_api_app()`, `/health`, `/version`, `GET /projects`, `GET /projects/{name}/tree`, `POST /projects/{name}/import`; `weaver serve-api`; reuses `services/project_tree` + `import_source`. Flask baseline intact. 361 tests green. |
 | Sprint 3 | 3A read workspace: `services/chapter_workspace.py` + `GET …/chapters/{chapter_id}/workspace` (source + latest translation); nav via tree. 3B save: `services/workspace_edit.py` + `PATCH …/segments/{segment_id}/translation` (chapter-scoped ownership; source preserved; one `transaction()`; status→`manual`; `saved_at`). 3C history: `storage.list_translation_attempts` + `services/segment_history.py` + `GET …/segments/{segment_id}/translations` (all attempts oldest-first; no new table — reuses `translations.attempt`); save-state/autosave contract in COCKPIT_WORKFLOW.md (UI debounce deferred). Path-resolver consolidated to `services/project_paths.py`. 393 tests green. |
+| Sprint 4A | FastAPI AI-translation foundation. `services/workspace_translate.py`: `prepare_chapter_translation` (validate chapter/selection + build/healthcheck provider + glossary, raises typed errors) and `run_translation` (per-segment loop, one txn each) — DB-derived normalized text via `normalize_japanese_text` (no source re-read, volume-safe); skip already-`translated`/`manual`. `api/jobs.py`: thread-backed `JobRegistry` (multi-job, keyed by id). Router `api/routers/translate.py`: `POST …/chapters/{id}/translate`, `POST …/chapters/{id}/translate-segments` (202 + job_id), `GET …/jobs/{job_id}`; per-request `provider`/`model` override; provider unhealthy→502. Reuse: extracted `translate_one_segment` + `build_context(normalized_source_text=…)` from `services/translation.py`; new `storage.list_chapter_translation_targets`; secrets applied at API startup. CLI + Flask intact. 413 tests green. **4B/4C pending** (progress/SSE/cancel/polling; safe-retranslate). |
 
 ---
 

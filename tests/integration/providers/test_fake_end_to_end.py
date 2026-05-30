@@ -57,7 +57,7 @@ def test_fake_provider_runs_end_to_end_through_fixture_epub(tmp_path) -> None:
         for chapter in document.chapters:
             for block in chapter.blocks:
                 context = build_context(
-                    segment=block,
+                    normalized_source_text=block.normalized_source_text,
                     glossary_terms=glossary_terms,
                     previous_segments=previous_window,
                 )

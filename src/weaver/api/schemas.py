@@ -179,3 +179,57 @@ class SegmentTranslationHistoryResponse(BaseModel):
     status: str
     current_translation: str | None
     attempts: list[TranslationAttemptResponse]
+
+
+# ---------------------------------------------------------------------------
+# AI translation (Stage 4A — provider/model selection + background jobs)
+# ---------------------------------------------------------------------------
+
+
+class ChapterTranslateRequest(BaseModel):
+    """Request to translate a whole chapter. Provider/model are optional overrides
+    of the project's configured provider; omit to use the project default."""
+
+    provider: str | None = None
+    model: str | None = None
+
+
+class SegmentSelectionTranslateRequest(BaseModel):
+    """Request to translate a chosen set of segments within one chapter."""
+
+    segment_ids: list[str]
+    provider: str | None = None
+    model: str | None = None
+
+
+class TranslationJobResponse(BaseModel):
+    """Acknowledgement that a background translate job was started (202)."""
+
+    job_id: str
+    status: str
+    chapter_id: str
+    mode: str
+
+
+class TranslationJobResultResponse(BaseModel):
+    """Per-run counts for a finished translate job."""
+
+    chapter_id: str
+    selected: int
+    translated: int
+    failed: int
+    skipped: int
+    input_tokens: int
+    output_tokens: int
+    cancelled: bool
+
+
+class TranslationJobStatusResponse(BaseModel):
+    """A translate job's current state; ``result`` is set once it finishes."""
+
+    job_id: str
+    status: str
+    chapter_id: str
+    mode: str
+    result: TranslationJobResultResponse | None
+    error: str | None

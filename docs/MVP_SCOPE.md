@@ -27,7 +27,7 @@ Translation style presets · honorific rules (partial: `preserve`/`localize`/`hy
 |---|---|---|---|---|---|
 | Project management | partial | `services/project.py`, `storage/projects.py`, `readers/epub.py` (only reader) | EPUB-only import; no Volume tier (grep `Volume` = 0); no TXT/HTML reader | P0 | 1 |
 | Translation workspace | partial | `services/translation.py`, `services/manual_edit.py` | no 2-col UI; no auto-save; no revision store | P0 | 2 |
-| AI translation | exists | `providers/registry.py` → `fake/deepseek/gemini/ollama/custom` | native OpenAI/Groq/OpenRouter absent but OpenAI-compatible `custom` covers them | P0 | 3 |
+| AI translation | exists | `providers/registry.py` → `fake/deepseek/gemini/ollama/custom`; FastAPI chapter/selection translate via `services/workspace_translate.py` + `api/routers/translate.py` + `api/jobs.py` (Sprint 4A) | native OpenAI/Groq/OpenRouter absent but OpenAI-compatible `custom` covers them; 4A skips already-translated (safe-retranslate = 4C) | P0 | 4 |
 | Glossary | exists | `services/glossary.py`, `glossary_review.py`, `glossary_diff.py`, web review | strong; prompt-injection wiring to confirm in sprint | P0 | 4 (polish) |
 | Character database | **missing** | only char-string ops (`core/segment.py`, `providers/parser.py`) | full feature absent — net-new model + storage + injection | P0 | 4 |
 | Translation memory | **missing** | none (grep `translation_memory`/`Memory` = 0) | absent — net-new store + lookup-before-AI | P0 | 5 |
