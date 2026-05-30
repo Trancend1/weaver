@@ -209,6 +209,35 @@ def list_segments_for_translation(
     return [_segment_from_row(row) for row in rows]
 
 
+def list_chapter_segments(
+    connection: sqlite3.Connection, *, chapter_id: str
+) -> list[SegmentRecord]:
+    """List all of one chapter's segments in block order.
+
+    Translation target selection (which statuses are eligible) is applied by the
+    caller per requested mode; this returns the full chapter so the caller can
+    also count what was skipped.
+
+    Args:
+        connection: Open SQLite connection.
+        chapter_id: Chapter id whose segments are listed.
+
+    Returns:
+        All chapter segments ordered by block order.
+    """
+
+    rows = connection.execute(
+        """
+        SELECT id, chapter_id, block_order, kind, source_text, source_hash, status
+        FROM segments
+        WHERE chapter_id = ?
+        ORDER BY block_order
+        """,
+        (chapter_id,),
+    ).fetchall()
+    return [_segment_from_row(row) for row in rows]
+
+
 def get_segment(connection: sqlite3.Connection, segment_id: str) -> SegmentRecord | None:
     """Return one segment row by id, or None if it does not exist.
 

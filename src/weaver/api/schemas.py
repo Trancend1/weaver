@@ -6,7 +6,11 @@ All types are read-only response models. Domain logic stays in
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
+
+TranslateMode = Literal["skip_existing", "retranslate_non_manual", "force_selected"]
 
 # ---------------------------------------------------------------------------
 # System (Stage 2A)
@@ -179,3 +183,87 @@ class SegmentTranslationHistoryResponse(BaseModel):
     status: str
     current_translation: str | None
     attempts: list[TranslationAttemptResponse]
+
+
+# ---------------------------------------------------------------------------
+# AI translation (Stage 4A — provider/model selection + background jobs)
+# ---------------------------------------------------------------------------
+
+
+class ChapterTranslateRequest(BaseModel):
+    """Request to translate a whole chapter. Provider/model are optional overrides
+    of the project's configured provider; omit to use the project default."""
+
+    provider: str | None = None
+    model: str | None = None
+
+
+class SegmentSelectionTranslateRequest(BaseModel):
+    """Request to translate a chosen set of segments within one chapter."""
+
+    segment_ids: list[str]
+    provider: str | None = None
+    model: str | None = None
+
+
+class ChapterRetranslateRequest(BaseModel):
+    """Request to retranslate a chapter under an explicit overwrite mode.
+
+    ``mode`` defaults to ``skip_existing`` (safe). ``manual`` segments are only
+    overwritten when ``mode`` is ``force_selected``."""
+
+    mode: TranslateMode = "skip_existing"
+    provider: str | None = None
+    model: str | None = None
+
+
+class SegmentSelectionRetranslateRequest(BaseModel):
+    """Request to retranslate a chosen set of segments under an overwrite mode."""
+
+    segment_ids: list[str]
+    mode: TranslateMode = "skip_existing"
+    provider: str | None = None
+    model: str | None = None
+
+
+class TranslationJobResponse(BaseModel):
+    """Acknowledgement that a background translate job was started (202)."""
+
+    job_id: str
+    status: str
+    chapter_id: str
+    mode: str
+
+
+class TranslationJobResultResponse(BaseModel):
+    """Per-run counts for a finished translate job."""
+
+    chapter_id: str
+    selected: int
+    translated: int
+    failed: int
+    skipped: int
+    input_tokens: int
+    output_tokens: int
+    cancelled: bool
+
+
+class TranslationJobProgressResponse(BaseModel):
+    """Live per-segment progress for a running (or finished) translate job."""
+
+    current: int
+    total: int
+    translated: int
+    failed: int
+
+
+class TranslationJobStatusResponse(BaseModel):
+    """A translate job's current state; ``result`` is set once it finishes."""
+
+    job_id: str
+    status: str
+    chapter_id: str
+    mode: str
+    progress: TranslationJobProgressResponse
+    result: TranslationJobResultResponse | None
+    error: str | None
