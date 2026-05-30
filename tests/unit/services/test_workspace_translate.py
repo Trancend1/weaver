@@ -214,9 +214,7 @@ def test_retranslate_non_manual_retranslates_translated_protects_manual(
     run_translation(prepare_chapter_translation(init.project_toml, chapter_id))  # all translated
     save_segment_translation(init.project_toml, chapter_id, segment_ids[0], "hand edit")  # manual
 
-    plan = prepare_chapter_translation(
-        init.project_toml, chapter_id, mode="retranslate_non_manual"
-    )
+    plan = prepare_chapter_translation(init.project_toml, chapter_id, mode="retranslate_non_manual")
     run_translation(plan)
 
     assert segment_ids[0] not in plan.target_segment_ids  # manual protected

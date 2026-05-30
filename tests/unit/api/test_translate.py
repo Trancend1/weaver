@@ -64,18 +64,14 @@ def test_translate_chapter_starts_job_and_completes(client_with_projects: TestCl
     assert status["result"]["translated"] > 0
     assert status["error"] is None
 
-    workspace = client_with_projects.get(
-        f"/projects/{name}/chapters/{chapter_id}/workspace"
-    ).json()
+    workspace = client_with_projects.get(f"/projects/{name}/chapters/{chapter_id}/workspace").json()
     assert any(seg["translated_text"] for seg in workspace["segments"])
 
 
 def test_translate_selection_starts_job_and_completes(client_with_projects: TestClient) -> None:
     name = _name(client_with_projects)
     chapter_id = _first_chapter(client_with_projects, name)
-    workspace = client_with_projects.get(
-        f"/projects/{name}/chapters/{chapter_id}/workspace"
-    ).json()
+    workspace = client_with_projects.get(f"/projects/{name}/chapters/{chapter_id}/workspace").json()
     segment_id = workspace["segments"][0]["id"]
 
     resp = client_with_projects.post(
@@ -99,9 +95,7 @@ def test_translate_unknown_project_returns_404(client_with_projects: TestClient)
 
 def test_translate_unknown_chapter_returns_404(client_with_projects: TestClient) -> None:
     name = _name(client_with_projects)
-    resp = client_with_projects.post(
-        f"/projects/{name}/chapters/missing/translate", json=FAKE_BODY
-    )
+    resp = client_with_projects.post(f"/projects/{name}/chapters/missing/translate", json=FAKE_BODY)
     assert resp.status_code == 404
 
 
@@ -234,9 +228,7 @@ def test_force_selected_overwrites_manual_and_appends_history(
 ) -> None:
     name = _name(client_with_projects)
     chapter_id = _first_chapter(client_with_projects, name)
-    workspace = client_with_projects.get(
-        f"/projects/{name}/chapters/{chapter_id}/workspace"
-    ).json()
+    workspace = client_with_projects.get(f"/projects/{name}/chapters/{chapter_id}/workspace").json()
     segment_id = workspace["segments"][0]["id"]
     # Make it manual via the save endpoint.
     client_with_projects.patch(
@@ -251,9 +243,10 @@ def test_force_selected_overwrites_manual_and_appends_history(
     assert resp.status_code == 202
     job_id = resp.json()["job_id"]
     _wait(client_with_projects, job_id)
-    assert client_with_projects.get(f"/projects/{name}/jobs/{job_id}").json()["result"][
-        "translated"
-    ] == 1
+    assert (
+        client_with_projects.get(f"/projects/{name}/jobs/{job_id}").json()["result"]["translated"]
+        == 1
+    )
 
     history = client_with_projects.get(
         f"/projects/{name}/chapters/{chapter_id}/segments/{segment_id}/translations"
