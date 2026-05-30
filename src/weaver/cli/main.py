@@ -1181,6 +1181,46 @@ def serve_command(
     run_server(books_dir=root, port=port, open_browser=not no_browser)
 
 
+@app.command(
+    "serve-api",
+    epilog=("Examples:\n  weaver serve-api\n  weaver serve-api --port 9000 --reload"),
+)
+def serve_api_command(
+    port: int = typer.Option(
+        8000,
+        "--port",
+        help="TCP port to bind on 127.0.0.1.",
+    ),
+    reload: bool = typer.Option(
+        False,
+        "--reload",
+        help="Enable auto-reload (development only).",
+    ),
+) -> None:
+    """Run the FastAPI cockpit (ASGI/Uvicorn). Runs parallel to `weaver serve` (Flask)."""
+
+    try:
+        import uvicorn
+    except ImportError as exc:
+        _exit_with_error(
+            ConfigError(
+                "The FastAPI cockpit requires the optional `web` extra. "
+                "Likely cause: uvicorn is not installed. "
+                "Next command: run `pip install weaver[web]`."
+            )
+        )
+        raise AssertionError("unreachable") from exc  # _exit_with_error never returns
+
+    console.print(f"Weaver FastAPI cockpit on http://127.0.0.1:{port} (Ctrl+C to stop)")
+    uvicorn.run(
+        "weaver.api.app:create_api_app",
+        host="127.0.0.1",
+        port=port,
+        factory=True,
+        reload=reload,
+    )
+
+
 @secrets_app.command(
     "set",
     epilog="Examples:\n  weaver secrets set DEEPSEEK_API_KEY\n  weaver secrets set MY_API_KEY",
