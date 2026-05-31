@@ -155,6 +155,50 @@ def test_apply_migrations_upgrades_v3_to_v4_adds_characters_table(tmp_path) -> N
     assert version == SCHEMA_VERSION
 
 
+def test_apply_migrations_upgrades_v4_to_v5_adds_translation_memory_table(tmp_path) -> None:
+    db_path = tmp_path / "legacy_v4.db"
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+    connection.executescript(
+        """
+        CREATE TABLE projects (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          source_path TEXT NOT NULL,
+          source_lang TEXT NOT NULL,
+          target_lang TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          schema_version INTEGER NOT NULL
+        );
+        INSERT INTO projects (
+          id, name, source_path, source_lang, target_lang, created_at, schema_version
+        )
+        VALUES (1, 'novel', 'n.epub', 'ja', 'en', '2025-01-01T00:00:00+00:00', 4);
+        """
+    )
+    connection.execute("PRAGMA user_version = 4")
+    connection.commit()
+
+    apply_migrations(connection, target_version=SCHEMA_VERSION)
+
+    tables = {
+        row["name"]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    tm_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(translation_memory)").fetchall()
+    }
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    connection.close()
+
+    assert "translation_memory" in tables
+    assert {"project_id", "source_text", "source_hash", "target_text"} <= tm_columns
+    assert version == SCHEMA_VERSION
+
+
 def test_apply_migrations_is_idempotent(tmp_path) -> None:
     db_path = tmp_path / "fresh.db"
     with initialize_database(db_path) as connection:

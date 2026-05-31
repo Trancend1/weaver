@@ -27,6 +27,7 @@ def test_initialize_database_creates_schema_and_enables_wal(tmp_path) -> None:
         "translations",
         "glossary_candidates",
         "glossary_terms",
+        "translation_memory",
         "qa_warnings",
         "job_events",
     }.issubset(tables)

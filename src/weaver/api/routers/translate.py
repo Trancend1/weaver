@@ -291,6 +291,7 @@ def _job_status(job: TranslationJob) -> TranslationJobStatusResponse:
             chapter_id=r.chapter_id,
             selected=r.selected,
             translated=r.translated,
+            reused_from_memory=r.reused_from_memory,
             failed=r.failed,
             skipped=r.skipped,
             input_tokens=r.input_tokens,

@@ -53,6 +53,10 @@ class CharacterNotFoundError(WeaverError):
     """Requested character (by Japanese name) does not exist in the project."""
 
 
+class TranslationMemoryNotFoundError(WeaverError):
+    """Requested translation-memory entry (by source hash) does not exist."""
+
+
 class ParserError(WeaverError):
     """Provider JSON output could not be parsed even after repair."""
 

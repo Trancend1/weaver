@@ -241,6 +241,7 @@ class TranslationJobResultResponse(BaseModel):
     chapter_id: str
     selected: int
     translated: int
+    reused_from_memory: int
     failed: int
     skipped: int
     input_tokens: int
@@ -349,3 +350,29 @@ class CharacterUpdateRequest(BaseModel):
     gender: str | None = None
     role: str | None = None
     notes: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Translation memory (Stage 6B — project-scoped read + delete)
+# ---------------------------------------------------------------------------
+
+
+class MemoryEntryResponse(BaseModel):
+    """One stored translation-memory entry."""
+
+    source_text: str
+    source_hash: str
+    target_text: str
+    provider: str | None
+    model: str | None
+    created_at: str
+    updated_at: str
+
+
+class MemoryOverviewResponse(BaseModel):
+    """A project's translation-memory entries plus reuse statistics."""
+
+    total_entries: int
+    exact_hits: int
+    reused_from_memory: int
+    entries: list[MemoryEntryResponse]

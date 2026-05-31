@@ -3,6 +3,8 @@
 The MVP target is a **consistency-first JP→EN light-novel translator**, web-cockpit-first (ADR 003). For long novels the hard problem is consistency (names, terms, honorifics, tone) across chapters — so glossary, character DB, and translation memory are first-class, not optional.
 
 > **Task 5 finalized (2026-05-29).** The gap table below is verified against `src/weaver/` (module listing + grep for character DB, translation memory, Volume tier, readers/renderers). The active phase/sprint table lives in [CLAUDE.md §2](../CLAUDE.md).
+>
+> **Progress (2026-05-31):** Sprints 1–6 shipped — Volume tier, FastAPI workspace + per-segment save + revision history, AI translate/retranslate, glossary, character database, and translation memory (lookup-before-AI + reuse). Remaining MVP gaps: **batch at volume/novel scope (Sprint 7)** and **TXT/HTML/DOCX export (Sprint 8)**. Live per-sprint detail: [CLAUDE.md §2.5](../CLAUDE.md). The snapshot table below is annotated with what has since shipped.
 
 ## Required MVP features
 
@@ -29,8 +31,8 @@ Translation style presets · honorific rules (partial: `preserve`/`localize`/`hy
 | Translation workspace | partial | `services/translation.py`, `services/manual_edit.py` | no 2-col UI; no auto-save; no revision store | P0 | 2 |
 | AI translation | exists | `providers/registry.py` → `fake/deepseek/gemini/ollama/custom`; FastAPI chapter/selection translate via `services/workspace_translate.py` + `api/routers/translate.py` + `api/jobs.py` (Sprint 4A) | native OpenAI/Groq/OpenRouter absent but OpenAI-compatible `custom` covers them; 4A skips already-translated (safe-retranslate = 4C) | P0 | 4 |
 | Glossary | exists | `services/glossary.py`, `glossary_review.py`, `glossary_diff.py`, web review | strong; prompt-injection wiring to confirm in sprint | P0 | 4 (polish) |
-| Character database | **missing** | only char-string ops (`core/segment.py`, `providers/parser.py`) | full feature absent — net-new model + storage + injection | P0 | 4 |
-| Translation memory | **missing** | none (grep `translation_memory`/`Memory` = 0) | absent — net-new store + lookup-before-AI | P0 | 5 |
+| Character database | exists ✅ (Sprint 5) | `storage/characters.py`, `services/characters.py`, `api/routers/characters.py`; `<characters>` prompt block | shipped — schema v4, project-scoped CRUD + prompt injection | P0 | 5 |
+| Translation memory | exists ✅ (Sprint 6) | `storage/translation_memory.py`, `services/translation_memory.py`, `api/routers/translation_memory.py`; lookup/save in `translate_one_segment` | shipped — schema v5, lookup-before-AI, reuse, manual source-of-truth, `GET/DELETE …/memory` | P0 | 6 |
 | Batch translation | partial | resumable orchestrator in `services/translation.py`; web single-job (`web/job_manager.py`) | no volume/novel scope; no job hierarchy | P1 | 6 |
 | Export | partial | `services/export.py` (Markdown), `renderers/epub.py` | no TXT/HTML/DOCX renderer | P1 | 7 |
 
@@ -53,14 +55,14 @@ Status: `exists` = usable · `partial` = some structure, not complete · `missin
 Create/import a project · manage chapters · edit source+translation side by side · run AI translation · glossary influences translation · character DB influences translation · TM reduces repeat calls · batch is monitorable · output exportable · every gap mapped to a sprint. UI polish (ADR 005) starts only after this bar is met.
 
 ## Acceptance checklist (gate before polish)
-- [ ] Create a novel project
-- [ ] Import TXT / EPUB / HTML
-- [ ] Novel/Volume/Chapter structure exists
-- [ ] JP/EN two-column workspace; edits persist; revision record
-- [ ] Provider/model configurable; translate chapter + selection; safe retranslate
-- [ ] Glossary project-scoped, injected, model instructed to follow
-- [ ] Character DB project-scoped, injected
-- [ ] TM: lookup before AI, reuse on match, AI fallback on miss
-- [ ] Batch chapter/volume/novel; visible progress + per-unit status; errors not silent
-- [ ] Export EPUB (priority) + TXT/HTML/DOCX present or sprint-mapped
-- [ ] CLI not broken · web not broken · docs match code · active ADRs `001`+ · gaps sprint-mapped · no premature UI polish
+- [x] Create a novel project
+- [x] Import TXT / EPUB / HTML
+- [x] Novel/Volume/Chapter structure exists
+- [x] JP/EN two-column workspace; edits persist; revision record
+- [x] Provider/model configurable; translate chapter + selection; safe retranslate
+- [x] Glossary project-scoped, injected, model instructed to follow
+- [x] Character DB project-scoped, injected
+- [x] TM: lookup before AI, reuse on match, AI fallback on miss
+- [ ] Batch chapter/volume/novel; visible progress + per-unit status; errors not silent — Sprint 7
+- [ ] Export EPUB (priority) + TXT/HTML/DOCX present or sprint-mapped — EPUB exists; TXT/HTML/DOCX Sprint 8
+- [ ] CLI not broken · web not broken · docs match code · active ADRs `001`+ · gaps sprint-mapped · no premature UI polish — final gate Sprint 9

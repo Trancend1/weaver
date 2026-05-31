@@ -9,11 +9,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from weaver.core.segment import normalize_japanese_text
 from weaver.errors import ConfigError, SegmentNotFoundError
 from weaver.services.project_paths import resolve_database_path
 from weaver.storage.db import connect_database, connect_readonly_database, transaction
 from weaver.storage.projects import get_project
 from weaver.storage.segments import get_segment, update_segment_status
+from weaver.storage.translation_memory import save_translation_memory
 from weaver.storage.translations import get_latest_translation_text, record_translation
 
 MANUAL_PROVIDER_NAME = "manual"
@@ -96,6 +98,17 @@ def apply_manual_translation(
                 output_tokens=None,
             )
             update_segment_status(connection, segment_id=segment.id, status="manual")
+            # Manual edits are the source of truth: store unconditionally so the
+            # latest manual translation wins; provider saves never overwrite it.
+            save_translation_memory(
+                connection,
+                project_id=int(project_row["id"]),
+                source_text=normalize_japanese_text(segment.source_text),
+                source_hash=segment.source_hash,
+                target_text=cleaned,
+                provider=MANUAL_PROVIDER_NAME,
+                model=MANUAL_PROVIDER_MODEL,
+            )
 
     return ManualEditResult(segment_id=segment.id, attempt=attempt, translation=cleaned)
 

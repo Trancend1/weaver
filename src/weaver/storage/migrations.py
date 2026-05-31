@@ -179,8 +179,34 @@ def _migrate_to_v4(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_to_v5(connection: sqlite3.Connection) -> None:
+    """Add the project-scoped ``translation_memory`` table (schema v5).
+
+    Source->target store for lookup-before-AI reuse. Idempotent: only creates the
+    table when absent, leaving existing project data untouched.
+    """
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS translation_memory (
+          id INTEGER PRIMARY KEY,
+          project_id INTEGER REFERENCES projects(id),
+          source_text TEXT NOT NULL,
+          source_hash TEXT NOT NULL,
+          target_text TEXT NOT NULL,
+          provider TEXT,
+          model TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE(project_id, source_hash)
+        )
+        """
+    )
+
+
 _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _migrate_to_v2,
     3: _migrate_to_v3,
     4: _migrate_to_v4,
+    5: _migrate_to_v5,
 }

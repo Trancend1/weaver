@@ -25,6 +25,7 @@ def _summary() -> TranslationRunSummary:
         total_segments=2,
         selected_segments=2,
         translated_segments=2,
+        reused_from_memory=0,
         failed_segments=0,
         pending_segments=0,
         stale_segments=0,
