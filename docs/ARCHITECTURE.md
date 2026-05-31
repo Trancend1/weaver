@@ -62,11 +62,9 @@ Per-project on-disk layout:
 
 ## Not yet in the model (MVP gaps → ADR 003 / MVP_SCOPE.md)
 
-- **Volume tier** — current model is Novel(project)→Chapter; Novel→Volume→Chapter is planned.
-- **Character database** — no module yet.
-- **Translation memory** — no module yet.
-- **Two-column workspace + auto-save + revisions** — editing today is `$EDITOR` (CLI) / per-segment (web).
 - **Batch at volume/novel scope** — translate is per-project resumable; web job manager is single-job.
+
+Shipped since the reset baseline: Volume tier (schema v3), character database (`storage/characters.py`, schema v4), translation memory (`storage/translation_memory.py` + `services/translation_memory.py`, schema v5), and the FastAPI two-column workspace with per-segment save + revision history.
 
 ## Dependencies
 

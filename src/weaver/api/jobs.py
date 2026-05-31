@@ -150,6 +150,7 @@ class TranslationJob:
                     "data": {
                         "selected": result.selected,
                         "translated": result.translated,
+                        "reused_from_memory": result.reused_from_memory,
                         "failed": result.failed,
                         "skipped": result.skipped,
                         "input_tokens": result.input_tokens,

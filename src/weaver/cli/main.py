@@ -448,6 +448,7 @@ def _translate_one_project(
 
     typer.echo(f"Selected: {summary.selected_segments}")
     typer.echo(f"Translated: {summary.translated_segments}")
+    typer.echo(f"Reused (memory): {summary.reused_from_memory}")
     typer.echo(f"Failed: {summary.failed_segments}")
     typer.echo(f"Pending: {summary.pending_segments}")
     typer.echo(f"Stale: {summary.stale_segments}")

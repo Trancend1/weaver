@@ -107,6 +107,7 @@ class TranslationJob:
                     "data": {
                         "selected": summary.selected_segments,
                         "translated": summary.translated_segments,
+                        "reused_from_memory": summary.reused_from_memory,
                         "failed": summary.failed_segments,
                         "pending": summary.pending_segments,
                         "stale": summary.stale_segments,

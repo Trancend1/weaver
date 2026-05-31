@@ -90,6 +90,19 @@ AI translation runs as a **background job** on a single worker thread; the reque
 - **No external queue.** `JobRegistry` is a single-process thread worker by design; no Celery/Redis/RQ/etc.
 - Errors: unknown project / chapter / segment → `404`; empty selection → `422`; unhealthy provider → `502`; unknown job → `404`.
 
+## FastAPI consistency-data API (Sprint 5/6 — glossary · character DB · translation memory)
+
+Project-scoped data that feeds the prompt and reuse layer. Each router is a thin adapter over a framework-agnostic service (`services/glossary_terms.py`, `services/characters.py`, `services/translation_memory.py`); Japanese path params decode (e.g. `魔王`, `エリナ`).
+
+| Method | Path | Notes |
+|---|---|---|
+| GET/POST/PATCH/DELETE | `/projects/{name}/glossary[/{source}]` | Project glossary term CRUD (same `glossary_terms` rows injected into the prompt). POST → `201`; not found → `404`; invalid → `422`. |
+| GET/POST/PATCH/DELETE | `/projects/{name}/characters[/{jp_name}]` | Character DB CRUD (jp_name / en_name required; gender/role/notes optional). Keyed by `jp_name`; injected as the `<characters>` prompt block. |
+| GET | `/projects/{name}/memory` | Translation-memory overview: `total_entries`, `exact_hits`, `reused_from_memory`, `entries[]`. |
+| DELETE | `/projects/{name}/memory/{source_hash}` | Delete one TM entry (the `translation_memory` row only). → `204`; unknown hash → `404`. Translation history, manual edits, glossary, and character data are **never** touched. |
+
+- **Translation memory** is keyed by the stored `segment.source_hash` (project-scoped). `translate_one_segment` looks it up before the provider call: exact match → reuse + record a `memory`-tagged attempt + skip the model; miss → call the model and save the result. **Manual edits are the source of truth** — manual saves write to TM and provider saves never overwrite a `manual` row. Explicit retranslate bypasses the lookup but still refreshes provider entries. Reuse count surfaces as `reused_from_memory` in job status, the SSE `done` event, the Flask job summary, and the CLI translate output.
+
 ## Boundary rules (ADR 002 / 004)
 - `web/` holds HTTP + templates + job lifecycle only. **Zero** translation/glossary/export logic — all of it is in `services/`, shared with the CLI.
 - No long-running translation inside a request handler — it runs behind the job/progress boundary (`job_manager`).

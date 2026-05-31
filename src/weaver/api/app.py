@@ -17,6 +17,7 @@ from weaver.api.routers.glossary import router as glossary_router
 from weaver.api.routers.projects import router as projects_router
 from weaver.api.routers.system import router as system_router
 from weaver.api.routers.translate import router as translate_router
+from weaver.api.routers.translation_memory import router as translation_memory_router
 from weaver.core.secret_store import apply_secrets_to_env
 
 
@@ -42,4 +43,5 @@ def create_api_app(base_dir: Path | None = None) -> FastAPI:
     app.include_router(translate_router)
     app.include_router(glossary_router)
     app.include_router(characters_router)
+    app.include_router(translation_memory_router)
     return app

@@ -17,10 +17,12 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
+from weaver.core.segment import normalize_japanese_text
 from weaver.errors import ChapterNotFoundError, SegmentNotFoundError
 from weaver.services.project_paths import resolve_database_path
 from weaver.storage.db import connect_database, transaction
-from weaver.storage.segments import get_segment, update_segment_status
+from weaver.storage.segments import SegmentRecord, get_segment, update_segment_status
+from weaver.storage.translation_memory import save_translation_memory
 from weaver.storage.translations import record_translation
 
 MANUAL_PROVIDER_NAME = "manual"
@@ -100,6 +102,7 @@ def save_segment_translation(
                 model=MANUAL_PROVIDER_MODEL,
             )
             update_segment_status(connection, segment_id=segment.id, status="manual")
+            _remember_manual_translation(connection, segment=segment, target_text=cleaned)
 
         saved_at = _translation_saved_at(connection, segment_id=segment.id, attempt=attempt)
 
@@ -114,6 +117,29 @@ def save_segment_translation(
 def _chapter_exists(connection: sqlite3.Connection, chapter_id: str) -> bool:
     row = connection.execute("SELECT 1 FROM chapters WHERE id = ?", (chapter_id,)).fetchone()
     return row is not None
+
+
+def _remember_manual_translation(
+    connection: sqlite3.Connection, *, segment: SegmentRecord, target_text: str
+) -> None:
+    """Store a manual edit in translation memory (manual is the source of truth).
+
+    Manual saves upsert unconditionally so the latest manual edit wins; a later
+    provider translation never overwrites it (``protect_manual`` on that path).
+    """
+
+    project_row = connection.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
+    if project_row is None:  # pragma: no cover - an initialized project always has a row
+        return
+    save_translation_memory(
+        connection,
+        project_id=int(project_row["id"]),
+        source_text=normalize_japanese_text(segment.source_text),
+        source_hash=segment.source_hash,
+        target_text=target_text,
+        provider=MANUAL_PROVIDER_NAME,
+        model=MANUAL_PROVIDER_MODEL,
+    )
 
 
 def _translation_saved_at(connection: sqlite3.Connection, *, segment_id: str, attempt: int) -> str:

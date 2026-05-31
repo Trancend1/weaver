@@ -81,6 +81,7 @@ class TranslationPlan:
     characters: tuple[CharacterContext, ...]
     target_segment_ids: tuple[str, ...]
     requested_count: int
+    use_translation_memory: bool
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,7 @@ class ChapterTranslationResult:
     chapter_id: str
     selected: int
     translated: int
+    reused_from_memory: int
     failed: int
     skipped: int
     input_tokens: int
@@ -219,6 +221,10 @@ def prepare_chapter_translation(
         characters=characters,
         target_segment_ids=tuple(segment.id for segment in targets),
         requested_count=requested_count,
+        # Reuse memory only on the normal translate path. Explicit retranslate
+        # (retranslate_non_manual / force_selected) must hit the provider so it is
+        # not a silent no-op; the memory is still refreshed on success.
+        use_translation_memory=(mode == "skip_existing"),
     )
 
 
@@ -245,6 +251,7 @@ def run_translation(
 
     selected = len(plan.target_segment_ids)
     translated = 0
+    reused = 0
     failed = 0
     input_tokens = 0
     output_tokens = 0
@@ -259,7 +266,7 @@ def run_translation(
             if segment is None:
                 continue
             normalized = normalize_japanese_text(segment.source_text)
-            ok, response_input_tokens, response_output_tokens = translate_one_segment(
+            ok, reused_flag, response_input_tokens, response_output_tokens = translate_one_segment(
                 connection=connection,
                 segment=segment,
                 source_text=segment.source_text,
@@ -270,6 +277,7 @@ def run_translation(
                 provider=plan.provider,
                 provider_model=plan.provider_model,
                 characters=plan.characters,
+                use_translation_memory=plan.use_translation_memory,
             )
             if ok:
                 translated += 1
@@ -277,6 +285,8 @@ def run_translation(
                 output_tokens += response_output_tokens or 0
             else:
                 failed += 1
+            if reused_flag:
+                reused += 1
             if progress_callback is not None:
                 progress_callback(
                     index,
@@ -291,6 +301,7 @@ def run_translation(
         chapter_id=plan.chapter_id,
         selected=selected,
         translated=translated,
+        reused_from_memory=reused,
         failed=failed,
         skipped=plan.requested_count - selected,
         input_tokens=input_tokens,

@@ -19,6 +19,7 @@ def _result(translated: int = 2, cancelled: bool = False) -> ChapterTranslationR
         chapter_id="ch-1",
         selected=2,
         translated=translated,
+        reused_from_memory=0,
         failed=0,
         skipped=0,
         input_tokens=20,

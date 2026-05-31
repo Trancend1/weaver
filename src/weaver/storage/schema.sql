@@ -102,6 +102,19 @@ CREATE TABLE IF NOT EXISTS characters (
 
 CREATE INDEX IF NOT EXISTS idx_characters_project ON characters(project_id, jp_name);
 
+CREATE TABLE IF NOT EXISTS translation_memory (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER REFERENCES projects(id),
+  source_text TEXT NOT NULL,
+  source_hash TEXT NOT NULL,
+  target_text TEXT NOT NULL,
+  provider TEXT,
+  model TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(project_id, source_hash)
+);
+
 CREATE TABLE IF NOT EXISTS qa_warnings (
   id INTEGER PRIMARY KEY,
   segment_id TEXT REFERENCES segments(id),

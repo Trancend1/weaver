@@ -31,6 +31,10 @@ from weaver.storage.segments import (
     sync_document_segments,
     update_segment_status,
 )
+from weaver.storage.translation_memory import (
+    lookup_translation_memory,
+    save_translation_memory,
+)
 from weaver.storage.translations import (
     list_previous_translated_segments,
     record_translation,
@@ -42,6 +46,11 @@ MAX_CHARACTERS_PER_SEGMENT = 20
 MAX_CONTEXT_SEGMENTS = 5
 MAX_CONTEXT_TOKENS = 600
 DRY_RUN_TOKENS_PER_CHAR = 0.25  # 1 token ≈ 4 source characters
+
+# Provider/model sentinel recorded on a translation reused from translation memory,
+# so the attempt history stays audit-able (it was not a live provider call).
+MEMORY_PROVIDER = "memory"
+MEMORY_MODEL = "memory"
 
 VALID_HONORIFIC_POLICIES = frozenset({"preserve", "localize", "hybrid"})
 
@@ -55,6 +64,7 @@ class TranslationRunSummary:
     total_segments: int
     selected_segments: int
     translated_segments: int
+    reused_from_memory: int
     failed_segments: int
     pending_segments: int
     stale_segments: int
@@ -259,6 +269,7 @@ def translate_project(
         )
 
     translated_count = 0
+    reused_count = 0
     input_tokens = 0
     output_tokens = 0
 
@@ -291,22 +302,26 @@ def translate_project(
                     "Next command: rerun `weaver init <input.epub>` for this source."
                 )
 
-            translated, response_input_tokens, response_output_tokens = translate_one_segment(
-                connection=connection,
-                segment=segment,
-                source_text=block.source_text,
-                normalized_source_text=block.normalized_source_text,
-                project=project,
-                glossary_terms=glossary_terms,
-                honorific_policy=honorific_policy,
-                provider=active_provider,
-                provider_model=provider_model,
-                characters=characters,
+            translated, reused, response_input_tokens, response_output_tokens = (
+                translate_one_segment(
+                    connection=connection,
+                    segment=segment,
+                    source_text=block.source_text,
+                    normalized_source_text=block.normalized_source_text,
+                    project=project,
+                    glossary_terms=glossary_terms,
+                    honorific_policy=honorific_policy,
+                    provider=active_provider,
+                    provider_model=provider_model,
+                    characters=characters,
+                )
             )
             if translated:
                 translated_count += 1
                 input_tokens += response_input_tokens or 0
                 output_tokens += response_output_tokens or 0
+            if reused:
+                reused_count += 1
             if progress_callback is not None:
                 progress_callback(
                     index,
@@ -323,6 +338,7 @@ def translate_project(
         total_segments=counts["total"],
         selected_segments=total_selected,
         translated_segments=translated_count,
+        reused_from_memory=reused_count,
         failed_segments=counts["failed"],
         pending_segments=counts["pending"],
         stale_segments=counts["stale"],
@@ -368,6 +384,7 @@ def _dry_run_summary(
         total_segments=counts["total"],
         selected_segments=total_selected,
         translated_segments=0,
+        reused_from_memory=0,
         failed_segments=counts["failed"],
         pending_segments=counts["pending"],
         stale_segments=counts["stale"],
@@ -388,14 +405,21 @@ def translate_one_segment(
     provider: LLMProvider,
     provider_model: str,
     characters: Iterable[CharacterContext] = (),
-) -> tuple[bool, int | None, int | None]:
+    use_translation_memory: bool = True,
+) -> tuple[bool, bool, int | None, int | None]:
     """Translate one segment in a single transaction.
 
-    Sets the segment to ``in_progress``, assembles its context (rolling window +
-    filtered glossary), calls the provider, and records the result: on success a
-    new translation attempt plus status ``translated``; on ``ProviderError`` the
-    status becomes ``failed`` and no attempt is recorded. Source text is never
-    mutated.
+    Sets the segment to ``in_progress``. When ``use_translation_memory`` is True,
+    first looks up the segment's ``source_hash`` in the project's translation
+    memory; on an exact match it records the stored target as a new attempt
+    (provider/model ``"memory"``), marks the segment ``translated``, and returns
+    **without calling the provider**. On a miss it assembles context (rolling
+    window + filtered glossary/characters), calls the provider, records the
+    result, and saves the successful translation back into memory (never
+    overwriting a ``manual`` entry). On ``ProviderError`` the status becomes
+    ``failed``, no attempt is recorded, and nothing is written to memory. Source
+    text is never mutated. The translation-memory key is always the stored
+    ``segment.source_hash``; it is never recomputed here.
 
     Args:
         connection: Open writable SQLite connection.
@@ -408,14 +432,38 @@ def translate_one_segment(
         honorific_policy: One of `preserve` | `localize` | `hybrid`.
         provider: Built, healthchecked provider.
         provider_model: Model name recorded with the attempt.
+        characters: Project character contexts injected into the prompt.
+        use_translation_memory: When True, reuse an exact memory match instead of
+            calling the provider. Callers pass False for explicit retranslate so
+            a fresh provider call is made (the memory is still refreshed on
+            success).
 
     Returns:
-        ``(translated, input_tokens, output_tokens)``. Tokens are None on failure
-        or when the provider does not report usage.
+        ``(translated, reused_from_memory, input_tokens, output_tokens)``.
+        ``reused_from_memory`` is True only when the result came from translation
+        memory (no provider call, no token cost). Tokens are None on failure, on
+        a memory hit, or when the provider does not report usage.
     """
 
     with transaction(connection):
         update_segment_status(connection, segment_id=segment.id, status="in_progress")
+
+        if use_translation_memory:
+            remembered = lookup_translation_memory(
+                connection, project_id=project.id, source_hash=segment.source_hash
+            )
+            if remembered is not None:
+                record_translation(
+                    connection,
+                    segment_id=segment.id,
+                    text=remembered.target_text,
+                    source_hash=segment.source_hash,
+                    provider=MEMORY_PROVIDER,
+                    model=MEMORY_MODEL,
+                )
+                update_segment_status(connection, segment_id=segment.id, status="translated")
+                return True, True, None, None
+
         previous_segments = list_previous_translated_segments(
             connection,
             chapter_id=segment.chapter_id,
@@ -442,7 +490,7 @@ def translate_one_segment(
             response = provider.translate(request)
         except ProviderError:
             update_segment_status(connection, segment_id=segment.id, status="failed")
-            return False, None, None
+            return False, False, None, None
 
         record_translation(
             connection,
@@ -455,8 +503,18 @@ def translate_one_segment(
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
         )
+        save_translation_memory(
+            connection,
+            project_id=project.id,
+            source_text=normalized_source_text,
+            source_hash=segment.source_hash,
+            target_text=response.translation,
+            provider=provider.name,
+            model=provider_model,
+            protect_manual=True,
+        )
         update_segment_status(connection, segment_id=segment.id, status="translated")
-        return True, response.input_tokens, response.output_tokens
+        return True, False, response.input_tokens, response.output_tokens
 
 
 def _load_single_project(connection: sqlite3.Connection) -> ProjectRecord:
