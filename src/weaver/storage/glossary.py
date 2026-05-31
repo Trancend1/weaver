@@ -123,9 +123,7 @@ def upsert_glossary_term(
     return stored
 
 
-def delete_glossary_term(
-    connection: sqlite3.Connection, *, project_id: int, source: str
-) -> bool:
+def delete_glossary_term(connection: sqlite3.Connection, *, project_id: int, source: str) -> bool:
     """Delete one approved glossary term; return whether a row was removed."""
 
     cursor = connection.execute(
