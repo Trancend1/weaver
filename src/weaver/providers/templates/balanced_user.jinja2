@@ -8,6 +8,13 @@ honorifics: {{ honorific_policy }}
 {% endfor -%}
 </glossary>
 {% endif %}
+{% if characters %}
+<characters>
+{% for c in characters -%}
+{{ c.jp_name }}	{{ c.en_name }}	{{ c.gender or "" }}	{{ c.role or "" }}	{{ c.notes or "" }}
+{% endfor -%}
+</characters>
+{% endif %}
 {% if previous_segments %}
 <context>
 {% for source, translation in previous_segments -%}

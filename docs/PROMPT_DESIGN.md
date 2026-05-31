@@ -48,6 +48,10 @@ honorifics: {honorific_policy}
 {glossary_block}
 </glossary>
 
+<characters>
+{characters_block}
+</characters>
+
 <context>
 {context_block}
 </context>
@@ -92,6 +96,25 @@ Example:
 If no terms match: omit the `<glossary>` block entirely (do not send an empty block).
 
 **Maximum glossary terms per segment:** 20. If more than 20 terms match, prioritize by frequency descending. This is a hard cap to prevent prompt bloat.
+
+#### `{characters_block}` (Sprint 5C)
+
+TSV-formatted list of project characters whose Japanese name appears in the current segment, one per line:
+
+```
+{jp_name}\t{en_name}\t{gender}\t{role}\t{notes}
+```
+
+Example:
+
+```
+エリナ	Elina	Female	Main Heroine	protagonist
+魔王	Demon King	Male	Antagonist
+```
+
+**Filtering rule:** Only inject characters whose `jp_name` appears as a substring of `normalized_source_text` (same approach as glossary). If none match, omit the `<characters>` block entirely.
+
+**Maximum characters per segment:** 20 (hard cap). Characters are project-scoped (`characters` table, schema v4) and injected so the model renders names consistently across chapters. Optional fields render as empty TSV columns.
 
 #### `{context_block}`
 

@@ -5,6 +5,7 @@ Rules:
 - Produce natural, readable English that preserves the author's tone and register.
 - Do not summarize, paraphrase, or add content not present in the source.
 - If a term appears in <glossary>, use the specified English translation exactly.
+- If a character appears in <characters>, render their name with the listed English name consistently, honoring the gender and role given.
 - Apply the honorific policy specified in <policy>.
 - Respond ONLY with a valid JSON object. No explanation. No markdown. No prose outside the JSON.
 

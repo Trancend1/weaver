@@ -17,6 +17,17 @@ class GlossaryTerm:
 
 
 @dataclass(frozen=True)
+class CharacterContext:
+    """Project character pinned to a consistent English name for translation."""
+
+    jp_name: str
+    en_name: str
+    gender: str | None = None
+    role: str | None = None
+    notes: str | None = None
+
+
+@dataclass(frozen=True)
 class TranslationContext:
     """Per-segment context assembled by `build_context()`.
 
@@ -24,11 +35,13 @@ class TranslationContext:
     segment is last. Capped at 5 entries / 600 tokens per PROMPT_DESIGN.md.
     `glossary_terms` is pre-filtered to entries that substring-match the
     current segment's normalized source text, capped at 20 entries.
+    `characters` is pre-filtered the same way (jp_name substring), capped at 20.
     """
 
     previous_segments: tuple[tuple[str, str], ...]
     glossary_terms: tuple[GlossaryTerm, ...]
     honorific_policy: str
+    characters: tuple[CharacterContext, ...] = ()
 
 
 @dataclass(frozen=True)

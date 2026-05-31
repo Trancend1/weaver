@@ -153,7 +153,34 @@ def _migrate_to_v3(connection: sqlite3.Connection) -> None:
         )
 
 
+def _migrate_to_v4(connection: sqlite3.Connection) -> None:
+    """Add the project-scoped ``characters`` table (schema v4).
+
+    Character database for translation consistency. Idempotent: only creates the
+    table and its index when absent, leaving existing project data untouched.
+    """
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS characters (
+          id INTEGER PRIMARY KEY,
+          project_id INTEGER REFERENCES projects(id),
+          jp_name TEXT NOT NULL,
+          en_name TEXT NOT NULL,
+          gender TEXT,
+          role TEXT,
+          notes TEXT,
+          UNIQUE(project_id, jp_name)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_characters_project ON characters(project_id, jp_name)"
+    )
+
+
 _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _migrate_to_v2,
     3: _migrate_to_v3,
+    4: _migrate_to_v4,
 }

@@ -45,6 +45,14 @@ class GlossaryConflictError(WeaverError):
     """Two approved glossary terms disagree on the same source."""
 
 
+class GlossaryTermNotFoundError(WeaverError):
+    """Requested glossary term source does not exist in the project."""
+
+
+class CharacterNotFoundError(WeaverError):
+    """Requested character (by Japanese name) does not exist in the project."""
+
+
 class ParserError(WeaverError):
     """Provider JSON output could not be parsed even after repair."""
 

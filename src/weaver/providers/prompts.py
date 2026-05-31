@@ -52,6 +52,7 @@ def render_user_message(context: TranslationContext, *, source_text: str) -> str
     return template.render(
         honorific_policy=context.honorific_policy,
         glossary_terms=context.glossary_terms,
+        characters=context.characters,
         previous_segments=context.previous_segments,
         source_text=source_text,
     )

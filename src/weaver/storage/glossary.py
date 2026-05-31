@@ -58,6 +58,83 @@ def list_glossary_terms(connection: sqlite3.Connection, *, project_id: int) -> l
     ]
 
 
+def get_glossary_term(
+    connection: sqlite3.Connection, *, project_id: int, source: str
+) -> GlossaryTerm | None:
+    """Load one approved glossary term by its source, or None if absent."""
+
+    row = connection.execute(
+        """
+        SELECT source, target, category, notes, case_sensitive
+        FROM glossary_terms
+        WHERE project_id = ? AND source = ?
+        """,
+        (project_id, source),
+    ).fetchone()
+    if row is None:
+        return None
+    return GlossaryTerm(
+        source=str(row["source"]),
+        target=str(row["target"]),
+        category=_optional_str(row["category"]),
+        notes=_optional_str(row["notes"]),
+        case_sensitive=bool(row["case_sensitive"]),
+    )
+
+
+def upsert_glossary_term(
+    connection: sqlite3.Connection,
+    *,
+    project_id: int,
+    source: str,
+    target: str,
+    category: str | None = None,
+    notes: str | None = None,
+    case_sensitive: bool = False,
+) -> GlossaryTerm:
+    """Insert or update one approved glossary term.
+
+    Writes directly to the same ``glossary_terms`` table the candidate review
+    flow populates (UNIQUE(project_id, source) → upsert, never a duplicate row).
+    """
+
+    connection.execute(
+        """
+        INSERT INTO glossary_terms (
+          project_id,
+          source,
+          target,
+          category,
+          notes,
+          case_sensitive
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(project_id, source) DO UPDATE SET
+          target = excluded.target,
+          category = excluded.category,
+          notes = excluded.notes,
+          case_sensitive = excluded.case_sensitive
+        """,
+        (project_id, source, target, category, notes, 1 if case_sensitive else 0),
+    )
+    stored = get_glossary_term(connection, project_id=project_id, source=source)
+    if stored is None:  # pragma: no cover - upsert always yields a row
+        raise RuntimeError("Glossary term upsert did not persist a row")
+    return stored
+
+
+def delete_glossary_term(
+    connection: sqlite3.Connection, *, project_id: int, source: str
+) -> bool:
+    """Delete one approved glossary term; return whether a row was removed."""
+
+    cursor = connection.execute(
+        "DELETE FROM glossary_terms WHERE project_id = ? AND source = ?",
+        (project_id, source),
+    )
+    return cursor.rowcount > 0
+
+
 def insert_glossary_candidate(
     connection: sqlite3.Connection,
     *,
@@ -356,30 +433,14 @@ def _upsert_term(
     target: str,
     notes: str | None,
 ) -> None:
-    connection.execute(
-        """
-        INSERT INTO glossary_terms (
-          project_id,
-          source,
-          target,
-          category,
-          notes,
-          case_sensitive
-        )
-        VALUES (?, ?, ?, ?, ?, 0)
-        ON CONFLICT(project_id, source) DO UPDATE SET
-          target = excluded.target,
-          category = excluded.category,
-          notes = excluded.notes,
-          case_sensitive = excluded.case_sensitive
-        """,
-        (
-            candidate.project_id,
-            candidate.source,
-            target,
-            candidate.category,
-            notes,
-        ),
+    upsert_glossary_term(
+        connection,
+        project_id=candidate.project_id,
+        source=candidate.source,
+        target=target,
+        category=candidate.category,
+        notes=notes,
+        case_sensitive=False,
     )
 
 
