@@ -39,11 +39,13 @@ from weaver.errors import (
     SegmentNotFoundError,
 )
 from weaver.providers import GlossaryTerm, LLMProvider, build_provider
+from weaver.providers.types import CharacterContext
 from weaver.services.glossary import raise_on_glossary_conflicts
 from weaver.services.project_paths import resolve_database_path
 from weaver.services.translation import (
     VALID_HONORIFIC_POLICIES,
     ProgressCallback,
+    load_character_contexts,
     translate_one_segment,
 )
 from weaver.storage.db import connect_database, connect_readonly_database
@@ -76,6 +78,7 @@ class TranslationPlan:
     provider_model: str
     honorific_policy: str
     glossary_terms: tuple[GlossaryTerm, ...]
+    characters: tuple[CharacterContext, ...]
     target_segment_ids: tuple[str, ...]
     requested_count: int
 
@@ -190,6 +193,7 @@ def prepare_chapter_translation(
 
         raise_on_glossary_conflicts(connection, project_id=project.id)
         glossary_terms = tuple(list_glossary_terms(connection, project_id=project.id))
+        characters = load_character_contexts(connection, project_id=project.id)
 
     provider = build_provider(provider_config)
     status = provider.healthcheck()
@@ -212,6 +216,7 @@ def prepare_chapter_translation(
         provider_model=provider_model,
         honorific_policy=honorific_policy,
         glossary_terms=glossary_terms,
+        characters=characters,
         target_segment_ids=tuple(segment.id for segment in targets),
         requested_count=requested_count,
     )
@@ -264,6 +269,7 @@ def run_translation(
                 honorific_policy=plan.honorific_policy,
                 provider=plan.provider,
                 provider_model=plan.provider_model,
+                characters=plan.characters,
             )
             if ok:
                 translated += 1

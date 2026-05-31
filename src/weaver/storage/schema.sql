@@ -89,6 +89,19 @@ CREATE TABLE IF NOT EXISTS glossary_terms (
   UNIQUE(project_id, source)
 );
 
+CREATE TABLE IF NOT EXISTS characters (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER REFERENCES projects(id),
+  jp_name TEXT NOT NULL,
+  en_name TEXT NOT NULL,
+  gender TEXT,
+  role TEXT,
+  notes TEXT,
+  UNIQUE(project_id, jp_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_characters_project ON characters(project_id, jp_name);
+
 CREATE TABLE IF NOT EXISTS qa_warnings (
   id INTEGER PRIMARY KEY,
   segment_id TEXT REFERENCES segments(id),

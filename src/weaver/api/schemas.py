@@ -267,3 +267,85 @@ class TranslationJobStatusResponse(BaseModel):
     progress: TranslationJobProgressResponse
     result: TranslationJobResultResponse | None
     error: str | None
+
+
+# ---------------------------------------------------------------------------
+# Glossary (Stage 5A — direct project-scoped term CRUD)
+# ---------------------------------------------------------------------------
+
+
+class GlossaryTermResponse(BaseModel):
+    """One approved project glossary term."""
+
+    source: str
+    target: str
+    category: str | None
+    notes: str | None
+    case_sensitive: bool
+
+
+class GlossaryListResponse(BaseModel):
+    """All approved glossary terms for a project."""
+
+    terms: list[GlossaryTermResponse]
+    count: int
+
+
+class GlossaryTermCreateRequest(BaseModel):
+    """Add or upsert one glossary term (keyed by ``source`` per project)."""
+
+    source: str
+    target: str
+    category: str | None = None
+    notes: str | None = None
+    case_sensitive: bool = False
+
+
+class GlossaryTermUpdateRequest(BaseModel):
+    """Update an existing glossary term identified by its path ``source``."""
+
+    target: str
+    category: str | None = None
+    notes: str | None = None
+    case_sensitive: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Character database (Stage 5B — project-scoped CRUD, keyed by jp_name)
+# ---------------------------------------------------------------------------
+
+
+class CharacterResponse(BaseModel):
+    """One project character."""
+
+    jp_name: str
+    en_name: str
+    gender: str | None
+    role: str | None
+    notes: str | None
+
+
+class CharacterListResponse(BaseModel):
+    """All characters for a project."""
+
+    characters: list[CharacterResponse]
+    count: int
+
+
+class CharacterCreateRequest(BaseModel):
+    """Add or upsert one character (keyed by ``jp_name`` per project)."""
+
+    jp_name: str
+    en_name: str
+    gender: str | None = None
+    role: str | None = None
+    notes: str | None = None
+
+
+class CharacterUpdateRequest(BaseModel):
+    """Update an existing character identified by its path ``jp_name``."""
+
+    en_name: str
+    gender: str | None = None
+    role: str | None = None
+    notes: str | None = None

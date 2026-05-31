@@ -13,9 +13,15 @@ from weaver.core.config import load_project_config
 from weaver.core.ir import BlockIR, DocumentIR
 from weaver.errors import ConfigError, ProviderError, ProviderUnavailable
 from weaver.providers import LLMProvider, build_provider
-from weaver.providers.types import GlossaryTerm, TranslationContext, TranslationRequest
+from weaver.providers.types import (
+    CharacterContext,
+    GlossaryTerm,
+    TranslationContext,
+    TranslationRequest,
+)
 from weaver.readers import read_source
 from weaver.services.glossary import raise_on_glossary_conflicts
+from weaver.storage.characters import list_characters
 from weaver.storage.db import connect_database, transaction
 from weaver.storage.glossary import list_glossary_terms
 from weaver.storage.projects import ProjectRecord, get_project
@@ -32,6 +38,7 @@ from weaver.storage.translations import (
 from weaver.storage.volumes import list_volumes
 
 MAX_GLOSSARY_TERMS_PER_SEGMENT = 20
+MAX_CHARACTERS_PER_SEGMENT = 20
 MAX_CONTEXT_SEGMENTS = 5
 MAX_CONTEXT_TOKENS = 600
 DRY_RUN_TOKENS_PER_CHAR = 0.25  # 1 token ≈ 4 source characters
@@ -61,6 +68,7 @@ def build_context(
     glossary_terms: Iterable[GlossaryTerm],
     previous_segments: Sequence[tuple[str, str]],
     honorific_policy: str = "preserve",
+    characters: Iterable[CharacterContext] = (),
 ) -> TranslationContext:
     """Assemble a `TranslationContext` for one segment.
 
@@ -92,12 +100,14 @@ def build_context(
         )
 
     filtered_glossary = _filter_glossary(glossary_terms, normalized_source_text)
+    filtered_characters = _filter_characters(characters, normalized_source_text)
     trimmed_window = _trim_window(previous_segments)
 
     return TranslationContext(
         previous_segments=trimmed_window,
         glossary_terms=filtered_glossary,
         honorific_policy=honorific_policy,
+        characters=filtered_characters,
     )
 
 
@@ -115,6 +125,37 @@ def _filter_glossary(
         if len(matches) >= MAX_GLOSSARY_TERMS_PER_SEGMENT:
             break
     return tuple(matches)
+
+
+def _filter_characters(
+    characters: Iterable[CharacterContext], normalized_source: str
+) -> tuple[CharacterContext, ...]:
+    matches: list[CharacterContext] = []
+    for character in characters:
+        if not character.jp_name:
+            continue
+        if character.jp_name in normalized_source:
+            matches.append(character)
+        if len(matches) >= MAX_CHARACTERS_PER_SEGMENT:
+            break
+    return tuple(matches)
+
+
+def load_character_contexts(
+    connection: sqlite3.Connection, *, project_id: int
+) -> tuple[CharacterContext, ...]:
+    """Load a project's characters as prompt-ready contexts (storage → DTO)."""
+
+    return tuple(
+        CharacterContext(
+            jp_name=record.jp_name,
+            en_name=record.en_name,
+            gender=record.gender,
+            role=record.role,
+            notes=record.notes,
+        )
+        for record in list_characters(connection, project_id=project_id)
+    )
 
 
 def _trim_window(
@@ -231,6 +272,7 @@ def translate_project(
             )
 
         glossary_terms = list_glossary_terms(connection, project_id=project.id)
+        characters = load_character_contexts(connection, project_id=project.id)
         selected = list_segments_for_translation(
             connection, project_id=project.id, retry_failed=retry_failed
         )
@@ -259,6 +301,7 @@ def translate_project(
                 honorific_policy=honorific_policy,
                 provider=active_provider,
                 provider_model=provider_model,
+                characters=characters,
             )
             if translated:
                 translated_count += 1
@@ -344,6 +387,7 @@ def translate_one_segment(
     honorific_policy: str,
     provider: LLMProvider,
     provider_model: str,
+    characters: Iterable[CharacterContext] = (),
 ) -> tuple[bool, int | None, int | None]:
     """Translate one segment in a single transaction.
 
@@ -383,6 +427,7 @@ def translate_one_segment(
             glossary_terms=glossary_terms,
             previous_segments=previous_segments,
             honorific_policy=honorific_policy,
+            characters=characters,
         )
         request = TranslationRequest(
             segment_id=segment.id,
