@@ -66,6 +66,30 @@ Revision history needs no separate table — every save is a row in `translation
 
 Debounce timing, conflict handling, and the revision panel UI are later work; the API surface above is stable for them to target.
 
+## FastAPI AI translation API (Sprint 4A/4B — `src/weaver/api/`)
+
+AI translation runs as a **background job** on a single worker thread; the request returns immediately with a job id. Logic lives in `services/workspace_translate.py` (`prepare_chapter_translation` → `run_translation`); the in-memory `api/jobs.py` `JobRegistry` owns job lifecycle.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/projects/{name}/chapters/{chapter_id}/translate` | Translate the chapter's untranslated segments. Body: optional `provider`/`model` override. → `202` `{job_id, status, chapter_id, mode}`. |
+| POST | `/projects/{name}/chapters/{chapter_id}/translate-segments` | Translate a chosen `segment_ids` list (each must belong to the chapter). Same body extras; → `202`. |
+| POST | `/projects/{name}/chapters/{chapter_id}/retranslate` | Re-translate the chapter under an explicit `mode` (see below). Body adds `mode`; → `202`. |
+| POST | `/projects/{name}/chapters/{chapter_id}/retranslate-segments` | Re-translate a chosen `segment_ids` list under `mode`. → `202`. |
+| GET | `/projects/{name}/jobs/{job_id}` | Poll: `status` (`running`/`done`/`failed`/`cancelled`), live `progress` (`current`/`total`/`translated`/`failed`), `result` (once finished), `error`. |
+| POST | `/projects/{name}/jobs/{job_id}/cancel` | Cooperative cancel — worker stops after the current segment; committed segments stay. Idempotent; returns current status. |
+| GET | `/projects/{name}/jobs/{job_id}/events` | Optional SSE stream: `progress` events per segment, then one terminal event (`done`/`cancelled`/`error`). Single-consumer. |
+
+- **Provider/model selection** is per-request (`{"type": provider, "model": model}` merged onto `[provider]`); omit to use the project default. Keys resolve from env / secret store (applied at API startup), never from config.
+- **Skip already-translated (plain translate).** `/translate` and `/translate-segments` only touch `pending`/`failed`/`stale`; `translated`/`manual` are left untouched (`skipped` count reports them).
+- **Retranslate modes (4C).** `/retranslate*` take a `mode`:
+  - `skip_existing` (default) — same as plain translate; never overwrites.
+  - `retranslate_non_manual` — also re-translates `translated` segments; **`manual` is protected** (skipped).
+  - `force_selected` — translates every target, **including `manual`** (the only way to overwrite a hand edit).
+  Invalid `mode` → `422`. Every retranslate **appends** a new `translations` attempt; prior attempts (including the overwritten manual text) remain as immutable history — overwrite is non-destructive.
+- **No external queue.** `JobRegistry` is a single-process thread worker by design; no Celery/Redis/RQ/etc.
+- Errors: unknown project / chapter / segment → `404`; empty selection → `422`; unhealthy provider → `502`; unknown job → `404`.
+
 ## Boundary rules (ADR 002 / 004)
 - `web/` holds HTTP + templates + job lifecycle only. **Zero** translation/glossary/export logic — all of it is in `services/`, shared with the CLI.
 - No long-running translation inside a request handler — it runs behind the job/progress boundary (`job_manager`).

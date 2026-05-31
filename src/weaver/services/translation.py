@@ -57,7 +57,7 @@ class TranslationRunSummary:
 
 def build_context(
     *,
-    segment: BlockIR,
+    normalized_source_text: str,
     glossary_terms: Iterable[GlossaryTerm],
     previous_segments: Sequence[tuple[str, str]],
     honorific_policy: str = "preserve",
@@ -71,7 +71,8 @@ def build_context(
     preserved). Tokens are estimated as 1 token ≈ 4 characters.
 
     Args:
-        segment: Current segment being translated.
+        normalized_source_text: Normalized source text of the current segment,
+            used for substring glossary matching.
         glossary_terms: All approved glossary terms for the project.
         previous_segments: (source, translation) pairs from earlier segments
             in the same chapter, ordered oldest-first.
@@ -90,7 +91,7 @@ def build_context(
             f"got {honorific_policy!r}"
         )
 
-    filtered_glossary = _filter_glossary(glossary_terms, segment.normalized_source_text)
+    filtered_glossary = _filter_glossary(glossary_terms, normalized_source_text)
     trimmed_window = _trim_window(previous_segments)
 
     return TranslationContext(
@@ -248,10 +249,11 @@ def translate_project(
                     "Next command: rerun `weaver init <input.epub>` for this source."
                 )
 
-            translated, response_input_tokens, response_output_tokens = _translate_one(
+            translated, response_input_tokens, response_output_tokens = translate_one_segment(
                 connection=connection,
                 segment=segment,
-                block=block,
+                source_text=block.source_text,
+                normalized_source_text=block.normalized_source_text,
                 project=project,
                 glossary_terms=glossary_terms,
                 honorific_policy=honorific_policy,
@@ -331,17 +333,43 @@ def _dry_run_summary(
     )
 
 
-def _translate_one(
+def translate_one_segment(
     *,
     connection: sqlite3.Connection,
     segment: SegmentRecord,
-    block: BlockIR,
+    source_text: str,
+    normalized_source_text: str,
     project: ProjectRecord,
     glossary_terms: Iterable[GlossaryTerm],
     honorific_policy: str,
     provider: LLMProvider,
     provider_model: str,
 ) -> tuple[bool, int | None, int | None]:
+    """Translate one segment in a single transaction.
+
+    Sets the segment to ``in_progress``, assembles its context (rolling window +
+    filtered glossary), calls the provider, and records the result: on success a
+    new translation attempt plus status ``translated``; on ``ProviderError`` the
+    status becomes ``failed`` and no attempt is recorded. Source text is never
+    mutated.
+
+    Args:
+        connection: Open writable SQLite connection.
+        segment: Stored segment row being translated.
+        source_text: Raw source text handed to the provider.
+        normalized_source_text: Normalized source text for glossary matching and
+            the provider request.
+        project: Owning project (supplies source/target languages).
+        glossary_terms: Approved glossary terms for the project.
+        honorific_policy: One of `preserve` | `localize` | `hybrid`.
+        provider: Built, healthchecked provider.
+        provider_model: Model name recorded with the attempt.
+
+    Returns:
+        ``(translated, input_tokens, output_tokens)``. Tokens are None on failure
+        or when the provider does not report usage.
+    """
+
     with transaction(connection):
         update_segment_status(connection, segment_id=segment.id, status="in_progress")
         previous_segments = list_previous_translated_segments(
@@ -351,15 +379,15 @@ def _translate_one(
             limit=MAX_CONTEXT_SEGMENTS,
         )
         context = build_context(
-            segment=block,
+            normalized_source_text=normalized_source_text,
             glossary_terms=glossary_terms,
             previous_segments=previous_segments,
             honorific_policy=honorific_policy,
         )
         request = TranslationRequest(
             segment_id=segment.id,
-            source_text=block.source_text,
-            normalized_source_text=block.normalized_source_text,
+            source_text=source_text,
+            normalized_source_text=normalized_source_text,
             source_language=project.source_lang,
             target_language=project.target_lang,
             context=context,
