@@ -32,7 +32,7 @@ weaver serve --books-dir ~/novels     # discover projects under another root
 | Provider/model config | Write project `[provider]` or global default from a dropdown; API key writes to the secret store only. |
 | Translate | Start (first-N / retry-failed), live **SSE** progress, cooperative **stop** (committed segments stay). |
 | Glossary review | Paginated approve / edit / reject of pending candidates; approved-term conflicts + per-chapter coverage diff shown read-only. |
-| Export | Trigger Markdown or EPUB export. |
+| Export | Trigger Markdown or EPUB export (**legacy single-project** exporter, `services/export.py`). Volume-aware EPUB/TXT/HTML export is the FastAPI surface — see below. |
 
 ## Request/UI flow (Flask today)
 ```
@@ -114,6 +114,8 @@ Batch translation runs the per-chapter pipeline across many chapters as **one ba
 ## FastAPI export API (Sprint 8B — novel/volume/chapter EPUB jobs)
 
 Export renders translated content to a **per-volume artifact** (EPUB / TXT / HTML) as **one background job** with per-volume progress. Logic lives in `services/export_book.py` (`prepare_export` → `run_export`); the `api/jobs.py` `JobRegistry` owns a separate `ExportJob` lifecycle (`submit_export`/`get_export`). Translation, TM, and provider paths are **untouched**.
+
+> **Surface split (web-first MVP).** This FastAPI export is the **volume-aware** exporter for the Novel→Volume→Chapter model (one artifact per volume, EPUB/TXT/HTML). The **CLI `export` command** and the Flask "Export" page above drive the **legacy single-project exporter** (`services/export.py`, Markdown/single-EPUB) and are not back-ported to the volume model — exporting full novels is a cockpit workflow. This is an accepted MVP boundary, not a gap.
 
 | Method | Path | Notes |
 |---|---|---|

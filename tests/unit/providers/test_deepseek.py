@@ -146,6 +146,22 @@ def test_deepseek_healthcheck_returns_healthy_status() -> None:
     assert status.latency_ms is not None
 
 
+def test_deepseek_healthcheck_probe_mentions_json_for_json_mode() -> None:
+    # The engine always requests response_format=json_object. json-mode-strict
+    # OpenAI-compatible endpoints (e.g. Groq) reject prompts lacking the word
+    # "json", so the healthcheck probe must include it.
+    completions = _StubChatCompletions([_completion('{"status": "ok"}')])
+    provider = DeepSeekProvider(client=_StubClient(completions))
+
+    provider.healthcheck()
+
+    assert len(completions.calls) == 1
+    call = completions.calls[0]
+    assert call["response_format"] == {"type": "json_object"}
+    blob = " ".join(str(m["content"]) for m in call["messages"]).lower()  # type: ignore[union-attr]
+    assert "json" in blob
+
+
 def test_deepseek_healthcheck_reports_unhealthy_on_auth_failure() -> None:
     class AuthenticationError(Exception):
         pass

@@ -111,12 +111,16 @@ class DeepSeekProvider(LLMProvider):
     def healthcheck(self) -> ProviderStatus:
         start = time.perf_counter()
         try:
+            # This engine always requests response_format=json_object. json-mode-strict
+            # OpenAI-compatible endpoints (e.g. Groq) reject any prompt that does not
+            # contain the word "json", so the probe must mention it; otherwise the
+            # healthcheck 400s and every such endpoint looks unhealthy.
             self._chat_completion(
                 messages=[
-                    {"role": "system", "content": "ping"},
-                    {"role": "user", "content": "ping"},
+                    {"role": "system", "content": "Health check. Reply with a small json object."},
+                    {"role": "user", "content": 'Reply with {"status": "ok"} as json.'},
                 ],
-                max_tokens=1,
+                max_tokens=16,
             )
         except ProviderUnavailable as exc:
             return self._status(False, str(exc), start)

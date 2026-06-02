@@ -26,6 +26,19 @@ uv run pyright
 - `requires_ollama` / `requires_cloud` / `slow` markers gate environment-dependent tests; CI skips them.
 - Acceptance gate: `uv run python bench/run_acceptance_gate.py` (AC-1..AC-9).
 
+## MVP stabilization validation (Sprint 9 baseline)
+The exact gate run to lock the MVP baseline — see [MVP_STABILIZATION_REPORT.md](MVP_STABILIZATION_REPORT.md) for the full matrix.
+```bash
+uv run pytest -q                  # 561 passed, 4 skipped (expected — see below)
+uv run pyright                    # 0 errors, 0 warnings
+uv run ruff check .               # All checks passed
+uv run ruff format --check .      # all files already formatted
+uv run weaver --help              # CLI smoke — 15 commands
+```
+Web smoke (no port binding): construct `create_api_app()` + FastAPI `TestClient` and assert `/health`·`/version`·`/projects` → 200; construct Flask `create_app(books_dir)` + `test_client()` and assert `/` → 200.
+
+**Expected skips (4 — none a regression):** `test_deepseek_live.py` (no `DEEPSEEK_API_KEY`), `test_gemini_live.py` (no `GEMINI_API_KEY`), `test_ollama_live.py` (no local Ollama), `test_secret_store.py::…` POSIX file-mode (Windows host). Live-provider tests are gated by `requires_cloud` / `requires_ollama` and need real keys / a running Ollama — they are **not** run in CI by design.
+
 ## Regression checklist (before merge / release)
 - [ ] `pytest` green (CI subset)
 - [ ] ruff lint + format clean
