@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -189,3 +190,74 @@ def list_previous_translated_segments(
         (chapter_id, before_block_order, limit),
     ).fetchall()
     return [(str(row["source_text"]), str(row["text"])) for row in reversed(rows)]
+
+
+@dataclass(frozen=True)
+class ExportSegmentState:
+    """One segment's export-time state: its status and publishable translation.
+
+    ``publishable_text`` is the latest translation attempt's text **only** when
+    the segment status is ``translated`` or ``manual`` and that attempt's
+    ``source_hash`` still matches the segment's current ``source_hash``. In every
+    other case (an untranslated status, or a hash-mismatched latest attempt) it is
+    ``None`` and the exporter falls back to source text.
+    """
+
+    id: str
+    status: str
+    publishable_text: str | None
+
+
+def list_export_segment_states(
+    connection: sqlite3.Connection, *, chapter_ids: Sequence[str]
+) -> list[ExportSegmentState]:
+    """Return export-time state for every segment in the given chapters.
+
+    Args:
+        connection: Open SQLite connection.
+        chapter_ids: Chapter ids whose segments are returned.
+
+    Returns:
+        One :class:`ExportSegmentState` per segment, ordered by chapter then block
+        order. Empty when ``chapter_ids`` is empty.
+    """
+
+    ids = list(chapter_ids)
+    if not ids:
+        return []
+    placeholders = ", ".join("?" for _ in ids)
+    rows = connection.execute(
+        f"""
+        WITH latest AS (
+          SELECT segment_id, MAX(attempt) AS attempt
+          FROM translations
+          GROUP BY segment_id
+        )
+        SELECT
+          s.id AS id,
+          s.status AS status,
+          CASE
+            WHEN s.status IN ('translated', 'manual') AND t.source_hash = s.source_hash
+            THEN t.text
+            ELSE NULL
+          END AS publishable_text
+        FROM segments s
+        LEFT JOIN latest l ON l.segment_id = s.id
+        LEFT JOIN translations t
+          ON t.segment_id = l.segment_id
+         AND t.attempt = l.attempt
+        WHERE s.chapter_id IN ({placeholders})
+        ORDER BY s.chapter_id, s.block_order
+        """,
+        ids,
+    ).fetchall()
+    return [
+        ExportSegmentState(
+            id=str(row["id"]),
+            status=str(row["status"]),
+            publishable_text=(
+                None if row["publishable_text"] is None else str(row["publishable_text"])
+            ),
+        )
+        for row in rows
+    ]

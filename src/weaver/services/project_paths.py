@@ -35,3 +35,30 @@ def resolve_database_path(project_toml: Path, *, cwd: Path | None = None) -> Pat
     if cwd_path.exists():
         return cwd_path
     return project_toml.parent / path
+
+
+def resolve_output_dir(project_toml: Path, *, cwd: Path | None = None) -> Path:
+    """Resolve a project's export output directory to an absolute path.
+
+    Reads ``project.output_dir`` from the project config. An absolute value is
+    returned unchanged. A relative value is resolved against ``cwd`` when that
+    location exists, otherwise against the project file's own directory. The
+    directory is not created here; renderers create it on write.
+
+    Args:
+        project_toml: Path to the project's ``project.toml``.
+        cwd: Working directory used to resolve a relative output directory.
+
+    Returns:
+        Absolute path to the project's output directory.
+    """
+
+    base_dir = cwd or Path.cwd()
+    data = load_project_config(project_toml)
+    path = Path(str(data["project"]["output_dir"]))
+    if path.is_absolute():
+        return path
+    cwd_path = base_dir / path
+    if cwd_path.exists():
+        return cwd_path
+    return project_toml.parent / path

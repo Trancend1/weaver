@@ -111,6 +111,25 @@ Batch translation runs the per-chapter pipeline across many chapters as **one ba
 - **No external queue.** Single-process thread worker, same as the chapter jobs.
 - Errors: unknown project / volume / chapter → `404`; invalid `mode` → `422`; unhealthy provider → `502`; unknown job → `404`.
 
+## FastAPI export API (Sprint 8B — novel/volume/chapter EPUB jobs)
+
+Export renders translated content to a **per-volume artifact** (EPUB / TXT / HTML) as **one background job** with per-volume progress. Logic lives in `services/export_book.py` (`prepare_export` → `run_export`); the `api/jobs.py` `JobRegistry` owns a separate `ExportJob` lifecycle (`submit_export`/`get_export`). Translation, TM, and provider paths are **untouched**.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/projects/{name}/export/novel` | Export every volume to its own artifact (no cross-EPUB merge). Body: optional `target` ∈ `{epub, txt, html}` (defaults `epub`). → `202` `{job_id, status, scope, scope_id, target}`. |
+| POST | `/projects/{name}/export/volumes/{volume_id}` | Export one volume. → `202`. |
+| POST | `/projects/{name}/export/chapters/{chapter_id}` | Export one chapter. → `202`. |
+| GET | `/projects/{name}/export/jobs/{job_id}` | Poll: `status`, per-volume `progress` (`volumes_total/done`, `current_volume_*`, `translated_segments`/`fallback_segments`), `result` (once done: per-volume `artifacts[]` with `output_path` + `fallback_by_status`), `error`. |
+| POST | `/projects/{name}/export/jobs/{job_id}/cancel` | Cooperative cancel — worker stops before the next volume; already-written artifacts stay. Idempotent. |
+| GET | `/projects/{name}/export/jobs/{job_id}/events` | SSE: `progress` per volume, then one terminal event (`done`/`cancelled`/`error`). Single-consumer. |
+
+- **Publishable rule** (from 8A): a segment exports its latest translation only when status is `translated`/`manual` and `source_hash` matches; otherwise **source fallback** (counted in `fallback_by_status`). Export never blocks/blanks/drops and writes no translations.
+- **Distinct id namespace.** Export jobs live under `/export/jobs/`; an export `job_id` is **not** resolvable via the chapter `/jobs/` or batch `/batch/jobs/` routes.
+- **No external queue.** Single-process thread worker, same as chapter/batch jobs.
+- Errors: unknown project / volume / chapter → `404`; unsupported `target` (e.g. `docx`) → `422`; unknown job → `404`.
+- **EPUB / TXT / HTML** output (Sprint 8A/8C; TXT/HTML build from the DB, one file per volume under `output/<target>/`). DOCX output, a combined single-EPUB, ZIP packaging, and the export UI are deferred.
+
 ## FastAPI consistency-data API (Sprint 5/6 — glossary · character DB · translation memory)
 
 Project-scoped data that feeds the prompt and reuse layer. Each router is a thin adapter over a framework-agnostic service (`services/glossary_terms.py`, `services/characters.py`, `services/translation_memory.py`); Japanese path params decode (e.g. `魔王`, `エリナ`).
@@ -130,4 +149,4 @@ Project-scoped data that feeds the prompt and reuse layer. Each router is a thin
 - The FastAPI migration must preserve every behavior above and keep Pydantic at the boundary only.
 
 ## Not yet in the cockpit (MVP gaps → [MVP_SCOPE.md](MVP_SCOPE.md))
-Novel/Volume/Chapter navigation, TXT/HTML import, two-column workspace with auto-save/revisions, character DB UI, translation-memory UI, batch monitor **UI** (the batch API exists — Sprint 7), TXT/HTML/DOCX export.
+Novel/Volume/Chapter navigation, TXT/HTML import, two-column workspace with auto-save/revisions, character DB UI, translation-memory UI, batch monitor **UI** (the batch API exists — Sprint 7), export **UI** (the EPUB/TXT/HTML export API exists — Sprint 8B/8C), DOCX export output.

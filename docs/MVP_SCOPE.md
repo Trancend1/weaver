@@ -4,7 +4,7 @@ The MVP target is a **consistency-first JP→EN light-novel translator**, web-co
 
 > **Task 5 finalized (2026-05-29).** The gap table below is verified against `src/weaver/` (module listing + grep for character DB, translation memory, Volume tier, readers/renderers). The active phase/sprint table lives in [CLAUDE.md §2](../CLAUDE.md).
 >
-> **Progress (2026-06-02):** Sprints 1–7 shipped — Volume tier, FastAPI workspace + per-segment save + revision history, AI translate/retranslate, glossary, character database, translation memory (lookup-before-AI + reuse), and **batch translation at chapter/volume/novel scope** (`services/batch_translate.py` + `api/routers/batch.py`, aggregate progress + cooperative cancel + SSE). Remaining MVP gap: **TXT/HTML/DOCX export (Sprint 8)** (EPUB + Markdown exist). Live per-sprint detail: [CLAUDE.md §2.5](../CLAUDE.md). The snapshot table below is annotated with what has since shipped.
+> **Progress (2026-06-02):** Sprints 1–7 shipped — Volume tier, FastAPI workspace + per-segment save + revision history, AI translate/retranslate, glossary, character database, translation memory (lookup-before-AI + reuse), and **batch translation at chapter/volume/novel scope** (`services/batch_translate.py` + `api/routers/batch.py`, aggregate progress + cooperative cancel + SSE). Sprint 8A shipped **volume-aware EPUB export** for the Novel/Volume/Chapter model (`services/export_book.py` + `renderers/epub_synthesis.py`); remaining export gap: **TXT/HTML/DOCX output targets + FastAPI endpoints/UI (Sprint 8B+)**. Live per-sprint detail: [CLAUDE.md §2.5](../CLAUDE.md). The snapshot table below is annotated with what has since shipped.
 
 ## Required MVP features
 
@@ -34,7 +34,7 @@ Translation style presets · honorific rules (partial: `preserve`/`localize`/`hy
 | Character database | exists ✅ (Sprint 5) | `storage/characters.py`, `services/characters.py`, `api/routers/characters.py`; `<characters>` prompt block | shipped — schema v4, project-scoped CRUD + prompt injection | P0 | 5 |
 | Translation memory | exists ✅ (Sprint 6) | `storage/translation_memory.py`, `services/translation_memory.py`, `api/routers/translation_memory.py`; lookup/save in `translate_one_segment` | shipped — schema v5, lookup-before-AI, reuse, manual source-of-truth, `GET/DELETE …/memory` | P0 | 6 |
 | Batch translation | exists ✅ (Sprint 7) | `services/batch_translate.py`, `api/routers/batch.py`, `BatchJob` in `api/jobs.py`; chapter/volume/novel scope + aggregate progress + cancel + SSE | shipped — reuses chapter pipeline; no external queue | P1 | 7 |
-| Export | partial | `services/export.py` (Markdown), `renderers/epub.py` | no TXT/HTML/DOCX renderer | P1 | 8 |
+| Export | partial (Sprint 8A+8B+8C) | `services/export_book.py` (novel/volume/chapter → per-volume EPUB/TXT/HTML), `renderers/{epub,epub_synthesis,txt,html}.py`; `api/routers/export.py` + `ExportJob` (FastAPI export jobs); legacy `services/export.py` (Markdown) | DOCX output + export UI (deferred) | P1 | 8 |
 
 Status: `exists` = usable · `partial` = some structure, not complete · `missing` = no meaningful support. Priority: `P0` = MVP blocker · `P1` = MVP-required, lower risk.
 
@@ -67,5 +67,5 @@ Create/import a project · manage chapters · edit source+translation side by si
 - [x] Character DB project-scoped, injected
 - [x] TM: lookup before AI, reuse on match, AI fallback on miss
 - [x] Batch chapter/volume/novel; visible progress + per-unit status; errors not silent — Sprint 7 (API; monitor UI deferred)
-- [ ] Export EPUB (priority) + TXT/HTML/DOCX present or sprint-mapped — EPUB exists; TXT/HTML/DOCX Sprint 8
+- [ ] Export EPUB (priority) + TXT/HTML/DOCX present or sprint-mapped — Sprint 8A–8C: EPUB/TXT/HTML output + FastAPI export endpoints (`api/routers/export.py`); DOCX output deferred, export UI is post-MVP polish
 - [ ] CLI not broken · web not broken · docs match code · active ADRs `001`+ · gaps sprint-mapped · no premature UI polish — final gate Sprint 9

@@ -17,6 +17,10 @@ class EpubWriteError(WeaverError):
     """Translated EPUB cannot be written."""
 
 
+class ExportError(WeaverError):
+    """A TXT or HTML export artifact cannot be written."""
+
+
 class ProviderError(WeaverError):
     """Base class for LLM provider failures."""
 
