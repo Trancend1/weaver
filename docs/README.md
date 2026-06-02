@@ -22,6 +22,7 @@ Two surfaces drive the **same** core:
 | Configure providers, models, API keys | [PROVIDER_AND_MODEL_CONFIG.md](PROVIDER_AND_MODEL_CONFIG.md) |
 | Understand how a segment becomes a translation | [TRANSLATION_PIPELINE.md](TRANSLATION_PIPELINE.md) |
 | See MVP scope, gaps, and the sprint plan | [MVP_SCOPE.md](MVP_SCOPE.md) |
+| See the MVP baseline: validation, acceptance audit, deferred list | [MVP_STABILIZATION_REPORT.md](MVP_STABILIZATION_REPORT.md) |
 | Maintain the repo (cleanup, tests, releases) | [MAINTENANCE.md](MAINTENANCE.md) |
 | Read the active architecture decisions | [DECISIONS.md](DECISIONS.md) |
 

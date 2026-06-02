@@ -4,7 +4,7 @@ Stabilization-only sprint locking the Weaver MVP baseline after Sprints 1–8. N
 features; verification, doc alignment, and an end-to-end proof. This document is built
 across the three stages: **9A audit + validation**, **9B doc/regression fixes**, **9C E2E proof + baseline report**.
 
-> Stage status: **9A complete** · 9B pending · 9C pending.
+> Stage status: **9A complete** · **9B complete** · 9C pending.
 > Date: 2026-06-02 · Branch: `feat/MVP-stabilization`.
 
 ---
@@ -82,7 +82,41 @@ Non-blocking findings to address in 9B (doc-only, no behavior change):
 
 ## Stage 9B — Doc & Regression Fixes
 
-_Pending._
+Doc/regression alignment only — **no source-code or behavior changes**. The four 9A findings (F1–F4) plus the `MAINTENANCE.md` validation section.
+
+### Files changed (docs only)
+
+| File | Change | Finding |
+|---|---|---|
+| `docs/MVP_SCOPE.md` | Acceptance checklist: export item → `[x]` EPUB/TXT/HTML done, DOCX deferred (422); final-gate item annotated (9A ✅ / 9B ✅ / 9C pending); stale progress note refreshed to "Sprints 1–8 shipped" + Sprint 9 in progress | F1 |
+| `docs/ARCHITECTURE.md` | `renderers/` inventory now states the **export surface split** explicitly (FastAPI = volume-aware `export_book.py`; CLI/Flask = legacy `export.py`) | F2 |
+| `docs/COCKPIT_WORKFLOW.md` | Flask "Export" page row marked legacy single-project; FastAPI export section gains a surface-split callout | F2 |
+| `docs/QUICKSTART.md` | CLI `export` flagged as legacy single-project; pointer to FastAPI volume-aware export | F2 |
+| `CLAUDE.md` | §1 doc map (+ report link), §2.1 Sprint 9 → 🟡, §2.3 Sprint 9 status, §2.5 phase-log rows 9A + 9B | F3 |
+| `docs/README.md` | "Where to start" table links the stabilization report | F4 |
+| `docs/MAINTENANCE.md` | New "MVP stabilization validation" section: exact gate commands + expected 4-skip set | F4 |
+| `docs/MVP_STABILIZATION_REPORT.md` | This stage section + status line | — |
+
+### Doc fixes summary
+- **F1 resolved** — `MVP_SCOPE.md` acceptance checklist matches shipped code (EPUB/TXT/HTML present; DOCX deferred, not a blocker).
+- **F2 resolved** — the CLI-vs-FastAPI export split is now stated in all three surface docs as an **accepted web-first MVP boundary**, not a gap.
+- **F3 resolved** — `CLAUDE.md` reflects Sprint 9 in progress (9A + 9B), with phase-log entries.
+- **F4 resolved** — the consolidated deferred list (this report §4) is cross-linked from `CLAUDE.md` §1 and `docs/README.md`; `MAINTENANCE.md` records the validation commands + skip set.
+
+### Re-validation (post-9B, docs-only change — matrix unchanged)
+
+| Gate | Result |
+|---|---|
+| `uv run pytest -q` | ✅ 561 passed, 4 skipped |
+| `uv run pyright` | ✅ 0 errors |
+| `uv run ruff check .` | ✅ clean |
+| `uv run ruff format --check .` | ✅ clean |
+| CLI smoke | ✅ 15 commands |
+| FastAPI smoke | ✅ 37 routes, 200s |
+| Flask smoke | ✅ 14 routes, 200 |
+
+### Remaining deferred list (unchanged from §4)
+DOCX export output · export UI · combined EPUB/ZIP · Flask decommission (Sprint 10, parity-gated) · general UI polish (ADR 005) · live provider tests (require keys/Ollama).
 
 ## Stage 9C — E2E Proof & MVP Baseline Report
 
