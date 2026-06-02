@@ -12,6 +12,7 @@ from fastapi import FastAPI
 
 from weaver import __version__
 from weaver.api.jobs import JobRegistry
+from weaver.api.routers.batch import router as batch_router
 from weaver.api.routers.characters import router as characters_router
 from weaver.api.routers.glossary import router as glossary_router
 from weaver.api.routers.projects import router as projects_router
@@ -41,6 +42,7 @@ def create_api_app(base_dir: Path | None = None) -> FastAPI:
     app.include_router(system_router)
     app.include_router(projects_router)
     app.include_router(translate_router)
+    app.include_router(batch_router)
     app.include_router(glossary_router)
     app.include_router(characters_router)
     app.include_router(translation_memory_router)

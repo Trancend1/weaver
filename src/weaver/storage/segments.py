@@ -238,6 +238,63 @@ def list_chapter_segments(
     return [_segment_from_row(row) for row in rows]
 
 
+def chapter_exists(connection: sqlite3.Connection, chapter_id: str) -> bool:
+    """Return whether a chapter row exists.
+
+    Args:
+        connection: Open SQLite connection.
+        chapter_id: Chapter id to check.
+
+    Returns:
+        True if the chapter exists, otherwise False.
+    """
+
+    row = connection.execute("SELECT 1 FROM chapters WHERE id = ?", (chapter_id,)).fetchone()
+    return row is not None
+
+
+def list_chapter_ids_for_volume(connection: sqlite3.Connection, volume_id: int) -> list[str]:
+    """List a volume's chapter ids in reading order.
+
+    Args:
+        connection: Open SQLite connection.
+        volume_id: Owning volume row id.
+
+    Returns:
+        Chapter ids ordered by ``spine_order``.
+    """
+
+    rows = connection.execute(
+        "SELECT id FROM chapters WHERE volume_id = ? ORDER BY spine_order, id",
+        (volume_id,),
+    ).fetchall()
+    return [str(row["id"]) for row in rows]
+
+
+def list_chapter_ids_for_project(connection: sqlite3.Connection, project_id: int) -> list[str]:
+    """List a novel's chapter ids across all volumes in reading order.
+
+    Args:
+        connection: Open SQLite connection.
+        project_id: Owning project (novel) row id.
+
+    Returns:
+        Chapter ids ordered by volume reading order then ``spine_order``.
+    """
+
+    rows = connection.execute(
+        """
+        SELECT c.id AS id
+        FROM chapters c
+        JOIN volumes v ON v.id = c.volume_id
+        WHERE c.project_id = ?
+        ORDER BY v.volume_order, v.id, c.spine_order, c.id
+        """,
+        (project_id,),
+    ).fetchall()
+    return [str(row["id"]) for row in rows]
+
+
 def get_segment(connection: sqlite3.Connection, segment_id: str) -> SegmentRecord | None:
     """Return one segment row by id, or None if it does not exist.
 

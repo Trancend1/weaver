@@ -39,6 +39,11 @@ Each segment translation is committed in **its own transaction** (`storage/trans
 ## 10. QA validate
 `qa/checks.py` runs six deterministic checks (`services/qa.py`); `--json` emits a stable shape (`schema_version: 1`, [api/qa_json_schema.md](api/qa_json_schema.md) if present). A critical finding exits 1. `--epub` optionally runs EPUBCheck.
 
+## 10b. Batch (chapter / volume / novel)
+A batch runs the per-segment pipeline above across many chapters under **one trackable job**. `services/batch_translate.py` plans once — provider built + healthchecked a **single time**, glossary + characters loaded once — then runs chapter by chapter via the existing `run_translation` (no translation logic is duplicated). Scope resolves to chapters in **deterministic reading order**: `chapter` → one chapter; `volume` → that volume's chapters (`spine_order`); `novel` → all chapters (`volume_order`, then `spine_order`). An empty scope is **valid** (a `done(0)` result), not an error.
+
+Per-chapter `mode` is inherited from the chapter pipeline (`skip_existing` default; `retranslate_non_manual`; `force_selected`) — **TM semantics and manual protection are unchanged**. Aggregate counters: `chapters_total`/`chapters_done`, `segments_total`, `translated`, `reused_from_memory`, `skipped`, `failed`, plus per-chapter outcomes and timing. **Invariant:** `translated` *includes* `reused_from_memory` (a TM hit is a success), so on full completion `translated + failed == segments_total` and `reused_from_memory <= translated`; `skipped` (mode-excluded segments) is reported separately and is **not** part of `segments_total`. **Cancellation is cooperative at two levels** — checked before each chapter and (via `run_translation`) before each segment; committed segments stay. FastAPI surface + lifecycle: [COCKPIT_WORKFLOW.md](COCKPIT_WORKFLOW.md). Single-process thread worker — **no external queue**.
+
 ## 11. Export
 `services/export.py` writes per-chapter **Markdown** review files; `renderers/epub.py` writes the translated **EPUB** (xpath block rewrite, nav fallback). **TXT / HTML / DOCX export is (planned)** (EPUB is the priority format).
 

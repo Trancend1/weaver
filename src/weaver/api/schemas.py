@@ -376,3 +376,100 @@ class MemoryOverviewResponse(BaseModel):
     exact_hits: int
     reused_from_memory: int
     entries: list[MemoryEntryResponse]
+
+
+# ---------------------------------------------------------------------------
+# Batch translation (Sprint 7B — chapter/volume/novel jobs + aggregate progress)
+# ---------------------------------------------------------------------------
+
+
+class BatchTranslateRequest(BaseModel):
+    """Request to start a batch (chapter/volume/novel) translation.
+
+    ``mode`` defaults to ``skip_existing`` (safe); ``retranslate_non_manual`` and
+    ``force_selected`` apply only when explicitly sent. ``provider`` / ``model``
+    override the project's configured provider for this run only."""
+
+    mode: TranslateMode = "skip_existing"
+    provider: str | None = None
+    model: str | None = None
+
+
+class BatchJobResponse(BaseModel):
+    """Acknowledgement that a background batch job was started (202)."""
+
+    job_id: str
+    status: str
+    scope: str
+    scope_id: str | None
+    mode: str
+
+
+class BatchJobProgressResponse(BaseModel):
+    """Live aggregate progress for a running (or finished) batch job."""
+
+    scope: str
+    scope_id: str | None
+    mode: str
+    provider: str
+    model: str
+    chapters_total: int
+    chapters_done: int
+    current_chapter_id: str | None
+    segments_total: int
+    segments_done: int
+    translated: int
+    reused_from_memory: int
+    skipped: int
+    failed: int
+
+
+class BatchChapterOutcomeResponse(BaseModel):
+    """Per-chapter result inside a finished batch job."""
+
+    chapter_id: str
+    selected: int
+    translated: int
+    reused_from_memory: int
+    failed: int
+    skipped: int
+    input_tokens: int
+    output_tokens: int
+    cancelled: bool
+
+
+class BatchJobResultResponse(BaseModel):
+    """Aggregate counts, timing, and per-chapter outcomes for a finished batch."""
+
+    scope: str
+    scope_id: str | None
+    mode: str
+    provider: str
+    model: str
+    chapters_total: int
+    chapters_done: int
+    segments_total: int
+    translated: int
+    reused_from_memory: int
+    skipped: int
+    failed: int
+    input_tokens: int
+    output_tokens: int
+    cancelled: bool
+    started_at: str
+    finished_at: str
+    duration_seconds: float
+    chapters: list[BatchChapterOutcomeResponse]
+
+
+class BatchJobStatusResponse(BaseModel):
+    """A batch job's current state; ``result`` is set once it finishes."""
+
+    job_id: str
+    status: str
+    scope: str
+    scope_id: str | None
+    mode: str
+    progress: BatchJobProgressResponse
+    result: BatchJobResultResponse | None
+    error: str | None

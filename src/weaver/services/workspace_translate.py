@@ -154,27 +154,13 @@ def prepare_chapter_translation(
         )
 
     data = load_project_config(project_toml)
-    provider_config = _merge_provider_config(data["provider"], provider_override)
-    honorific_policy = str(data["translation"].get("honorifics", "preserve"))
-    if honorific_policy not in VALID_HONORIFIC_POLICIES:
-        valid = ", ".join(sorted(VALID_HONORIFIC_POLICIES))
-        raise ConfigError(
-            f"Invalid honorifics value `{honorific_policy}`. "
-            f"Likely cause: project.toml [translation] honorifics must be one of: {valid}. "
-            "Next command: edit project.toml and correct the value."
-        )
-    provider_model = str(provider_config.get("model", "")).strip()
-    if not provider_model:
-        raise ConfigError(
-            "Provider configuration is missing `provider.model`. "
-            "Likely cause: project.toml [provider] has no model, or the request "
-            "override cleared it. "
-            "Next command: set `[provider] model` in project.toml or send a model."
-        )
+    provider_config, provider_model, honorific_policy = validate_provider_config(
+        data, provider_override
+    )
 
     db_path = resolve_database_path(project_toml, cwd=cwd)
     with closing(connect_readonly_database(db_path)) as connection:
-        project = _load_single_project(connection)
+        project = load_single_project(connection)
         if not _chapter_exists(connection, chapter_id):
             raise ChapterNotFoundError(
                 f"Chapter '{chapter_id}' was not found in project '{project.name}'. "
@@ -185,28 +171,17 @@ def prepare_chapter_translation(
 
         if segment_ids is None:
             scope = "chapter"
-            chapter_segments = list_chapter_segments(connection, chapter_id=chapter_id)
-            requested_count = len(chapter_segments)
-            targets = [s for s in chapter_segments if _mode_allows(s.status, mode)]
+            targets, requested_count = select_chapter_targets(
+                connection, chapter_id=chapter_id, mode=mode
+            )
         else:
             scope = "selection"
             requested_count = len(segment_ids)
             targets = _selected_targets(connection, chapter_id, segment_ids, mode)
 
-        raise_on_glossary_conflicts(connection, project_id=project.id)
-        glossary_terms = tuple(list_glossary_terms(connection, project_id=project.id))
-        characters = load_character_contexts(connection, project_id=project.id)
+        glossary_terms, characters = load_translation_context(connection, project_id=project.id)
 
-    provider = build_provider(provider_config)
-    status = provider.healthcheck()
-    if not status.healthy:
-        detail = status.message or "no detail returned"
-        raise ProviderUnavailable(
-            f"Provider {provider.name} is unavailable: {detail}. "
-            "Likely cause: API key missing/invalid, network unreachable, or "
-            "local Ollama not running. "
-            "Next command: run `weaver inspect --healthcheck <project.toml>`."
-        )
+    provider = build_healthy_provider(provider_config)
 
     return TranslationPlan(
         project_toml=project_toml,
@@ -310,6 +285,119 @@ def run_translation(
     )
 
 
+def validate_provider_config(
+    data: dict[str, Any], provider_override: dict[str, Any] | None
+) -> tuple[dict[str, Any], str, str]:
+    """Validate provider/translation config and resolve the effective provider.
+
+    Merges ``provider_override`` onto the project's ``[provider]`` block, then
+    checks the honorific policy and provider model. Shared by the chapter and
+    batch translation planners.
+
+    Args:
+        data: Parsed project.toml mapping.
+        provider_override: Optional ``{"type": ..., "model": ...}`` overrides
+            (``None`` values dropped).
+
+    Returns:
+        ``(provider_config, provider_model, honorific_policy)``.
+
+    Raises:
+        ConfigError: If the honorific policy or provider model is invalid.
+    """
+
+    provider_config = _merge_provider_config(data["provider"], provider_override)
+    honorific_policy = str(data["translation"].get("honorifics", "preserve"))
+    if honorific_policy not in VALID_HONORIFIC_POLICIES:
+        valid = ", ".join(sorted(VALID_HONORIFIC_POLICIES))
+        raise ConfigError(
+            f"Invalid honorifics value `{honorific_policy}`. "
+            f"Likely cause: project.toml [translation] honorifics must be one of: {valid}. "
+            "Next command: edit project.toml and correct the value."
+        )
+    provider_model = str(provider_config.get("model", "")).strip()
+    if not provider_model:
+        raise ConfigError(
+            "Provider configuration is missing `provider.model`. "
+            "Likely cause: project.toml [provider] has no model, or the request "
+            "override cleared it. "
+            "Next command: set `[provider] model` in project.toml or send a model."
+        )
+    return provider_config, provider_model, honorific_policy
+
+
+def load_translation_context(
+    connection: sqlite3.Connection, *, project_id: int
+) -> tuple[tuple[GlossaryTerm, ...], tuple[CharacterContext, ...]]:
+    """Load the project-scoped glossary + character context for translation.
+
+    Raises on approved-glossary conflicts first, then returns the approved
+    glossary terms and character contexts. Shared by the chapter and batch
+    planners so both inject the same context.
+
+    Args:
+        connection: Open (read-only) SQLite connection.
+        project_id: Owning project id.
+
+    Returns:
+        ``(glossary_terms, characters)``.
+
+    Raises:
+        GlossaryConflictError: If approved glossary terms conflict.
+    """
+
+    raise_on_glossary_conflicts(connection, project_id=project_id)
+    glossary_terms = tuple(list_glossary_terms(connection, project_id=project_id))
+    characters = load_character_contexts(connection, project_id=project_id)
+    return glossary_terms, characters
+
+
+def build_healthy_provider(provider_config: dict[str, Any]) -> LLMProvider:
+    """Build a provider from config and healthcheck it once.
+
+    Args:
+        provider_config: Effective ``[provider]`` config (after overrides).
+
+    Returns:
+        A healthy :class:`LLMProvider`.
+
+    Raises:
+        ProviderUnavailable: If the provider fails its healthcheck.
+    """
+
+    provider = build_provider(provider_config)
+    status = provider.healthcheck()
+    if not status.healthy:
+        detail = status.message or "no detail returned"
+        raise ProviderUnavailable(
+            f"Provider {provider.name} is unavailable: {detail}. "
+            "Likely cause: API key missing/invalid, network unreachable, or "
+            "local Ollama not running. "
+            "Next command: run `weaver inspect --healthcheck <project.toml>`."
+        )
+    return provider
+
+
+def select_chapter_targets(
+    connection: sqlite3.Connection, *, chapter_id: str, mode: str
+) -> tuple[list[SegmentRecord], int]:
+    """Return a chapter's eligible translation targets under ``mode``.
+
+    Args:
+        connection: Open SQLite connection.
+        chapter_id: Chapter whose segments are considered.
+        mode: One of :data:`TRANSLATE_MODES`; governs which statuses are eligible.
+
+    Returns:
+        ``(targets, requested_count)`` where ``requested_count`` is the chapter's
+        total segment count (so callers can compute ``skipped``).
+    """
+
+    chapter_segments = list_chapter_segments(connection, chapter_id=chapter_id)
+    targets = [segment for segment in chapter_segments if _mode_allows(segment.status, mode)]
+    return targets, len(chapter_segments)
+
+
 def _selected_targets(
     connection: sqlite3.Connection, chapter_id: str, segment_ids: Sequence[str], mode: str
 ) -> list[SegmentRecord]:
@@ -344,7 +432,19 @@ def _mode_allows(status: str, mode: str) -> bool:
     return status in _NEEDS_TRANSLATION
 
 
-def _load_single_project(connection: sqlite3.Connection) -> ProjectRecord:
+def load_single_project(connection: sqlite3.Connection) -> ProjectRecord:
+    """Load the single project row for a per-project database.
+
+    Args:
+        connection: Open SQLite connection.
+
+    Returns:
+        The project record.
+
+    Raises:
+        ConfigError: If the database has no project row.
+    """
+
     row = connection.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
     if row is None:
         raise ConfigError(

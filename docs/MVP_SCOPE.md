@@ -4,7 +4,7 @@ The MVP target is a **consistency-first JP→EN light-novel translator**, web-co
 
 > **Task 5 finalized (2026-05-29).** The gap table below is verified against `src/weaver/` (module listing + grep for character DB, translation memory, Volume tier, readers/renderers). The active phase/sprint table lives in [CLAUDE.md §2](../CLAUDE.md).
 >
-> **Progress (2026-05-31):** Sprints 1–6 shipped — Volume tier, FastAPI workspace + per-segment save + revision history, AI translate/retranslate, glossary, character database, and translation memory (lookup-before-AI + reuse). Remaining MVP gaps: **batch at volume/novel scope (Sprint 7)** and **TXT/HTML/DOCX export (Sprint 8)**. Live per-sprint detail: [CLAUDE.md §2.5](../CLAUDE.md). The snapshot table below is annotated with what has since shipped.
+> **Progress (2026-06-02):** Sprints 1–7 shipped — Volume tier, FastAPI workspace + per-segment save + revision history, AI translate/retranslate, glossary, character database, translation memory (lookup-before-AI + reuse), and **batch translation at chapter/volume/novel scope** (`services/batch_translate.py` + `api/routers/batch.py`, aggregate progress + cooperative cancel + SSE). Remaining MVP gap: **TXT/HTML/DOCX export (Sprint 8)** (EPUB + Markdown exist). Live per-sprint detail: [CLAUDE.md §2.5](../CLAUDE.md). The snapshot table below is annotated with what has since shipped.
 
 ## Required MVP features
 
@@ -33,8 +33,8 @@ Translation style presets · honorific rules (partial: `preserve`/`localize`/`hy
 | Glossary | exists | `services/glossary.py`, `glossary_review.py`, `glossary_diff.py`, web review | strong; prompt-injection wiring to confirm in sprint | P0 | 4 (polish) |
 | Character database | exists ✅ (Sprint 5) | `storage/characters.py`, `services/characters.py`, `api/routers/characters.py`; `<characters>` prompt block | shipped — schema v4, project-scoped CRUD + prompt injection | P0 | 5 |
 | Translation memory | exists ✅ (Sprint 6) | `storage/translation_memory.py`, `services/translation_memory.py`, `api/routers/translation_memory.py`; lookup/save in `translate_one_segment` | shipped — schema v5, lookup-before-AI, reuse, manual source-of-truth, `GET/DELETE …/memory` | P0 | 6 |
-| Batch translation | partial | resumable orchestrator in `services/translation.py`; web single-job (`web/job_manager.py`) | no volume/novel scope; no job hierarchy | P1 | 6 |
-| Export | partial | `services/export.py` (Markdown), `renderers/epub.py` | no TXT/HTML/DOCX renderer | P1 | 7 |
+| Batch translation | exists ✅ (Sprint 7) | `services/batch_translate.py`, `api/routers/batch.py`, `BatchJob` in `api/jobs.py`; chapter/volume/novel scope + aggregate progress + cancel + SSE | shipped — reuses chapter pipeline; no external queue | P1 | 7 |
+| Export | partial | `services/export.py` (Markdown), `renderers/epub.py` | no TXT/HTML/DOCX renderer | P1 | 8 |
 
 Status: `exists` = usable · `partial` = some structure, not complete · `missing` = no meaningful support. Priority: `P0` = MVP blocker · `P1` = MVP-required, lower risk.
 
@@ -44,12 +44,15 @@ Status: `exists` = usable · `partial` = some structure, not complete · `missin
 |---|---|
 | 1 | Novel/Volume/Chapter model; TXT/EPUB/HTML import; project detail |
 | 2 | JP/EN two-column workspace; edit; auto-save; basic revisions |
-| 3 | Provider/model config (FastAPI-safe boundary, Pydantic schemas); translate chapter/selection; safe retranslate |
-| 4 | Project glossary + character database; prompt injection; consistency baseline |
-| 5 | Translation memory; lookup-before-AI; reuse |
-| 6 | Batch chapter/volume/novel; job status; progress |
-| 7 | Export TXT/HTML/EPUB/DOCX |
-| 8 | MVP stabilization: smoke CLI+web, regression, acceptance checklist, UI/UX plan |
+| 3 | Translation workspace (FastAPI): two-column read, edit, save, revision history |
+| 4 | Provider/model config; translate chapter/selection; safe retranslate |
+| 5 | Project glossary + character database; prompt injection; consistency baseline |
+| 6 | Translation memory; lookup-before-AI; reuse |
+| 7 | Batch chapter/volume/novel; job status; aggregate progress; cancel |
+| 8 | Export EPUB (priority) + TXT/HTML/DOCX |
+| 9 | MVP stabilization: smoke CLI+web, regression, acceptance checklist, UI/UX plan |
+
+> Numbering follows [CLAUDE.md §2.1](../CLAUDE.md) (FastAPI foundation inserted as Sprint 2; remaining sprints shifted +1; Flask decommission appended as Sprint 10).
 
 ## What must exist before UI polish
 Create/import a project · manage chapters · edit source+translation side by side · run AI translation · glossary influences translation · character DB influences translation · TM reduces repeat calls · batch is monitorable · output exportable · every gap mapped to a sprint. UI polish (ADR 005) starts only after this bar is met.
@@ -63,6 +66,6 @@ Create/import a project · manage chapters · edit source+translation side by si
 - [x] Glossary project-scoped, injected, model instructed to follow
 - [x] Character DB project-scoped, injected
 - [x] TM: lookup before AI, reuse on match, AI fallback on miss
-- [ ] Batch chapter/volume/novel; visible progress + per-unit status; errors not silent — Sprint 7
+- [x] Batch chapter/volume/novel; visible progress + per-unit status; errors not silent — Sprint 7 (API; monitor UI deferred)
 - [ ] Export EPUB (priority) + TXT/HTML/DOCX present or sprint-mapped — EPUB exists; TXT/HTML/DOCX Sprint 8
 - [ ] CLI not broken · web not broken · docs match code · active ADRs `001`+ · gaps sprint-mapped · no premature UI polish — final gate Sprint 9
