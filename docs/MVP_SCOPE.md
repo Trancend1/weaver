@@ -68,4 +68,4 @@ Create/import a project · manage chapters · edit source+translation side by si
 - [x] TM: lookup before AI, reuse on match, AI fallback on miss
 - [x] Batch chapter/volume/novel; visible progress + per-unit status; errors not silent — Sprint 7 (API; monitor UI deferred)
 - [x] Export EPUB (priority) + TXT/HTML present; DOCX deferred (out of MVP) — Sprint 8A–8C: EPUB/TXT/HTML output + FastAPI export endpoints (`api/routers/export.py`); `target="docx"` returns 422 (handled deferral). DOCX output + export UI are deferred, not blockers
-- [ ] CLI not broken · web not broken · docs match code · active ADRs `001`+ · gaps sprint-mapped · no premature UI polish — **final gate Sprint 9** (9A audit + validation ✅; 9B doc alignment ✅; 9C E2E proof pending). See [MVP_STABILIZATION_REPORT.md](MVP_STABILIZATION_REPORT.md)
+- [x] CLI not broken · web not broken · docs match code · active ADRs `001`+ · gaps sprint-mapped · no premature UI polish — **final gate Sprint 9 PASSED** (9A audit + validation ✅; 9B doc alignment ✅; 9C E2E proof ✅ on the real light-novel EPUB → **MVP baseline LOCKED**). See [MVP_STABILIZATION_REPORT.md](MVP_STABILIZATION_REPORT.md)
