@@ -33,6 +33,18 @@ class SegmentRecord:
     status: str
 
 
+@dataclass(frozen=True)
+class ChapterRecord:
+    """Stored chapter row."""
+
+    id: str
+    project_id: int
+    volume_id: int
+    title: str | None
+    href: str | None
+    spine_order: int
+
+
 def sync_document_segments(
     connection: sqlite3.Connection, *, project_id: int, volume_id: int, document: DocumentIR
 ) -> None:
@@ -251,6 +263,37 @@ def chapter_exists(connection: sqlite3.Connection, chapter_id: str) -> bool:
 
     row = connection.execute("SELECT 1 FROM chapters WHERE id = ?", (chapter_id,)).fetchone()
     return row is not None
+
+
+def get_chapter(connection: sqlite3.Connection, chapter_id: str) -> ChapterRecord | None:
+    """Return one chapter row by id, or None if it does not exist.
+
+    Args:
+        connection: Open SQLite connection.
+        chapter_id: Chapter id to look up.
+
+    Returns:
+        ChapterRecord if the chapter exists, otherwise None.
+    """
+
+    row = connection.execute(
+        """
+        SELECT id, project_id, volume_id, title, href, spine_order
+        FROM chapters
+        WHERE id = ?
+        """,
+        (chapter_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return ChapterRecord(
+        id=str(row["id"]),
+        project_id=int(row["project_id"]),
+        volume_id=int(row["volume_id"]),
+        title=None if row["title"] is None else str(row["title"]),
+        href=None if row["href"] is None else str(row["href"]),
+        spine_order=int(row["spine_order"]),
+    )
 
 
 def list_chapter_ids_for_volume(connection: sqlite3.Connection, volume_id: int) -> list[str]:

@@ -473,3 +473,90 @@ class BatchJobStatusResponse(BaseModel):
     progress: BatchJobProgressResponse
     result: BatchJobResultResponse | None
     error: str | None
+
+
+class ExportRequest(BaseModel):
+    """Request to start a background export.
+
+    ``target`` defaults to ``epub`` (the only implemented target). The body is
+    optional; an empty POST uses the default."""
+
+    target: str = "epub"
+
+
+class ExportJobResponse(BaseModel):
+    """Acknowledgement that a background export job was started (202)."""
+
+    job_id: str
+    status: str
+    scope: str
+    scope_id: str | None
+    target: str
+
+
+class ExportFallbackByStatusResponse(BaseModel):
+    """Per-status counts of segments that fell back to source text."""
+
+    pending: int
+    in_progress: int
+    failed: int
+    stale: int
+    skipped: int
+    untranslated: int
+
+
+class ExportArtifactResponse(BaseModel):
+    """One exported file (one volume) in a finished export job."""
+
+    volume_id: int
+    volume_title: str
+    source_format: str
+    output_path: str
+    chapters_exported: int
+    translated_segments: int
+    fallback_segments: int
+    fallback_by_status: ExportFallbackByStatusResponse
+
+
+class ExportJobProgressResponse(BaseModel):
+    """Live per-volume progress for a running (or finished) export job."""
+
+    target: str
+    scope: str
+    scope_id: str | None
+    volumes_total: int
+    volumes_done: int
+    current_volume_id: int | None
+    current_volume_title: str | None
+    translated_segments: int
+    fallback_segments: int
+
+
+class ExportJobResultResponse(BaseModel):
+    """Aggregate counts and per-volume artifacts for a finished export."""
+
+    target: str
+    scope: str
+    scope_id: str | None
+    output_dir: str
+    volumes_total: int
+    volumes_exported: int
+    chapters_exported: int
+    translated_segments: int
+    fallback_segments: int
+    generated_at: str
+    cancelled: bool
+    artifacts: list[ExportArtifactResponse]
+
+
+class ExportJobStatusResponse(BaseModel):
+    """An export job's current state; ``result`` is set once it finishes."""
+
+    job_id: str
+    status: str
+    scope: str
+    scope_id: str | None
+    target: str
+    progress: ExportJobProgressResponse
+    result: ExportJobResultResponse | None
+    error: str | None

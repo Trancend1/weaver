@@ -1,6 +1,6 @@
 # Weaver Documentation
 
-Weaver is an offline-capable, glossary-aware **Japanese→English light-novel translation workbench**. It turns a Japanese source into a translated EPUB (plus Markdown review files) while keeping terminology and naming consistent across a long novel.
+Weaver is an offline-capable, glossary-aware **Japanese→English light-novel translation workbench**. It turns a Japanese source into a translated EPUB/TXT/HTML (plus Markdown review files) while keeping terminology and naming consistent across a long novel.
 
 Two surfaces drive the **same** core:
 

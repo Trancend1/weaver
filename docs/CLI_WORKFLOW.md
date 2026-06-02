@@ -67,7 +67,7 @@ weaver validate my_novel/project.toml --epub     # EPUBCheck (needs Java + epubc
 
 ## CLI limitations
 - Import is **EPUB only** (TXT/HTML are MVP gaps).
-- Export is **Markdown + EPUB** (TXT/HTML/DOCX are MVP gaps).
+- CLI export is **Markdown + EPUB** (legacy single-source `weaver export`). Per-volume **EPUB/TXT/HTML** export lives in the FastAPI cockpit (`POST /projects/{name}/export/...`, Sprint 8); **DOCX** is deferred.
 - No character DB / translation-memory commands yet (MVP gaps — see [MVP_SCOPE.md](MVP_SCOPE.md)).
 
 ## Maintenance rules

@@ -27,7 +27,7 @@ src/weaver/
 
 **`services/`** — `project.py` (init/inspect), `translation.py` (resumable orchestrator), `workspace_translate.py` (chapter/selection translate + safe-retranslate), `batch_translate.py` (chapter/volume/novel batch planning + run), `translation_memory.py`, `characters.py`, `glossary.py`, `glossary_review.py`, `glossary_diff.py`, `glossary_terms.py`, `export.py` (markdown + epub), `manual_edit.py`, `preview.py`, `qa.py`, `doctor.py`, `epubcheck.py`, `wizard.py`, `config_writer.py` (atomic provider/model writer), `project_discovery.py` (cockpit project listing).
 
-**`api/`** (FastAPI cockpit) — `app.py` (`create_api_app` factory), `jobs.py` (`JobRegistry` + `TranslationJob`/`BatchJob`, single-process thread workers + SSE), `schemas.py` (Pydantic boundary DTOs), routers `routers/{system,projects,translate,batch,glossary,characters,translation_memory}.py` (thin adapters over `services/*`).
+**`api/`** (FastAPI cockpit) — `app.py` (`create_api_app` factory), `jobs.py` (`JobRegistry` + `TranslationJob`/`BatchJob`/`ExportJob`, single-process thread workers + SSE), `schemas.py` (Pydantic boundary DTOs), routers `routers/{system,projects,translate,batch,export,glossary,characters,translation_memory}.py` (thin adapters over `services/*`).
 
 **`storage/`** — `db.py`, `schema.sql`, `migrations.py`, `projects.py`, `volumes.py`, `segments.py` (incl. ordered chapter-id helpers for batch scope), `translations.py`, `glossary.py`, `characters.py`, `translation_memory.py`.
 
@@ -37,8 +37,8 @@ src/weaver/
 
 **`web/`** (Flask) — `app.py` (factory, `127.0.0.1` bind), `job_manager.py` (single-job + SSE), route blueprints `routes_{projects,translate,new,config,export,glossary}.py`, `file_browser.py` (sandboxed), `templates/*.html`, vendored `static/htmx.min.js`.
 
-**`readers/`** — `epub.py` **only** (EPUB → IR). *TXT/HTML readers are MVP gaps — not yet built.*
-**`renderers/`** — `epub.py` **only**. Markdown export lives in `services/export.py`. *TXT/HTML/DOCX renderers are MVP gaps.*
+**`readers/`** — `epub.py`, `txt.py`, `html.py` (EPUB/TXT/HTML → IR) with `read_source` dispatch; shared `html_blocks.py` + `synthetic_document.py`.
+**`renderers/`** — `epub.py` (EPUB write-back), `epub_synthesis.py` (synthesize EPUB for TXT/HTML-sourced volumes), `txt.py` + `html.py` (plain-text / HTML output), and `rendered_document.py` (shared `RenderChapter` + `block_to_html`). Volume-aware export orchestration lives in `services/export_book.py`; legacy Markdown/single-EPUB export in `services/export.py`. *DOCX output + export UI are MVP gaps (deferred).*
 
 ## Data / project flow
 
@@ -46,7 +46,7 @@ src/weaver/
 init:      EPUB → readers/epub → DocumentIR → storage (segments, glossary candidates) → .weaver/<name>/weaver.db
 translate: pending segments → services/translation (context + glossary injection) → provider → storage (one segment = one txn)
 review:    glossary candidates → services/glossary_review → approved terms (injected into prompts)
-export:    storage → services/export (markdown) / renderers/epub (epub) → output/
+export:    storage → services/export_book → renderers/{epub | epub_synthesis | txt | html} → output/<target>/<per-volume>.<ext>   (legacy: services/export → markdown/single-epub)
 qa:        storage → qa/checks → report (JSON, schema_version 1)
 ```
 
@@ -64,9 +64,9 @@ Per-project on-disk layout:
 
 ## Not yet in the model (MVP gaps → ADR 003 / MVP_SCOPE.md)
 
-- **TXT/HTML/DOCX export** — Markdown + EPUB exist; other renderers are not built (Sprint 8).
+- **DOCX export output + export UI** — EPUB/TXT/HTML output (`services/export_book.py`) + FastAPI export endpoints (`api/routers/export.py` + `ExportJob`, Sprint 8B) + Markdown exist; DOCX output and the export UI are not built (deferred).
 
-Shipped since the reset baseline: Volume tier (schema v3), character database (`storage/characters.py`, schema v4), translation memory (`storage/translation_memory.py` + `services/translation_memory.py`, schema v5), the FastAPI two-column workspace with per-segment save + revision history, and **batch translation at chapter/volume/novel scope** (`services/batch_translate.py` + `api/routers/batch.py` + `BatchJob` in `api/jobs.py`, Sprint 7).
+Shipped since the reset baseline: Volume tier (schema v3), character database (`storage/characters.py`, schema v4), translation memory (`storage/translation_memory.py` + `services/translation_memory.py`, schema v5), the FastAPI two-column workspace with per-segment save + revision history, and **batch translation at chapter/volume/novel scope** (`services/batch_translate.py` + `api/routers/batch.py` + `BatchJob` in `api/jobs.py`, Sprint 7), and **volume-aware EPUB export** (`services/export_book.py` orchestrator + `renderers/epub_synthesis.py`, Sprint 8A).
 
 ## Dependencies
 
