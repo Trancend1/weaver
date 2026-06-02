@@ -90,6 +90,27 @@ AI translation runs as a **background job** on a single worker thread; the reque
 - **No external queue.** `JobRegistry` is a single-process thread worker by design; no Celery/Redis/RQ/etc.
 - Errors: unknown project / chapter / segment → `404`; empty selection → `422`; unhealthy provider → `502`; unknown job → `404`.
 
+## FastAPI batch translation API (Sprint 7 — chapter/volume/novel jobs)
+
+Batch translation runs the per-chapter pipeline across many chapters as **one background job** with aggregate progress. Logic lives in `services/batch_translate.py` (`prepare_batch_translation` → `run_batch_translation`, reusing `run_translation`); the `api/jobs.py` `JobRegistry` owns a separate `BatchJob` lifecycle (`submit_batch`/`get_batch`). The per-chapter `/translate*` + `/retranslate*` endpoints are **untouched**.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/projects/{name}/batch/novel` | Translate every chapter in the novel (reading order). Body: optional `mode`, `provider`, `model`. → `202` `{job_id, status, scope, scope_id, mode}`. |
+| POST | `/projects/{name}/batch/volumes/{volume_id}` | Translate every chapter in one volume. → `202`. |
+| POST | `/projects/{name}/batch/chapters/{chapter_id}` | Batch scoped to one chapter (uniform batch-progress shape). → `202`. |
+| GET | `/projects/{name}/batch/jobs/{job_id}` | Poll: `status`, aggregate `progress` (scope/mode/provider/model + `chapters_total/done`, `segments_total/done`, `translated`/`reused_from_memory`/`skipped`/`failed`, `current_chapter_id`), `result` (once done), `error`. |
+| POST | `/projects/{name}/batch/jobs/{job_id}/cancel` | Cooperative cancel — worker stops after the current segment, before the next chapter; committed segments stay. Idempotent. |
+| GET | `/projects/{name}/batch/jobs/{job_id}/events` | SSE: `progress` per snapshot, then one terminal event (`done`/`cancelled`/`error`). Single-consumer. |
+
+- **Validate once.** Provider is built + healthchecked a **single time** at prepare (before the `202`), and glossary/characters load once — not per chapter.
+- **Mode** defaults to `skip_existing`; `retranslate_non_manual` / `force_selected` apply only when sent. **Manual protection + TM semantics are unchanged** (inherited from the chapter pipeline).
+- **Result** carries per-chapter outcomes (with `input_tokens`/`output_tokens`), aggregate counts, and timing (`started_at`/`finished_at`/`duration_seconds`). Invariant: `translated` includes `reused_from_memory`; `translated + failed == segments_total`; `skipped` is separate.
+- **Empty scope** (novel/volume with no chapters) → `202` + a job that finishes immediately with zero counts (not an error).
+- **Distinct id namespace.** Batch jobs live under `/batch/jobs/`; a batch `job_id` is **not** resolvable via the chapter `/jobs/{job_id}` route (and vice-versa).
+- **No external queue.** Single-process thread worker, same as the chapter jobs.
+- Errors: unknown project / volume / chapter → `404`; invalid `mode` → `422`; unhealthy provider → `502`; unknown job → `404`.
+
 ## FastAPI consistency-data API (Sprint 5/6 — glossary · character DB · translation memory)
 
 Project-scoped data that feeds the prompt and reuse layer. Each router is a thin adapter over a framework-agnostic service (`services/glossary_terms.py`, `services/characters.py`, `services/translation_memory.py`); Japanese path params decode (e.g. `魔王`, `エリナ`).
@@ -109,4 +130,4 @@ Project-scoped data that feeds the prompt and reuse layer. Each router is a thin
 - The FastAPI migration must preserve every behavior above and keep Pydantic at the boundary only.
 
 ## Not yet in the cockpit (MVP gaps → [MVP_SCOPE.md](MVP_SCOPE.md))
-Novel/Volume/Chapter navigation, TXT/HTML import, two-column workspace with auto-save/revisions, character DB UI, translation-memory UI, batch volume/novel monitor, TXT/HTML/DOCX export.
+Novel/Volume/Chapter navigation, TXT/HTML import, two-column workspace with auto-save/revisions, character DB UI, translation-memory UI, batch monitor **UI** (the batch API exists — Sprint 7), TXT/HTML/DOCX export.

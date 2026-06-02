@@ -69,5 +69,9 @@ class ChapterNotFoundError(WeaverError):
     """Requested chapter id does not exist in the project database."""
 
 
+class VolumeNotFoundError(WeaverError):
+    """Requested volume id does not exist in the project database."""
+
+
 class DatabaseError(WeaverError):
     """SQLite operation failed in an unrecoverable way."""

@@ -23,6 +23,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from weaver.services.batch_translate import (
+    BatchProgressCallback,
+    BatchProgressSnapshot,
+    BatchTranslationResult,
+)
 from weaver.services.translation import ProgressCallback
 from weaver.services.workspace_translate import ChapterTranslationResult
 from weaver.storage.segments import SegmentRecord
@@ -33,6 +38,8 @@ from weaver.storage.segments import SegmentRecord
 # testable with a fake runner.
 ShouldCancel = Callable[[], bool]
 JobRunner = Callable[[ShouldCancel, ProgressCallback], ChapterTranslationResult]
+# A batch runner is the multi-chapter analogue, built around ``run_batch_translation``.
+BatchJobRunner = Callable[[ShouldCancel, BatchProgressCallback], BatchTranslationResult]
 
 # Sentinel pushed onto the event queue when the worker finishes (any outcome), so
 # an SSE generator knows to stop draining.
@@ -169,12 +176,187 @@ class TranslationJob:
             self._thread.join(timeout)
 
 
+@dataclass
+class BatchProgress:
+    """Live aggregate progress snapshot for one batch job (mutable)."""
+
+    scope: str = "novel"
+    scope_id: str | None = None
+    mode: str = "skip_existing"
+    provider: str = ""
+    model: str = ""
+    chapters_total: int = 0
+    chapters_done: int = 0
+    current_chapter_id: str | None = None
+    segments_total: int = 0
+    segments_done: int = 0
+    translated: int = 0
+    reused_from_memory: int = 0
+    skipped: int = 0
+    failed: int = 0
+
+
+@dataclass
+class BatchJob:
+    """One background batch (chapter/volume/novel) translate run.
+
+    Sibling of :class:`TranslationJob`: same status state machine
+    (``running`` → ``done`` | ``failed`` | ``cancelled``), cancel flag, SSE event
+    queue, and stream-end sentinel, but carries aggregate batch progress and a
+    :class:`BatchTranslationResult`.
+    """
+
+    id: str
+    project_name: str
+    scope: str  # "chapter" | "volume" | "novel"
+    scope_id: str | None
+    mode: str
+    runner: BatchJobRunner
+    status: str = "running"
+    result: BatchTranslationResult | None = None
+    error: str | None = None
+    progress: BatchProgress = field(default_factory=BatchProgress)
+    queue: queue.Queue[dict[str, Any] | None] = field(default_factory=queue.Queue)
+    _cancel: threading.Event = field(default_factory=threading.Event)
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+    _thread: threading.Thread | None = field(default=None, repr=False)
+
+    def request_cancel(self) -> None:
+        """Signal the worker to stop after the current segment/chapter."""
+
+        self._cancel.set()
+
+    def should_cancel(self) -> bool:
+        """True once :meth:`request_cancel` has been called."""
+
+        return self._cancel.is_set()
+
+    def snapshot(self) -> BatchProgress:
+        """Return a consistent copy of the live aggregate counters."""
+
+        with self._lock:
+            return BatchProgress(
+                scope=self.progress.scope,
+                scope_id=self.progress.scope_id,
+                mode=self.progress.mode,
+                provider=self.progress.provider,
+                model=self.progress.model,
+                chapters_total=self.progress.chapters_total,
+                chapters_done=self.progress.chapters_done,
+                current_chapter_id=self.progress.current_chapter_id,
+                segments_total=self.progress.segments_total,
+                segments_done=self.progress.segments_done,
+                translated=self.progress.translated,
+                reused_from_memory=self.progress.reused_from_memory,
+                skipped=self.progress.skipped,
+                failed=self.progress.failed,
+            )
+
+    def on_progress(self, snapshot: BatchProgressSnapshot) -> None:
+        """Adopt a batch progress snapshot and emit a ``progress`` SSE event."""
+
+        with self._lock:
+            self.progress = BatchProgress(
+                scope=snapshot.scope,
+                scope_id=snapshot.scope_id,
+                mode=snapshot.mode,
+                provider=snapshot.provider,
+                model=snapshot.model,
+                chapters_total=snapshot.chapters_total,
+                chapters_done=snapshot.chapters_done,
+                current_chapter_id=snapshot.current_chapter_id,
+                segments_total=snapshot.segments_total,
+                segments_done=snapshot.segments_done,
+                translated=snapshot.translated,
+                reused_from_memory=snapshot.reused_from_memory,
+                skipped=snapshot.skipped,
+                failed=snapshot.failed,
+            )
+        self.queue.put({"event": "progress", "data": _batch_progress_data(snapshot)})
+
+    def run(self) -> None:
+        """Execute the runner on the worker thread, emitting queue events.
+
+        Emits ``progress`` per snapshot, then exactly one terminal event
+        (``done`` | ``cancelled`` | ``error``), then the stream-end sentinel. The
+        broad ``except`` is the web-boundary analogue (CLAUDE.md §4.2): an
+        unhandled worker-thread exception is surfaced, not swallowed.
+        """
+
+        try:
+            self.result = self.runner(self.should_cancel, self.on_progress)
+        except Exception as exc:  # noqa: BLE001 - web boundary; surfaced, not swallowed
+            self.status = "failed"
+            self.error = str(exc)
+            self.queue.put({"event": "error", "data": {"message": str(exc)}})
+        else:
+            result = self.result
+            self.status = "cancelled" if result.cancelled else "done"
+            self.queue.put({"event": self.status, "data": _batch_result_data(result)})
+        finally:
+            self.queue.put(_STREAM_END)
+
+    def wait(self, timeout: float | None = None) -> None:
+        """Block until the worker thread finishes (or ``timeout`` elapses)."""
+
+        if self._thread is not None:
+            self._thread.join(timeout)
+
+
+def _batch_progress_data(snapshot: BatchProgressSnapshot) -> dict[str, Any]:
+    return {
+        "scope": snapshot.scope,
+        "scope_id": snapshot.scope_id,
+        "mode": snapshot.mode,
+        "provider": snapshot.provider,
+        "model": snapshot.model,
+        "chapters_total": snapshot.chapters_total,
+        "chapters_done": snapshot.chapters_done,
+        "current_chapter_id": snapshot.current_chapter_id,
+        "segments_total": snapshot.segments_total,
+        "segments_done": snapshot.segments_done,
+        "translated": snapshot.translated,
+        "reused_from_memory": snapshot.reused_from_memory,
+        "skipped": snapshot.skipped,
+        "failed": snapshot.failed,
+    }
+
+
+def _batch_result_data(result: BatchTranslationResult) -> dict[str, Any]:
+    return {
+        "scope": result.scope,
+        "scope_id": result.scope_id,
+        "mode": result.mode,
+        "provider": result.provider,
+        "model": result.model,
+        "chapters_total": result.chapters_total,
+        "chapters_done": result.chapters_done,
+        "segments_total": result.segments_total,
+        "translated": result.translated,
+        "reused_from_memory": result.reused_from_memory,
+        "skipped": result.skipped,
+        "failed": result.failed,
+        "input_tokens": result.input_tokens,
+        "output_tokens": result.output_tokens,
+        "cancelled": result.cancelled,
+        "started_at": result.started_at,
+        "finished_at": result.finished_at,
+        "duration_seconds": result.duration_seconds,
+    }
+
+
 class JobRegistry:
-    """Thread-safe registry of background translate jobs, keyed by id."""
+    """Thread-safe registry of background translate jobs, keyed by id.
+
+    Chapter jobs (:class:`TranslationJob`) and batch jobs (:class:`BatchJob`)
+    live in separate dicts; both key on a globally-unique ``uuid4().hex``, so a
+    batch id is never resolvable via :meth:`get` and vice-versa.
+    """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._jobs: dict[str, TranslationJob] = {}
+        self._batch_jobs: dict[str, BatchJob] = {}
 
     def submit(
         self,
@@ -218,10 +400,57 @@ class JobRegistry:
         return job
 
     def get(self, job_id: str) -> TranslationJob | None:
-        """Return the job with ``job_id``, or None when unknown."""
+        """Return the chapter job with ``job_id``, or None when unknown."""
 
         with self._lock:
             return self._jobs.get(job_id)
+
+    def submit_batch(
+        self,
+        *,
+        project_name: str,
+        scope: str,
+        scope_id: str | None,
+        mode: str,
+        runner: BatchJobRunner,
+    ) -> BatchJob:
+        """Register a batch job and start its worker thread.
+
+        Args:
+            project_name: Owning project (``.weaver/<name>`` directory name).
+            scope: ``"chapter"`` | ``"volume"`` | ``"novel"``.
+            scope_id: Chapter or volume id; None for novel scope.
+            mode: Overwrite mode applied per chapter.
+            runner: Closure that performs the batch and returns its result.
+
+        Returns:
+            The created :class:`BatchJob` (already running).
+        """
+
+        job = BatchJob(
+            id=uuid.uuid4().hex,
+            project_name=project_name,
+            scope=scope,
+            scope_id=scope_id,
+            mode=mode,
+            runner=runner,
+        )
+        thread = threading.Thread(
+            target=job.run,
+            name=f"weaver-batch-{job.id}",
+            daemon=True,
+        )
+        job._thread = thread
+        with self._lock:
+            self._batch_jobs[job.id] = job
+        thread.start()
+        return job
+
+    def get_batch(self, job_id: str) -> BatchJob | None:
+        """Return the batch job with ``job_id``, or None when unknown."""
+
+        with self._lock:
+            return self._batch_jobs.get(job_id)
 
 
 def format_sse(event: dict[str, Any]) -> str:

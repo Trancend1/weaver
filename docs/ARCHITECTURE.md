@@ -25,9 +25,11 @@ src/weaver/
 
 ## Module inventory (current)
 
-**`services/`** — `project.py` (init/inspect), `translation.py` (resumable orchestrator), `glossary.py`, `glossary_review.py`, `glossary_diff.py`, `export.py` (markdown + epub), `manual_edit.py`, `preview.py`, `qa.py`, `doctor.py`, `epubcheck.py`, `wizard.py`, `config_writer.py` (atomic provider/model writer), `project_discovery.py` (cockpit project listing).
+**`services/`** — `project.py` (init/inspect), `translation.py` (resumable orchestrator), `workspace_translate.py` (chapter/selection translate + safe-retranslate), `batch_translate.py` (chapter/volume/novel batch planning + run), `translation_memory.py`, `characters.py`, `glossary.py`, `glossary_review.py`, `glossary_diff.py`, `glossary_terms.py`, `export.py` (markdown + epub), `manual_edit.py`, `preview.py`, `qa.py`, `doctor.py`, `epubcheck.py`, `wizard.py`, `config_writer.py` (atomic provider/model writer), `project_discovery.py` (cockpit project listing).
 
-**`storage/`** — `db.py`, `schema.sql`, `migrations.py`, `projects.py`, `segments.py`, `translations.py`, `glossary.py`.
+**`api/`** (FastAPI cockpit) — `app.py` (`create_api_app` factory), `jobs.py` (`JobRegistry` + `TranslationJob`/`BatchJob`, single-process thread workers + SSE), `schemas.py` (Pydantic boundary DTOs), routers `routers/{system,projects,translate,batch,glossary,characters,translation_memory}.py` (thin adapters over `services/*`).
+
+**`storage/`** — `db.py`, `schema.sql`, `migrations.py`, `projects.py`, `volumes.py`, `segments.py` (incl. ordered chapter-id helpers for batch scope), `translations.py`, `glossary.py`, `characters.py`, `translation_memory.py`.
 
 **`core/`** — `ir.py` (DocumentIR), `segment.py` (segment + deterministic IDs), `config.py` (project.toml), `global_config.py` (`~/.weaver/config.toml` precedence), `templates.py` (genre presets), `secret_store.py` (`~/.weaver/secrets.toml`).
 
@@ -62,9 +64,9 @@ Per-project on-disk layout:
 
 ## Not yet in the model (MVP gaps → ADR 003 / MVP_SCOPE.md)
 
-- **Batch at volume/novel scope** — translate is per-project resumable; web job manager is single-job.
+- **TXT/HTML/DOCX export** — Markdown + EPUB exist; other renderers are not built (Sprint 8).
 
-Shipped since the reset baseline: Volume tier (schema v3), character database (`storage/characters.py`, schema v4), translation memory (`storage/translation_memory.py` + `services/translation_memory.py`, schema v5), and the FastAPI two-column workspace with per-segment save + revision history.
+Shipped since the reset baseline: Volume tier (schema v3), character database (`storage/characters.py`, schema v4), translation memory (`storage/translation_memory.py` + `services/translation_memory.py`, schema v5), the FastAPI two-column workspace with per-segment save + revision history, and **batch translation at chapter/volume/novel scope** (`services/batch_translate.py` + `api/routers/batch.py` + `BatchJob` in `api/jobs.py`, Sprint 7).
 
 ## Dependencies
 
