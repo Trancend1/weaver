@@ -43,6 +43,21 @@ long jobs: routes_translate → web/job_manager (single background thread) → S
 ```
 HTMX provides liveness (progress, partial updates) without a JS build step.
 
+## FastAPI project management API (Sprint 2C + 10B — `src/weaver/api/`)
+
+Project discovery, creation, import, and a sandboxed source browser. The browser
+and create endpoints (Sprint 10B) close the FastAPI parity gap for *creating /
+selecting* projects without the Flask UI. All paths are sandboxed to the cockpit
+`base_dir` (ADR `0017`) — `..` traversal and absolute paths are rejected.
+
+| Method | Path | Service | Notes |
+|---|---|---|---|
+| GET | `/projects` | `discover_projects` | List discovered projects + summaries. |
+| GET | `/projects/{name}/tree` | `project_tree` | Novel → Volume → Chapter tree. |
+| GET | `/projects/browse?dir=<rel>` | `source_browser.list_directory` | Sandboxed listing: sub-dirs first, then importable sources (`.epub`/`.txt`/`.html`/`.htm`). `dir` is relative to `base_dir`; `""` is root. Escape/missing → `422`. |
+| POST | `/projects/create` | `initialize_project` (+ `source_browser`) | Create a novel from an uploaded `file` **or** a browsed `source_path` (multipart; upload preferred). Optional `provider`/`template`. Name derives from the source stem. → `201` `{project_name, chapter_count, segment_count, glossary_candidate_count}`. No source → `422`; duplicate name → `409`; bad source/provider → `422`. **Sourceless creation is unsupported** (the source defines the project name + initial volume). |
+| POST | `/projects/{name}/import` | `import_volume` | Import another source as a new volume (upload only). → `201`. |
+
 ## FastAPI workspace API (Sprint 3 — `src/weaver/api/`)
 
 The FastAPI cockpit (`weaver serve-api`) exposes the translation workspace as JSON. Routers are thin adapters; all logic lives in `services/*` and writes go through `storage/*` + `transaction()`.

@@ -112,6 +112,36 @@ class ImportVolumeResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Create novel + file browser (Stage 10B)
+# ---------------------------------------------------------------------------
+
+
+class BrowseEntryResponse(BaseModel):
+    """One sandboxed listing item: a sub-directory or importable source file."""
+
+    name: str
+    kind: str  # "dir" | "epub" | "txt" | "html"
+    rel_path: str
+
+
+class BrowseListingResponse(BaseModel):
+    """A sandboxed directory listing relative to the cockpit base dir."""
+
+    rel_dir: str
+    parent: str | None
+    entries: list[BrowseEntryResponse]
+
+
+class CreateNovelResponse(BaseModel):
+    """Result of creating a new novel project from a source file."""
+
+    project_name: str
+    chapter_count: int
+    segment_count: int
+    glossary_candidate_count: int
+
+
+# ---------------------------------------------------------------------------
 # Translation workspace (Stage 3A — read only)
 # ---------------------------------------------------------------------------
 

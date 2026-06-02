@@ -152,3 +152,16 @@ before any decommission work is considered.
 
 > **Gate 10A: CLOSED — decision = KEEP Flask.** Removal stage is not authorized.
 > Re-audit required after the four gaps are closed.
+
+---
+
+## 8. Gap-closure progress
+
+| Gap | Stage | Status |
+|---|---|---|
+| 4 — create-novel endpoint + file browser | **10B** | ✅ **Closed.** `POST /projects/create` (upload or browsed source; 409 on duplicate) + `GET /projects/browse` (sandboxed). Browser logic extracted to framework-agnostic `services/source_browser.py`; Flask `web/file_browser.py` re-exports it (no Flask behavior change). **Sourceless creation** is unsupported by `initialize_project` (name derives from source stem) → out of scope, not built. No UI. |
+| 1 — web UI surface | — | ⬜ Open |
+| 2 — provider/secret config-write API | — | ⬜ Open |
+| 3 — glossary candidate-review flow | — | ⬜ Open |
+
+Re-audit (and any decommission decision) remains gated on gaps 1–3 also closing.

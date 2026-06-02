@@ -9,11 +9,14 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 
 from weaver.api.schemas import (
+    BrowseEntryResponse,
+    BrowseListingResponse,
     ChapterResponse,
     ChapterWorkspaceResponse,
+    CreateNovelResponse,
     ImportVolumeResponse,
     NovelTreeResponse,
     ProjectListResponse,
@@ -28,9 +31,15 @@ from weaver.api.schemas import (
 from weaver.errors import ChapterNotFoundError, SegmentNotFoundError, WeaverError
 from weaver.services.chapter_workspace import chapter_workspace
 from weaver.services.import_source import import_volume
+from weaver.services.project import initialize_project, project_exists
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_tree import project_tree
 from weaver.services.segment_history import segment_translation_history
+from weaver.services.source_browser import (
+    list_directory,
+    resolve_source,
+    store_uploaded_source,
+)
 from weaver.services.workspace_edit import save_segment_translation
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -68,6 +77,89 @@ def list_projects(request: Request) -> ProjectListResponse:
             )
         )
     return ProjectListResponse(projects=projects)
+
+
+@router.get("/browse", response_model=BrowseListingResponse)
+def browse_sources(
+    request: Request, rel_dir: str = Query("", alias="dir")
+) -> BrowseListingResponse:
+    """List sub-directories and importable source files under the base dir.
+
+    Sandboxed to ``base_dir`` (ADR ``0017``): ``..`` traversal and absolute paths
+    are rejected. The ``dir`` query is a path relative to the base dir; ``""`` is
+    the root.
+    """
+    base = _base_dir(request)
+    try:
+        listing = list_directory(base, rel_dir)
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return BrowseListingResponse(
+        rel_dir=listing.rel_dir,
+        parent=listing.parent,
+        entries=[
+            BrowseEntryResponse(name=e.name, kind=e.kind, rel_path=e.rel_path)
+            for e in listing.entries
+        ],
+    )
+
+
+@router.post("/create", response_model=CreateNovelResponse, status_code=201)
+async def create_novel(
+    request: Request,
+    file: UploadFile | None = File(
+        None, description="Source file to create the novel from (EPUB, TXT, or HTML)."
+    ),
+    source_path: str | None = Form(
+        None, description="Path to a browsed source, relative to the base dir."
+    ),
+    provider: str | None = Form(None, description="Provider type for the generated config."),
+    template: str | None = Form(None, description="Template preset for the generated config."),
+) -> CreateNovelResponse:
+    """Create a new novel project from an uploaded or browsed source file.
+
+    Exactly one source is required: an uploaded ``file`` (preferred) or a browsed
+    ``source_path``. The project name derives from the source filename stem.
+    Creating over an existing project of the same name is refused (409).
+    Sourceless creation is unsupported — the source defines the project name and
+    initial volume.
+    """
+    base = _base_dir(request)
+
+    try:
+        if file is not None and file.filename:
+            data = await file.read()
+            source = store_uploaded_source(base, file.filename, data)
+        elif source_path and source_path.strip():
+            source = resolve_source(base, source_path.strip())
+        else:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "No source selected. Likely cause: neither an uploaded file nor a "
+                    "browsed source_path was provided. Next command: upload or pick an "
+                    "EPUB, TXT, or HTML source."
+                ),
+            )
+        if project_exists(source, cwd=base):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"A project named {source.stem!r} already exists. "
+                    "Likely cause: this source was already created. "
+                    "Next command: open the existing project or import as a volume."
+                ),
+            )
+        result = initialize_project(source, cwd=base, template=template, provider=provider)
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return CreateNovelResponse(
+        project_name=result.project_name,
+        chapter_count=result.chapter_count,
+        segment_count=result.segment_count,
+        glossary_candidate_count=result.glossary_candidate_count,
+    )
 
 
 @router.get("/{name}/tree", response_model=NovelTreeResponse)
