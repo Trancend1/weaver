@@ -24,6 +24,7 @@ from weaver.api.routers.system import router as system_router
 from weaver.api.routers.translate import router as translate_router
 from weaver.api.routers.translation_memory import router as translation_memory_router
 from weaver.api.routers.ui import router as ui_router
+from weaver.api.routers.ui_admin import router as ui_admin_router
 from weaver.api.templating import mount_static
 from weaver.core.secret_store import apply_secrets_to_env
 
@@ -61,6 +62,7 @@ def create_api_app(base_dir: Path | None = None) -> FastAPI:
     # default `weaver serve` cockpit — no default flip.
     mount_static(app)
     app.include_router(ui_router)
+    app.include_router(ui_admin_router)
 
     @app.get("/", include_in_schema=False)
     def _root_redirect() -> RedirectResponse:

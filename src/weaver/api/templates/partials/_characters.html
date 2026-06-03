@@ -1,0 +1,45 @@
+<div id="characters">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if characters %}
+  <table class="grid">
+    <thead><tr><th>JP name</th><th>EN name</th><th>Gender</th><th>Role</th><th>Notes</th><th></th></tr></thead>
+    <tbody>
+      {% for ch in characters %}
+      <tr>
+        <td>{{ ch.jp_name }}</td>
+        <td>
+          <form class="row-form" hx-post="/ui/projects/{{ name }}/characters/{{ ch.jp_name }}/update"
+                hx-target="#characters" hx-swap="outerHTML">
+            <input name="en_name" value="{{ ch.en_name }}" required>
+            <input name="gender" value="{{ ch.gender or '' }}" placeholder="gender">
+            <input name="role" value="{{ ch.role or '' }}" placeholder="role">
+            <input name="notes" value="{{ ch.notes or '' }}" placeholder="notes">
+            <button type="submit">Save</button>
+          </form>
+        </td>
+        <td>{{ ch.gender or "—" }}</td>
+        <td>{{ ch.role or "—" }}</td>
+        <td>{{ ch.notes or "—" }}</td>
+        <td>
+          <button type="button" class="link-btn"
+                  hx-post="/ui/projects/{{ name }}/characters/{{ ch.jp_name }}/delete"
+                  hx-target="#characters" hx-swap="outerHTML">Delete</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty hint">No characters yet.</p>
+  {% endif %}
+
+  <form class="inline-form" hx-post="/ui/projects/{{ name }}/characters"
+        hx-target="#characters" hx-swap="outerHTML">
+    <input name="jp_name" placeholder="JP name" required>
+    <input name="en_name" placeholder="EN name" required>
+    <input name="gender" placeholder="gender">
+    <input name="role" placeholder="role">
+    <input name="notes" placeholder="notes">
+    <button type="submit">Add character</button>
+  </form>
+</div>

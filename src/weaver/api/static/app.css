@@ -112,6 +112,15 @@ button:hover { border-color: var(--link); }
 .artifacts { list-style: none; padding: 0; margin: 0.3rem 0; }
 .artifacts li { padding: 0.15rem 0; }
 
+/* Admin (Stage 11C): glossary/characters/memory/config — layout only. */
+.subnav { display: flex; gap: 0.8rem; margin: 0.3rem 0 0.6rem; }
+.subnav a { color: var(--link); text-decoration: none; font-size: 0.9rem; }
+.row-form { display: flex; gap: 0.3rem; flex-wrap: wrap; align-items: center; }
+.row-form input { padding: 0.15rem 0.3rem; border: 1px solid var(--line); border-radius: 4px; }
+.pager { display: flex; gap: 0.8rem; margin-top: 0.4rem; }
+.diff-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem; }
+.diff-cols ul { list-style: none; padding-left: 0; margin: 0.2rem 0; }
+
 /* HTMX loading state (used from 11B onward; styled now so the primitive exists). */
 .htmx-indicator { opacity: 0; transition: opacity 120ms ease-in; }
 .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }

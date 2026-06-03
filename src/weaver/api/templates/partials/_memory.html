@@ -1,0 +1,26 @@
+<div id="memory">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <p class="meta">{{ overview.total_entries }} entries · reused from memory {{ overview.reused_from_memory }}</p>
+  {% if overview.entries %}
+  <table class="grid">
+    <thead><tr><th>Source (JP)</th><th>Target (EN)</th><th>Provider</th><th>Updated</th><th></th></tr></thead>
+    <tbody>
+      {% for e in overview.entries %}
+      <tr>
+        <td>{{ e.source_text }}</td>
+        <td>{{ e.target_text }}</td>
+        <td class="meta">{{ e.provider or "—" }}{% if e.model %} / {{ e.model }}{% endif %}</td>
+        <td class="meta">{{ e.updated_at }}</td>
+        <td>
+          <button type="button" class="link-btn"
+                  hx-post="/ui/projects/{{ name }}/memory/{{ e.source_hash }}/delete"
+                  hx-target="#memory" hx-swap="outerHTML">Delete</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty hint">No translation-memory entries yet.</p>
+  {% endif %}
+</div>

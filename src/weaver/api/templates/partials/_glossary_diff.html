@@ -1,0 +1,11 @@
+<div id="glossary-diff-result">
+  {% if error %}<p class="error">{{ error }}</p>
+  {% else %}
+  <p class="meta">Chapter {{ diff.chapter_a }} vs {{ diff.chapter_b }}</p>
+  <div class="diff-cols">
+    <div><strong>Only in {{ diff.chapter_a }}</strong><ul>{% for s in diff.only_in_a %}<li>{{ s }}</li>{% else %}<li class="meta">—</li>{% endfor %}</ul></div>
+    <div><strong>Only in {{ diff.chapter_b }}</strong><ul>{% for s in diff.only_in_b %}<li>{{ s }}</li>{% else %}<li class="meta">—</li>{% endfor %}</ul></div>
+    <div><strong>In both</strong><ul>{% for s in diff.in_both %}<li>{{ s }}</li>{% else %}<li class="meta">—</li>{% endfor %}</ul></div>
+  </div>
+  {% endif %}
+</div>

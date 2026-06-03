@@ -79,9 +79,23 @@ project page has an **Export** control (EPUB/TXT/HTML). Both start a background 
 same JSON-router start helpers (`translate._start_job`, `export._start_export`) over the
 shared `JobRegistry` + services — and render a **self-polling HTMX panel** (`hx-trigger="load
 delay:1s"`) that shows live progress, a **Cancel** button, and the terminal result (translate
-counts / export artifact paths). Terminal panels drop the poll trigger. Provider/secret config
-UI is **not** here — translate uses the project's configured provider (configure it via CLI
-`secrets`/`init` or the `/config` API until 11C). Glossary/character/TM/config screens (11C) follow.
+counts / export artifact paths). Terminal panels drop the poll trigger.
+
+**Sprint 11C — consistency/admin (shipped, `routers/ui_admin.py`):** glossary term CRUD +
+candidate review (approve/edit/reject, conflicts, coverage diff), character DB CRUD,
+translation-memory read/delete, and provider/model + secret config. Each mutation re-renders
+its HTMX fragment. Reuses `glossary_terms`, `glossary_review`, `glossary_diff`, `characters`,
+`translation_memory`, `provider_config` (no logic in UI). **API-key values are accepted only by
+the secret-set form and are never rendered back** (presence/names only). Provider/secret config
+lives at `/ui/config` (global + per-project scope); project pages link to glossary/characters/memory.
+
+| Method | Path | Renders |
+|---|---|---|
+| GET/POST | `/ui/projects/{name}/glossary` · `…/glossary/terms[/{source}/update\|delete]` | glossary page · `_glossary_terms` fragment |
+| GET/POST | `…/glossary/candidates[/{id}/{approve\|edit\|reject}]` · `…/glossary/diff` | `_glossary_candidates` · `_glossary_diff` fragments |
+| GET/POST | `/ui/projects/{name}/characters[/{jp_name}/update\|delete]` | characters page · `_characters` fragment |
+| GET/POST | `/ui/projects/{name}/memory` · `…/memory/{source_hash}/delete` | memory page · `_memory` fragment |
+| GET/POST | `/ui/config` · `/ui/config/secrets[/{env_name}/delete]` | config page · `_config_form` / `_secrets` fragments (no key value) |
 
 | Method | Path | Renders | Notes |
 |---|---|---|---|

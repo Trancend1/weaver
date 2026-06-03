@@ -1,0 +1,42 @@
+<div id="glossary-terms">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if terms %}
+  <table class="grid">
+    <thead><tr><th>Source (JP)</th><th>Target (EN)</th><th>Category</th><th>Notes</th><th></th></tr></thead>
+    <tbody>
+      {% for t in terms %}
+      <tr>
+        <td>{{ t.source }}</td>
+        <td>
+          <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/terms/{{ t.source }}/update"
+                hx-target="#glossary-terms" hx-swap="outerHTML">
+            <input name="target" value="{{ t.target }}">
+            <input name="category" value="{{ t.category or '' }}" placeholder="category">
+            <input name="notes" value="{{ t.notes or '' }}" placeholder="notes">
+            <button type="submit">Save</button>
+          </form>
+        </td>
+        <td>{{ t.category or "—" }}</td>
+        <td>{{ t.notes or "—" }}</td>
+        <td>
+          <button type="button" class="link-btn"
+                  hx-post="/ui/projects/{{ name }}/glossary/terms/{{ t.source }}/delete"
+                  hx-target="#glossary-terms" hx-swap="outerHTML">Delete</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty hint">No approved glossary terms yet.</p>
+  {% endif %}
+
+  <form class="inline-form" hx-post="/ui/projects/{{ name }}/glossary/terms"
+        hx-target="#glossary-terms" hx-swap="outerHTML">
+    <input name="source" placeholder="source (JP)" required>
+    <input name="target" placeholder="target (EN)" required>
+    <input name="category" placeholder="category">
+    <input name="notes" placeholder="notes">
+    <button type="submit">Add term</button>
+  </form>
+</div>

@@ -1,0 +1,30 @@
+<div id="config-form">
+  {% if saved %}<p class="saved-note">Saved ✓</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  <p class="meta">
+    Global defaults: provider <code>{{ view.default_provider or "—" }}</code> · model <code>{{ view.default_model or "—" }}</code>
+  </p>
+  {% if view.project_name %}
+  <p class="meta">
+    Project <strong>{{ view.project_name }}</strong> [provider]:
+    type <code>{{ view.provider_type or "—" }}</code> · model <code>{{ view.model or "—" }}</code> ·
+    api_key_env <code>{{ view.api_key_env or "—" }}</code> · key set: {{ "yes" if view.api_key_set else "no" }}
+  </p>
+  {% endif %}
+
+  <form class="stack" hx-post="/ui/config" hx-target="#config-form" hx-swap="outerHTML">
+    <input type="hidden" name="project" value="{{ project or '' }}">
+    <label>Scope
+      <select name="scope">
+        <option value="project"{% if view.project_name %} selected{% endif %}>project</option>
+        <option value="global">global</option>
+      </select>
+    </label>
+    <label>Provider type <input name="provider_type" placeholder="deepseek / gemini / ollama / fake / custom"></label>
+    <label>Model <input name="model" placeholder="model id"></label>
+    <label>Base URL <input name="base_url" placeholder="(custom/ollama only)"></label>
+    <label>API key env <input name="api_key_env" placeholder="env-var name only (no value)"></label>
+    <button type="submit">Save config</button>
+  </form>
+</div>
