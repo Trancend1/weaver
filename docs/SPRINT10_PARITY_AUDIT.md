@@ -160,8 +160,8 @@ before any decommission work is considered.
 | Gap | Stage | Status |
 |---|---|---|
 | 4 — create-novel endpoint + file browser | **10B** | ✅ **Closed.** `POST /projects/create` (upload or browsed source; 409 on duplicate) + `GET /projects/browse` (sandboxed). Browser logic extracted to framework-agnostic `services/source_browser.py`; Flask `web/file_browser.py` re-exports it (no Flask behavior change). **Sourceless creation** is unsupported by `initialize_project` (name derives from source stem) → out of scope, not built. No UI. |
+| 2 — provider/secret config-write API | **10C** | ✅ **Closed.** `GET/PATCH /config` (provider/model, project+global scope) + `POST/DELETE /config/secrets/{env_name}`. Framework-agnostic `services/provider_config.py` reuses `config_writer` + `core/secret_store`. **Secrets keyed by env-var name** (the existing store abstraction; no provider→env map exists) — minor deviation from the suggested `{provider}` path. **Key values never accepted by PATCH and never returned anywhere** (presence bool + names only; verified vs response bodies *and* OpenAPI schema). CLI `secrets` + Flask `/config` untouched. No UI. |
 | 1 — web UI surface | — | ⬜ Open |
-| 2 — provider/secret config-write API | — | ⬜ Open |
 | 3 — glossary candidate-review flow | — | ⬜ Open |
 
-Re-audit (and any decommission decision) remains gated on gaps 1–3 also closing.
+Re-audit (and any decommission decision) remains gated on gaps 1 + 3 also closing.

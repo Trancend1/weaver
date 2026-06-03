@@ -58,6 +58,27 @@ selecting* projects without the Flask UI. All paths are sandboxed to the cockpit
 | POST | `/projects/create` | `initialize_project` (+ `source_browser`) | Create a novel from an uploaded `file` **or** a browsed `source_path` (multipart; upload preferred). Optional `provider`/`template`. Name derives from the source stem. → `201` `{project_name, chapter_count, segment_count, glossary_candidate_count}`. No source → `422`; duplicate name → `409`; bad source/provider → `422`. **Sourceless creation is unsupported** (the source defines the project name + initial volume). |
 | POST | `/projects/{name}/import` | `import_volume` | Import another source as a new volume (upload only). → `201`. |
 
+## FastAPI provider/secret config API (Sprint 10C — `src/weaver/api/`)
+
+Persists provider/model config and API-key secrets from the API (closes the
+Flask `/config` parity gap). Thin adapter over `services/provider_config.py`,
+which reuses `services/config_writer` (provider/model write) + `core/secret_store`
+(secrets). **API-key values are accepted only by `POST /config/secrets/{env_name}`
+and are never returned by any endpoint** — responses carry key *presence* (a bool)
+and stored secret *names* only (CLAUDE.md §4.2, ADR `0017`/`0020`).
+
+| Method | Path | Service | Notes |
+|---|---|---|---|
+| GET | `/config` | `provider_config.read_config` | Redacted view: global defaults + stored secret **names**. `?project=<name>` also returns that project's `[provider]` block (`provider_type`/`model`/`base_url`/`api_key_env`) + `api_key_set` bool. Unknown project → `404`. **No key value.** |
+| PATCH | `/config` | `provider_config.write_config` | Persist provider/model. Body: `scope` (`project`\|`global`), `project` (required if `scope=project`), `provider_type`/`model`/`base_url`/`api_key_env`. **No key value accepted here** (only the env-var *name*). Global scope writes `[defaults]` (provider+model only). Unknown provider/scope, missing project → `422`. |
+| POST | `/config/secrets/{env_name}` | `provider_config.store_secret` | Store one API-key secret under env-var name `{env_name}` in `~/.weaver/secrets.toml` (`0o600`). Body `{value}`. → `201` `{name, is_set: true}`; value never echoed. Invalid name / empty value → `422`. |
+| DELETE | `/config/secrets/{env_name}` | `provider_config.remove_secret` | Remove the secret. → `{name, is_set: false}`; unknown → `404`. |
+
+> Secrets are keyed by **env-var name** (e.g. `DEEPSEEK_API_KEY`), not by provider
+> — this is the existing secret-store abstraction (`core/secret_store`), shared
+> with the CLI `secrets` group and the Flask `/config` route. The provider config's
+> `api_key_env` field names which env var holds its key.
+
 ## FastAPI workspace API (Sprint 3 — `src/weaver/api/`)
 
 The FastAPI cockpit (`weaver serve-api`) exposes the translation workspace as JSON. Routers are thin adapters; all logic lives in `services/*` and writes go through `storage/*` + `transaction()`.

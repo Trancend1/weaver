@@ -142,6 +142,53 @@ class CreateNovelResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Provider / secret config (Stage 10C)
+# ---------------------------------------------------------------------------
+
+
+class ProviderConfigResponse(BaseModel):
+    """Redacted provider/model config. Never carries an API-key value."""
+
+    default_provider: str | None
+    default_model: str | None
+    project_name: str | None
+    provider_type: str | None
+    model: str | None
+    base_url: str | None
+    api_key_env: str | None
+    api_key_set: bool
+    secret_names: list[str]
+
+
+class ConfigUpdateRequest(BaseModel):
+    """Write provider/model config to ``project`` or ``global`` scope.
+
+    Carries no key value — only ``api_key_env`` (the env-var *name*). Project
+    scope requires ``project``.
+    """
+
+    scope: Literal["project", "global"] = "project"
+    project: str | None = None
+    provider_type: str | None = None
+    model: str | None = None
+    base_url: str | None = None
+    api_key_env: str | None = None
+
+
+class SecretUpdateRequest(BaseModel):
+    """Set one API-key secret. The value is stored, never echoed back."""
+
+    value: str
+
+
+class SecretResponse(BaseModel):
+    """Redacted secret state: a name and whether it is stored. No value."""
+
+    name: str
+    is_set: bool
+
+
+# ---------------------------------------------------------------------------
 # Translation workspace (Stage 3A — read only)
 # ---------------------------------------------------------------------------
 
