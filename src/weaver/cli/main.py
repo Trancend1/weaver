@@ -1137,13 +1137,60 @@ def _exit_with_error(error: WeaverError) -> NoReturn:
     raise typer.Exit(code=code) from error
 
 
+def _run_fastapi_cockpit(
+    *,
+    port: int,
+    books_dir: Path | None,
+    open_browser: bool,
+    reload: bool,
+) -> None:
+    """Launch the FastAPI cockpit on loopback (shared by `serve` and `serve-api`).
+
+    The app factory derives its project root from the current working directory
+    (``create_api_app`` defaults ``base_dir`` to cwd), so ``books_dir`` is applied
+    via ``chdir`` before Uvicorn imports the factory. Host is fixed to
+    ``127.0.0.1`` and is never user-configurable (security: ADR ``0017``).
+    """
+
+    try:
+        import uvicorn
+    except ImportError as exc:
+        _exit_with_error(
+            ConfigError(
+                "The FastAPI cockpit requires the optional `web` extra. "
+                "Likely cause: uvicorn is not installed. "
+                "Next command: run `pip install weaver[web]`."
+            )
+        )
+        raise AssertionError("unreachable") from exc  # _exit_with_error never returns
+
+    if books_dir is not None:
+        os.chdir(books_dir.resolve())
+
+    url = f"http://127.0.0.1:{port}"
+    console.print(f"Weaver cockpit (FastAPI UI) on {url} (Ctrl+C to stop)")
+    if open_browser:
+        import threading
+        import webbrowser
+
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    uvicorn.run(
+        "weaver.api.app:create_api_app",
+        host="127.0.0.1",
+        port=port,
+        factory=True,
+        reload=reload,
+    )
+
+
 @app.command(
     "serve",
     epilog=(
         "Examples:\n"
         "  weaver serve\n"
         "  weaver serve --port 9000 --books-dir ~/novels\n"
-        "  weaver serve --no-browser"
+        "  weaver serve --no-browser\n"
+        "Legacy Flask cockpit: weaver serve-flask"
     ),
 )
 def serve_command(
@@ -1162,24 +1209,24 @@ def serve_command(
         "--no-browser",
         help="Do not open a browser window on startup.",
     ),
+    reload: bool = typer.Option(
+        False,
+        "--reload",
+        help="Enable auto-reload (development only).",
+    ),
 ) -> None:
-    """Run the local web cockpit (binds 127.0.0.1 only)."""
+    """Run the local web cockpit (FastAPI UI; binds 127.0.0.1 only).
 
-    root = books_dir or Path.cwd()
-    try:
-        from weaver.web.app import run_server
-    except ImportError as exc:
-        _exit_with_error(
-            ConfigError(
-                "The web cockpit requires the optional `web` extra. "
-                "Likely cause: Flask is not installed. "
-                "Next command: run `pip install weaver[web]`."
-            )
-        )
-        raise AssertionError("unreachable") from exc  # _exit_with_error never returns
+    This is the default cockpit. The legacy Flask cockpit remains available as
+    `weaver serve-flask`.
+    """
 
-    console.print(f"Weaver cockpit on http://127.0.0.1:{port} (Ctrl+C to stop)")
-    run_server(books_dir=root, port=port, open_browser=not no_browser)
+    _run_fastapi_cockpit(
+        port=port,
+        books_dir=books_dir,
+        open_browser=not no_browser,
+        reload=reload,
+    )
 
 
 @app.command(
@@ -1198,28 +1245,62 @@ def serve_api_command(
         help="Enable auto-reload (development only).",
     ),
 ) -> None:
-    """Run the FastAPI cockpit (ASGI/Uvicorn). Runs parallel to `weaver serve` (Flask)."""
+    """Run the FastAPI cockpit headless (no browser). Same app as `weaver serve`."""
 
+    _run_fastapi_cockpit(
+        port=port,
+        books_dir=None,
+        open_browser=False,
+        reload=reload,
+    )
+
+
+@app.command(
+    "serve-flask",
+    epilog=(
+        "Examples:\n"
+        "  weaver serve-flask\n"
+        "  weaver serve-flask --port 9000 --books-dir ~/novels\n"
+        "  weaver serve-flask --no-browser"
+    ),
+)
+def serve_flask_command(
+    port: int = typer.Option(
+        8765,
+        "--port",
+        help="TCP port to bind on 127.0.0.1.",
+    ),
+    books_dir: Path | None = typer.Option(
+        None,
+        "--books-dir",
+        help="Root directory to discover projects under (default: current directory).",
+    ),
+    no_browser: bool = typer.Option(
+        False,
+        "--no-browser",
+        help="Do not open a browser window on startup.",
+    ),
+) -> None:
+    """Run the legacy Flask web cockpit (binds 127.0.0.1 only).
+
+    Legacy fallback. The default cockpit is now `weaver serve` (FastAPI UI).
+    """
+
+    root = books_dir or Path.cwd()
     try:
-        import uvicorn
+        from weaver.web.app import run_server
     except ImportError as exc:
         _exit_with_error(
             ConfigError(
-                "The FastAPI cockpit requires the optional `web` extra. "
-                "Likely cause: uvicorn is not installed. "
+                "The Flask web cockpit requires the optional `web` extra. "
+                "Likely cause: Flask is not installed. "
                 "Next command: run `pip install weaver[web]`."
             )
         )
         raise AssertionError("unreachable") from exc  # _exit_with_error never returns
 
-    console.print(f"Weaver FastAPI cockpit on http://127.0.0.1:{port} (Ctrl+C to stop)")
-    uvicorn.run(
-        "weaver.api.app:create_api_app",
-        host="127.0.0.1",
-        port=port,
-        factory=True,
-        reload=reload,
-    )
+    console.print(f"Weaver legacy Flask cockpit on http://127.0.0.1:{port} (Ctrl+C to stop)")
+    run_server(books_dir=root, port=port, open_browser=not no_browser)
 
 
 @secrets_app.command(
