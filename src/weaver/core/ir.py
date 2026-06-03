@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
+
+from weaver.core.segment import scope_id_to_volume
 
 BlockKind = Literal["paragraph", "heading", "quote", "other"]
 
@@ -75,3 +77,30 @@ class DocumentIR:
     metadata: DocumentMetadata
     assets: list[AssetIR]
     chapters: list[ChapterIR]
+
+
+def scope_document_to_volume(document: DocumentIR, volume_id: int) -> DocumentIR:
+    """Return a copy of ``document`` with chapter/segment ids scoped to a volume.
+
+    Reader ids are content/structure-derived and carry no volume component, so two
+    volumes built from identical source content would share ids. Applying
+    :func:`weaver.core.segment.scope_id_to_volume` to every chapter id and block id
+    (and each block's ``chapter_id`` back-reference) makes a freshly-read document
+    join 1:1 with the rows ``sync_document_segments`` persists for the same volume,
+    and keeps two volumes' chapters/segments distinct (Stage 11B-1.5).
+
+    Apply this once, immediately after reading a source that is being associated
+    with a known volume (init, import, translate re-read, EPUB export write-back).
+    ``sync_document_segments`` stores ids as-given, so a document must be scoped
+    **exactly once** — never pass an already-scoped document through scoping again.
+    """
+
+    scoped_chapters: list[ChapterIR] = []
+    for chapter in document.chapters:
+        chapter_id = scope_id_to_volume(volume_id, chapter.id)
+        scoped_blocks = [
+            replace(block, id=scope_id_to_volume(volume_id, block.id), chapter_id=chapter_id)
+            for block in chapter.blocks
+        ]
+        scoped_chapters.append(replace(chapter, id=chapter_id, blocks=scoped_blocks))
+    return replace(document, chapters=scoped_chapters)

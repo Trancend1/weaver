@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 from ebooklib import epub
 
+from weaver.core.ir import scope_document_to_volume
 from weaver.errors import ChapterNotFoundError, VolumeNotFoundError
 from weaver.readers.epub import read_epub
 from weaver.services.export_book import (
@@ -132,6 +133,9 @@ def _add_epub_volume(conn, *, project_id: int, translate_first_n: int) -> list[t
         source_path=str(FIXTURE_EPUB),
         source_format="epub",
     )
+    # Mirror production: ids are volume-scoped before sync so the export's
+    # re-read source joins 1:1 with stored rows (Stage 11B-1.5).
+    document = scope_document_to_volume(document, volume_id)
     sync_document_segments(conn, project_id=project_id, volume_id=volume_id, document=document)
 
     ordered = [

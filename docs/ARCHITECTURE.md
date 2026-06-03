@@ -42,8 +42,10 @@ src/weaver/
 
 ## Data / project flow
 
+**Chapter/segment identity is volume-scoped.** Reader ids (`core/segment.compute_chapter_id`/`compute_segment_id`, blake2b) carry no volume component, so a freshly-read `DocumentIR` is passed through `core/ir.scope_document_to_volume` **once** at every read→persist boundary (init, import, CLI translate re-read, legacy + volume-aware export write-back). This keeps two volumes of identical source content from colliding/re-parenting on the `chapters.id`/`segments.id` upsert, and lets a re-read source join 1:1 with persisted rows. `sync_document_segments` stores ids as-given (scope exactly once). No schema change — purely the id assigned at sync time.
+
 ```
-init:      EPUB → readers/epub → DocumentIR → storage (segments, glossary candidates) → .weaver/<name>/weaver.db
+init:      EPUB → readers/epub → DocumentIR → scope_document_to_volume → storage (segments, glossary candidates) → .weaver/<name>/weaver.db
 translate: pending segments → services/translation (context + glossary injection) → provider → storage (one segment = one txn)
 review:    glossary candidates → services/glossary_review → approved terms (injected into prompts)
 export:    storage → services/export_book → renderers/{epub | epub_synthesis | txt | html} → output/<target>/<per-volume>.<ext>   (legacy: services/export → markdown/single-epub)

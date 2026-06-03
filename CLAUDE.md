@@ -54,7 +54,7 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 | 8  | Export (EPUB priority, TXT, HTML; DOCX deferred) | 6/10 | 🟡 Medium | ✅ |
 | 9  | MVP stabilization (smoke CLI+web, regression, acceptance checklist, E2E baseline) | 7/10 | 🟡 Medium | ✅ |
 | 10 | Flask↔FastAPI parity audit + gap closure (10A audit → KEEP · 10B create/browse · 10C config/secret · 10D glossary-review · 10E re-audit). Functional parity complete; only UI gap remains. | 5/10 | 🟡 Medium | ✅ |
-| 11 | FastAPI UI functional parity (ADR `007`: Jinja2+HTMX, presentation-only, reuse Sprint 2–10 APIs) — 11A shell ✅ · 11B-1 create/import ✅ · 11B-1.5 import-collision fix ⏳ · 11B-2 workspace · 11B-3 translate/export · 11C glossary/character/TM/config. **Functional parity, not visual polish.** | 7/10 | 🟡 Medium | 🟡 |
+| 11 | FastAPI UI functional parity (ADR `007`: Jinja2+HTMX, presentation-only, reuse Sprint 2–10 APIs) — 11A shell ✅ · 11B-1 create/import ✅ · 11B-1.5 import-collision fix ✅ · 11B-2 workspace ⏳ · 11B-3 translate/export · 11C glossary/character/TM/config. **Functional parity, not visual polish.** | 7/10 | 🟡 Medium | 🟡 |
 | 12 | FastAPI UI parity audit + default-`serve` decision (gated on 11) | 4/10 | 🟡 Medium | ⬜ |
 | 13 | Flask decommission — only if 12 passes **and** explicitly approved | 5/10 | 🟡 Medium | ⬜ |
 
@@ -93,15 +93,16 @@ Focus: build the core JP→EN light-novel translator workflow, then reach FastAP
 - **Sprint 11 (active) — FastAPI UI functional parity:**
   - 11A shell ✅ (dashboard, project tree, nav, state primitives)
   - 11B-1 create/import + file browser ✅
-  - **11B-1.5 import-collision bugfix → current stage**
-  - 11B-2 workspace read/save/history · 11B-3 translate/retranslate + jobs + export · 11C glossary/character/TM/provider config — pending
+  - 11B-1.5 import-collision bugfix ✅ (chapter/segment ids now volume-scoped)
+  - **11B-2 workspace read/save/history → next stage**
+  - 11B-3 translate/retranslate + jobs + export · 11C glossary/character/TM/provider config — pending
 - **Sprints 12–13 ⬜** — UI parity audit + default-`serve` decision, then Flask decommission (only if approved).
 
 **Locked posture (ADR `004` · Gate 10E, 2026-06-03):** `serve` = Flask (legacy browser UI/fallback) · `serve-api` = FastAPI (MVP API + new UI). No Flask removal, no deprecation, no default-`serve` flip until the Sprint 12 UI parity audit passes **and** is explicitly approved.
 
-**Open issue (addressed in 11B-1.5):** duplicate-content volume import re-parents chapters because content-hash chapter IDs are not volume-scoped → the first volume drops to 0 chapters. Reproduces with pure services (no UI); distinct sources unaffected.
+**Note (legacy CLI):** `weaver translate` and the legacy `services/export.py` are **single-volume** (they re-read the project's init source) — multi-volume translate/export is the cockpit's job (batch + `export_book`). This is unchanged by 11B-1.5; legacy CLI translate never supported multi-volume.
 
-**Validation baseline (Gate 11B-1):** 641 tests / 4 skipped · pyright 0 · ruff + format clean · Flask 13 routes (`/`→200) · FastAPI 60 route objects · CLI 15 commands.
+**Validation baseline (Gate 11B-1.5):** 646 tests / 4 skipped · pyright 0 · ruff + format clean · Flask 13 routes (`/`→200) · FastAPI 60 route objects · CLI 15 commands.
 
 ### 2.4 Exit Criteria
 
@@ -154,6 +155,7 @@ One row per sprint/stage, chronological. Keep entries terse; deep detail lives i
 | Sprint 10E | Flask↔FastAPI parity **re-audit** (audit only — no code change, no removal). Flask 13 vs FastAPI 53 route objects; every Flask route maps 1:1+ to FastAPI (matrix in [docs/SPRINT10_PARITY_AUDIT.md](docs/SPRINT10_PARITY_AUDIT.md) §9); gaps #2/#3/#4 confirmed closed. **All functional parity complete — only the rendered web UI (gap #1) remains, a deliberate ADR-005 deferral.** Decommission risk: removing Flask now = 🔴 High (only browser cockpit); coupling 🟢 Low. **Gate 10E decision (maintainer, 2026-06-03): Option 1 — KEEP Flask as legacy UI/fallback.** Flask removal requires a FastAPI UI first, then another parity audit (Sprint 12). **Sprint 10 complete.** 622 tests green. |
 | Sprint 11A | FastAPI UI shell (ADR `007`: server-rendered Jinja2 + HTMX, no Node/build, no SPA; **no Flask removal/flip**). `api/templating.py` (`Jinja2Templates` + `/static` mount; no new dep — `jinja2` already core), vendored `api/static/htmx.min.js` (pinned 1.9.12, no CDN) + minimal `app.css`, templates `base/dashboard/project/not_found/error.html`, **presentation-only** `api/routers/ui.py` over `project_discovery`/`project_tree`/`global_config`. Routes: `GET /`→307 `/ui`, `GET /ui` (dashboard), `GET /ui/projects/{name}` (tree; unknown→404 HTML), `/static/*`. UI under `/ui`, `include_in_schema=False`; JSON API unchanged + unshadowed. State primitives loading/empty/error/404. No visual polish. 630 tests (+8), pyright 0, ruff + format clean; smokes FastAPI 56 route objs (incl. JP titles), Flask 13, CLI 15. |
 | Sprint 11B-1 | Core Workflow UI — create/import + file browser (Jinja2 + HTMX; **no Flask removal/flip**). New `services/source_intake.py` (`resolve_intake_source`, framework-agnostic); JSON `POST /projects/create` refactored onto it (behavior identical). UI routes (presentation-only, reuse services): `GET/POST /ui/new` (create → 303), `GET /ui/browse?dir=` (sandboxed fragment), `POST /ui/projects/{name}/import` (→ refreshed `#tree`; errors → `HX-Retarget:#import_error`). Templates `new.html` + `partials/{_tree,_browse,_import_error}.html`; project view gains import panel + browser. 641 tests (+11), pyright 0, ruff + format clean; full flow proven (browse→create→import→tree refresh). **Surfaced a pre-existing storage bug** (chapter re-parenting on duplicate-content import; chapter IDs not volume-scoped) — reproduces without UI, fixed in 11B-1.5. |
+| Sprint 11B-1.5 | Import volume-id collision fix (storage/services; **no UI/Flask/serve change**). Chapter/segment ids were content-derived (`compute_chapter_id`/`compute_segment_id`, blake2b) with no volume component, so importing a source whose content collided with an existing volume re-parented its chapters via the `ON CONFLICT(id)` upsert (first volume → 0 chapters). Fix: new `core.segment.scope_id_to_volume` + `core.ir.scope_document_to_volume`; the freshly-read `DocumentIR` is scoped **once** to its volume at every read→persist boundary (`initialize_project`, `import_volume`, CLI `translate_project` re-read, legacy `export.py` markdown/epub, volume-aware `export_book.py` EPUB write-back); `sync_document_segments` stores ids as-given (no double-scope). Re-syncing the same volume reproduces the same ids (idempotent); **no schema change / migration** (existing rows keep their ids). Duplicate import now keeps both volumes' chapters; ids disjoint across volumes. Note: legacy CLI translate/export stay single-volume (unchanged); multi-volume is the cockpit's job. 646 tests (+5 `test_import_volume_collision.py`; 1 export-test helper scoped to mirror production), pyright 0, ruff + format clean; UI repro now `[(2,6),(2,6)]`; Flask 13 / FastAPI 60 / CLI 15 intact. |
 
 ---
 
