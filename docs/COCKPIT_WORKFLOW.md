@@ -43,6 +43,137 @@ long jobs: routes_translate → web/job_manager (single background thread) → S
 ```
 HTMX provides liveness (progress, partial updates) without a JS build step.
 
+## FastAPI browser UI (Sprint 11 — `src/weaver/api/`, ADR `007`)
+
+`weaver serve-api` now serves a server-rendered browser UI **alongside** its JSON
+API. Stack: **Jinja2 + HTMX, no build, no SPA** (ADR `007`); HTMX is vendored at
+`api/static/htmx.min.js` (pinned 1.9.12, no CDN). The UI is **presentation only**
+— `routers/ui.py` is a thin adapter over the same services the JSON routers use
+(no business logic, no storage access). All HTML lives under **`/ui`**; `GET /`
+redirects there; the JSON API surface is unchanged and UI routes are excluded
+from the OpenAPI schema.
+
+`weaver serve` (Flask) remains the default/legacy cockpit — **no default flip,
+Flask untouched** (gated on the Sprint 12 UI parity audit).
+
+**Sprint 11A — shell (shipped):** dashboard/home (project list + global provider
+default), project view (Novel→Volume→Chapter tree), navigation, and the read-screen
+state primitives (loading/empty/error/404).
+
+**Sprint 11B-1 — create/import + browser (shipped):** new-project form (upload **or**
+browsed source + optional provider/template), sandboxed source browser (HTMX
+fragment), and volume import on the project view with **HTMX tree refresh** on
+success. UI create/import reuse the same services as the JSON endpoints via
+`services/source_intake.resolve_intake_source` (no logic in the UI layer).
+
+**Sprint 11B-2 — workspace read/save/history (shipped):** the project tree links each
+chapter to a two-column JP/EN workspace; per-segment save (status → `manual`) swaps
+the refreshed segment row via HTMX; per-segment translation history loads on demand.
+Reuses `services/chapter_workspace`, `services/workspace_edit.save_segment_translation`,
+`services/segment_history` (no logic in the UI).
+
+**Sprint 11B-3 — translate/retranslate + jobs + export (shipped):** the workspace has a
+**Translate** button and a **Retranslate** mode select (`skip_existing` ·
+`retranslate_non_manual` · `force_selected`, the last only when explicitly chosen); the
+project page has an **Export** control (EPUB/TXT/HTML). Both start a background job via the
+same JSON-router start helpers (`translate._start_job`, `export._start_export`) over the
+shared `JobRegistry` + services — and render a **self-polling HTMX panel** (`hx-trigger="load
+delay:1s"`) that shows live progress, a **Cancel** button, and the terminal result (translate
+counts / export artifact paths). Terminal panels drop the poll trigger.
+
+**Sprint 11C — consistency/admin (shipped, `routers/ui_admin.py`):** glossary term CRUD +
+candidate review (approve/edit/reject, conflicts, coverage diff), character DB CRUD,
+translation-memory read/delete, and provider/model + secret config. Each mutation re-renders
+its HTMX fragment. Reuses `glossary_terms`, `glossary_review`, `glossary_diff`, `characters`,
+`translation_memory`, `provider_config` (no logic in UI). **API-key values are accepted only by
+the secret-set form and are never rendered back** (presence/names only). Provider/secret config
+lives at `/ui/config` (global + per-project scope); project pages link to glossary/characters/memory.
+
+| Method | Path | Renders |
+|---|---|---|
+| GET/POST | `/ui/projects/{name}/glossary` · `…/glossary/terms[/{source}/update\|delete]` | glossary page · `_glossary_terms` fragment |
+| GET/POST | `…/glossary/candidates[/{id}/{approve\|edit\|reject}]` · `…/glossary/diff` | `_glossary_candidates` · `_glossary_diff` fragments |
+| GET/POST | `/ui/projects/{name}/characters[/{jp_name}/update\|delete]` | characters page · `_characters` fragment |
+| GET/POST | `/ui/projects/{name}/memory` · `…/memory/{source_hash}/delete` | memory page · `_memory` fragment |
+| GET/POST | `/ui/config` · `/ui/config/secrets[/{env_name}/delete]` | config page · `_config_form` / `_secrets` fragments (no key value) |
+
+| Method | Path | Renders | Notes |
+|---|---|---|---|
+| GET | `/` | → 307 `/ui` | Redirect to the UI home. |
+| GET | `/ui` | `dashboard.html` | Project list + global provider/model default; empty state + "New novel" link. |
+| GET | `/ui/projects/{name}` | `project.html` | Tree (`partials/_tree.html`, chapters link to the workspace) + import panel + browser; unknown → 404 HTML, error → 422 HTML. |
+| GET | `/ui/projects/{name}/chapters/{chapter_id}` | `workspace.html` | Two-column JP/EN workspace (`partials/_segment.html` per segment); unknown chapter → 404 HTML. |
+| POST | `/ui/projects/{name}/chapters/{chapter_id}/segments/{segment_id}` | `partials/_segment.html` | Save translation (status → `manual`); returns the refreshed segment row (HTMX `outerHTML`). Empty text → row re-rendered with an error; unknown → 404. |
+| GET | `/ui/projects/{name}/chapters/{chapter_id}/segments/{segment_id}/history` | `partials/_history.html` | Full attempt history for a segment (HTMX fragment). |
+| POST | `/ui/projects/{name}/chapters/{chapter_id}/translate` | `partials/_job.html` | Start a translate job (skip already-translated/manual); returns a self-polling job panel. |
+| POST | `/ui/projects/{name}/chapters/{chapter_id}/retranslate` | `partials/_job.html` | Start a retranslate job under `mode` (skip_existing / retranslate_non_manual / force_selected). |
+| GET | `/ui/projects/{name}/jobs/{job_id}` | `partials/_job.html` | Poll translate-job progress (self-refresh until terminal). |
+| POST | `/ui/projects/{name}/jobs/{job_id}/cancel` | `partials/_job.html` | Cooperative cancel; renders current state. |
+| POST | `/ui/projects/{name}/export` | `partials/_export_job.html` | Start a novel-scope export job for `target` ∈ {epub,txt,html}. |
+| GET | `/ui/projects/{name}/export/jobs/{job_id}` | `partials/_export_job.html` | Poll export-job progress; terminal shows per-volume artifact paths. |
+| POST | `/ui/projects/{name}/export/jobs/{job_id}/cancel` | `partials/_export_job.html` | Cooperative cancel; renders current state. |
+| GET | `/ui/new` | `new.html` | Create form + source browser. |
+| POST | `/ui/new` | → 303 to project view | Create from upload/browsed source (reuses `resolve_intake_source` + `initialize_project`); duplicate/no-source/bad-source → form re-render with error (400). |
+| GET | `/ui/browse?dir=` | `partials/_browse.html` | Sandboxed listing fragment (dirs navigate via HTMX; files set the hidden `source_path`). Escape/missing → inline error. |
+| POST | `/ui/projects/{name}/import` | `partials/_tree.html` | Import a volume (reuses `resolve_intake_source` + `import_volume`); returns the refreshed `#tree`. Errors → `partials/_import_error.html` with `HX-Retarget: #import_error` so the tree is preserved. |
+| GET | `/static/*` | vendored assets | `htmx.min.js` (1.9.12), `app.css`. |
+
+## FastAPI project management API (Sprint 2C + 10B — `src/weaver/api/`)
+
+Project discovery, creation, import, and a sandboxed source browser. The browser
+and create endpoints (Sprint 10B) close the FastAPI parity gap for *creating /
+selecting* projects without the Flask UI. All paths are sandboxed to the cockpit
+`base_dir` (ADR `0017`) — `..` traversal and absolute paths are rejected.
+
+| Method | Path | Service | Notes |
+|---|---|---|---|
+| GET | `/projects` | `discover_projects` | List discovered projects + summaries. |
+| GET | `/projects/{name}/tree` | `project_tree` | Novel → Volume → Chapter tree. |
+| GET | `/projects/browse?dir=<rel>` | `source_browser.list_directory` | Sandboxed listing: sub-dirs first, then importable sources (`.epub`/`.txt`/`.html`/`.htm`). `dir` is relative to `base_dir`; `""` is root. Escape/missing → `422`. |
+| POST | `/projects/create` | `initialize_project` (+ `source_browser`) | Create a novel from an uploaded `file` **or** a browsed `source_path` (multipart; upload preferred). Optional `provider`/`template`. Name derives from the source stem. → `201` `{project_name, chapter_count, segment_count, glossary_candidate_count}`. No source → `422`; duplicate name → `409`; bad source/provider → `422`. **Sourceless creation is unsupported** (the source defines the project name + initial volume). |
+| POST | `/projects/{name}/import` | `import_volume` | Import another source as a new volume (upload only). → `201`. |
+
+## FastAPI glossary candidate-review API (Sprint 10D — `src/weaver/api/`)
+
+Exposes the existing candidate-review flow (the same one the CLI `glossary review`
+and Flask `/glossary` use) over JSON. Thin adapter over `services/glossary_review`
++ `services/glossary_diff`. **Approve/edit write into the project `glossary_terms`
+table** — the same rows direct glossary CRUD reads and `build_context` injects.
+There is **no second glossary store**; direct CRUD (`routers/glossary.py`) is
+unchanged. The candidate routes (`…/glossary/candidates/…`, `…/glossary/conflicts`,
+`…/glossary/diff`) do not shadow the CRUD term routes (`…/glossary`,
+`…/glossary/{source}`).
+
+| Method | Path | Service | Notes |
+|---|---|---|---|
+| GET | `/projects/{name}/glossary/candidates?offset=&limit=&find=` | `glossary_review.list_pending` | Page of pending candidates + queue `counts` (`pending`/`approved`/`rejected`) + `total_pending`. `find` filters by source substring. |
+| POST | `/projects/{name}/glossary/candidates/{candidate_id}/approve` | `act_on_candidate` | Approve → writes the term into `glossary_terms`. → `{candidate_id, action, counts}`. Unknown id → `404`. |
+| POST | `/projects/{name}/glossary/candidates/{candidate_id}/edit` | `act_on_candidate` | Body `{target, notes?}`: edit then approve. Empty target → `422`; unknown id → `404`. |
+| POST | `/projects/{name}/glossary/candidates/{candidate_id}/reject` | `act_on_candidate` | Reject (no term written). Unknown id → `404`. |
+| GET | `/projects/{name}/glossary/conflicts` | `list_project_glossary_conflicts` | Approved-term conflicts: `[{source, targets[]}]` (sources mapped to >1 target). |
+| GET | `/projects/{name}/glossary/diff?a=&b=` | `glossary_diff` | Approved-term coverage diff between chapters `a` and `b` (1-indexed): `only_in_a`/`only_in_b`/`in_both`. Out-of-range/missing → `422`. |
+
+## FastAPI provider/secret config API (Sprint 10C — `src/weaver/api/`)
+
+Persists provider/model config and API-key secrets from the API (closes the
+Flask `/config` parity gap). Thin adapter over `services/provider_config.py`,
+which reuses `services/config_writer` (provider/model write) + `core/secret_store`
+(secrets). **API-key values are accepted only by `POST /config/secrets/{env_name}`
+and are never returned by any endpoint** — responses carry key *presence* (a bool)
+and stored secret *names* only (CLAUDE.md §4.2, ADR `0017`/`0020`).
+
+| Method | Path | Service | Notes |
+|---|---|---|---|
+| GET | `/config` | `provider_config.read_config` | Redacted view: global defaults + stored secret **names**. `?project=<name>` also returns that project's `[provider]` block (`provider_type`/`model`/`base_url`/`api_key_env`) + `api_key_set` bool. Unknown project → `404`. **No key value.** |
+| PATCH | `/config` | `provider_config.write_config` | Persist provider/model. Body: `scope` (`project`\|`global`), `project` (required if `scope=project`), `provider_type`/`model`/`base_url`/`api_key_env`. **No key value accepted here** (only the env-var *name*). Global scope writes `[defaults]` (provider+model only). Unknown provider/scope, missing project → `422`. |
+| POST | `/config/secrets/{env_name}` | `provider_config.store_secret` | Store one API-key secret under env-var name `{env_name}` in `~/.weaver/secrets.toml` (`0o600`). Body `{value}`. → `201` `{name, is_set: true}`; value never echoed. Invalid name / empty value → `422`. |
+| DELETE | `/config/secrets/{env_name}` | `provider_config.remove_secret` | Remove the secret. → `{name, is_set: false}`; unknown → `404`. |
+
+> Secrets are keyed by **env-var name** (e.g. `DEEPSEEK_API_KEY`), not by provider
+> — this is the existing secret-store abstraction (`core/secret_store`), shared
+> with the CLI `secrets` group and the Flask `/config` route. The provider config's
+> `api_key_env` field names which env var holds its key.
+
 ## FastAPI workspace API (Sprint 3 — `src/weaver/api/`)
 
 The FastAPI cockpit (`weaver serve-api`) exposes the translation workspace as JSON. Routers are thin adapters; all logic lives in `services/*` and writes go through `storage/*` + `transaction()`.

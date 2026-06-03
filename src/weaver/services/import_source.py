@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from weaver.core.config import load_project_config
+from weaver.core.ir import scope_document_to_volume
 from weaver.errors import WeaverError
 from weaver.readers import detect_format, read_source
 from weaver.services.glossary import extract_and_store_project_glossary
@@ -80,6 +81,7 @@ def import_volume(
                 source_path=str(source_path),
                 source_format=source_format,
             )
+            document = scope_document_to_volume(document, volume_id)
             sync_document_segments(
                 connection,
                 project_id=project_id,

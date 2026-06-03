@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Weaver{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Projects <a class="action" href="/ui/new">+ New novel</a></h1>
+  <p class="meta">
+    Books dir: <code>{{ books_dir }}</code>
+    · Default provider: <code>{{ default_provider }}</code>
+    · Default model: <code>{{ default_model }}</code>
+  </p>
+
+  {% if projects %}
+  <table class="grid">
+    <thead>
+      <tr>
+        <th>Project</th><th>Provider</th><th>Model</th>
+        <th class="num">Volumes</th><th class="num">Chapters</th><th class="num">Segments</th>
+        <th class="num">Translated</th><th class="num">Pending</th><th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in projects %}
+      <tr>
+        <td><a href="/ui/projects/{{ p.name }}">{{ p.name }}</a></td>
+        <td>{{ p.provider or "—" }}</td>
+        <td>{{ p.model or "—" }}</td>
+        <td class="num">{{ p.volume_count }}</td>
+        <td class="num">{{ p.chapter_count }}</td>
+        <td class="num">{{ p.segment_count }}</td>
+        <td class="num">{{ p.translated_count }}</td>
+        <td class="num">{{ p.pending_count }}</td>
+        <td>
+          {% if p.error %}<span class="badge bad" title="{{ p.error }}">error</span>
+          {% else %}<span class="badge ok">ready</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    <p>No projects found under <code>{{ books_dir }}</code>.</p>
+    <p class="hint">Create one with the CLI (<code>weaver init &lt;source&gt;</code>) — the create/import UI lands in Sprint 11B.</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

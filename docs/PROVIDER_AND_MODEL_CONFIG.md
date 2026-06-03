@@ -54,6 +54,8 @@ weaver secrets rm MY_API_KEY
 
 At startup `apply_secrets_to_env()` loads the store and sets any key **not already present** in the environment; providers read `os.environ` unchanged. Override the store path with `WEAVER_SECRETS_PATH` (tests/alt setups). In the cockpit, the provider form's key field writes only to the secret store.
 
+Config can also be managed over the FastAPI cockpit: `GET/PATCH /config` (provider/model, project + global scope) and `POST/DELETE /config/secrets/{env_name}` (store keyed by env-var name). Key **values** are accepted only by the secrets `POST` and are **never returned** by any endpoint — responses carry key *presence* and stored *names* only. See [COCKPIT_WORKFLOW.md](COCKPIT_WORKFLOW.md) → "FastAPI provider/secret config API". CLI `secrets` and Flask `/config` are unchanged.
+
 ## Adding a provider type
 
 1. Add an adapter in `providers/` implementing the provider interface (see `base.py` / `providers/deepseek.py` as a model; OpenAI-compatible ones can reuse the `custom` engine).

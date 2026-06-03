@@ -1,0 +1,126 @@
+/* Weaver FastAPI cockpit — functional-parity UI (Sprint 11A).
+   Minimal layout + semantic status color only. Visual polish is deferred
+   (ADR 005). No framework, no build. */
+
+:root {
+  --fg: #1c1f24;
+  --muted: #5c6470;
+  --line: #d8dde4;
+  --bg: #ffffff;
+  --panel: #f6f8fa;
+  --ok: #1a7f37;
+  --bad: #b42318;
+  --link: #0b5cad;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 700; text-decoration: none; color: var(--fg); }
+.topnav a { margin-right: 0.75rem; color: var(--link); text-decoration: none; }
+.api-hint { margin-left: auto; color: var(--muted); font-size: 0.85rem; }
+
+.content { padding: 1.25rem; max-width: 1100px; margin: 0 auto; }
+.footer { padding: 0.75rem 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.8rem; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 1rem 1.25rem; }
+h1 { font-size: 1.3rem; margin: 0.2rem 0 0.6rem; }
+.meta { color: var(--muted); font-size: 0.85rem; }
+.crumbs { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.5rem; }
+.crumbs a { color: var(--link); text-decoration: none; }
+code { background: #eceff3; padding: 0.05rem 0.3rem; border-radius: 3px; }
+
+.grid { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+.grid th, .grid td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--line); }
+.grid th { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; }
+.grid td a { color: var(--link); text-decoration: none; }
+.num { text-align: right; }
+
+.badge { font-size: 0.75rem; padding: 0.1rem 0.45rem; border-radius: 10px; border: 1px solid var(--line); }
+.badge.ok { color: var(--ok); border-color: var(--ok); }
+.badge.bad { color: var(--bad); border-color: var(--bad); }
+
+.tree { list-style: none; padding-left: 0; }
+.vol { border: 1px solid var(--line); border-radius: 5px; margin-bottom: 0.6rem; background: var(--bg); }
+.vol-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--line); }
+.vol-title { font-weight: 600; }
+.chapters { list-style: none; margin: 0; padding: 0.3rem 0.75rem; }
+.chapter { display: flex; justify-content: space-between; padding: 0.2rem 0; border-bottom: 1px dashed var(--line); }
+.chapter:last-child { border-bottom: none; }
+
+.empty { padding: 1rem; color: var(--muted); }
+.empty .hint, .hint { font-size: 0.85rem; }
+.error { color: var(--bad); }
+.error a { color: var(--link); }
+
+/* Forms + source browser (Stage 11B-1) — layout only, no polish. */
+.stack { display: flex; flex-direction: column; gap: 0.55rem; align-items: flex-start; margin: 0.5rem 0 1rem; }
+.stack label { display: flex; gap: 0.4rem; align-items: center; }
+.stack input[type="text"], .stack input:not([type]) { padding: 0.2rem 0.4rem; border: 1px solid var(--line); border-radius: 4px; }
+.stack button, button.use, .action { cursor: pointer; }
+button { padding: 0.3rem 0.7rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); }
+button:hover { border-color: var(--link); }
+.action { margin-left: 0.6rem; font-size: 0.8rem; color: var(--link); text-decoration: none; }
+.field { font-size: 0.9rem; }
+
+.browser { border: 1px solid var(--line); border-radius: 5px; background: var(--bg); padding: 0.5rem 0.75rem; max-width: 640px; }
+.browse-path { display: flex; gap: 0.75rem; align-items: baseline; border-bottom: 1px solid var(--line); padding-bottom: 0.3rem; margin-bottom: 0.3rem; }
+.browse-path .up { color: var(--link); text-decoration: none; cursor: pointer; }
+.browse-list { list-style: none; margin: 0; padding: 0; }
+.browse-entry { display: flex; align-items: center; gap: 0.5rem; padding: 0.15rem 0; }
+.browse-entry .dir { color: var(--link); text-decoration: none; cursor: pointer; }
+.browse-entry .file { flex: 1; }
+.browse-entry .use { font-size: 0.75rem; padding: 0.1rem 0.45rem; }
+
+/* Workspace two-column JP/EN view (Stage 11B-2) — layout only. */
+.ws-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem 0.8rem; margin-top: 0.6rem; }
+.ws-head { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 0.2rem; }
+.ws-seg { display: contents; }
+.ws-seg .ws-src, .ws-seg .ws-tx { border-bottom: 1px dashed var(--line); padding: 0.45rem 0; }
+.seg-kind { font-size: 0.7rem; color: var(--muted); }
+.seg-source { margin: 0.1rem 0 0; white-space: pre-wrap; }
+.seg-input { width: 100%; font: inherit; padding: 0.3rem; border: 1px solid var(--line); border-radius: 4px; resize: vertical; }
+.seg-bar { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; flex-wrap: wrap; }
+.saved-note { color: var(--ok); font-size: 0.8rem; }
+.link-btn { background: none; border: none; color: var(--link); cursor: pointer; padding: 0; font: inherit; }
+.seg-history { grid-column: 2; }
+.history-tbl { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0.3rem 0; }
+.history-tbl th, .history-tbl td { text-align: left; padding: 0.2rem 0.4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.history-tbl tr.current { background: #eef6ee; }
+
+/* Jobs: translate/export controls + progress panels (Stage 11B-3) — layout only. */
+.job-controls { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; margin: 0.6rem 0; }
+.inline-form { display: flex; gap: 0.4rem; align-items: center; }
+.inline-form select { padding: 0.2rem; border: 1px solid var(--line); border-radius: 4px; }
+.job-panel { border: 1px solid var(--line); border-radius: 5px; padding: 0.5rem 0.75rem; margin-top: 0.5rem; background: var(--bg); }
+.job-panel:empty { display: none; border: none; padding: 0; }
+.job-head { display: flex; gap: 0.6rem; align-items: center; margin-bottom: 0.3rem; }
+.job-panel progress { width: 220px; max-width: 100%; vertical-align: middle; }
+.artifacts { list-style: none; padding: 0; margin: 0.3rem 0; }
+.artifacts li { padding: 0.15rem 0; }
+
+/* Admin (Stage 11C): glossary/characters/memory/config — layout only. */
+.subnav { display: flex; gap: 0.8rem; margin: 0.3rem 0 0.6rem; }
+.subnav a { color: var(--link); text-decoration: none; font-size: 0.9rem; }
+.row-form { display: flex; gap: 0.3rem; flex-wrap: wrap; align-items: center; }
+.row-form input { padding: 0.15rem 0.3rem; border: 1px solid var(--line); border-radius: 4px; }
+.pager { display: flex; gap: 0.8rem; margin-top: 0.4rem; }
+.diff-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem; }
+.diff-cols ul { list-style: none; padding-left: 0; margin: 0.2rem 0; }
+
+/* HTMX loading state (used from 11B onward; styled now so the primitive exists). */
+.htmx-indicator { opacity: 0; transition: opacity 120ms ease-in; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }

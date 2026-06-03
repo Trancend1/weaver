@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from weaver.core.config import load_project_config
-from weaver.core.ir import BlockIR, ChapterIR
+from weaver.core.ir import BlockIR, ChapterIR, scope_document_to_volume
 from weaver.errors import ConfigError
 from weaver.readers.epub import read_epub
 from weaver.renderers.epub import EpubRenderResult, render_translated_epub
@@ -48,6 +48,7 @@ def export_markdown_project(
 
     document = read_epub(source_path)
     with closing(connect_readonly_database(db_path)) as connection:
+        document = scope_document_to_volume(document, _source_volume_id(connection, source_path))
         states = _load_segment_states(connection)
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -94,6 +95,7 @@ def export_epub_project(project_toml: Path, *, cwd: Path | None = None) -> EpubR
 
     document = read_epub(source_path)
     with closing(connect_readonly_database(db_path)) as connection:
+        document = scope_document_to_volume(document, _source_volume_id(connection, source_path))
         translations = _load_publishable_translations(connection)
 
     return render_translated_epub(
@@ -101,6 +103,30 @@ def export_epub_project(project_toml: Path, *, cwd: Path | None = None) -> EpubR
         output_path=output_path,
         document=document,
         translations_by_segment_id=translations,
+    )
+
+
+def _source_volume_id(connection: sqlite3.Connection, source_path: Path) -> int:
+    """Resolve the volume id for the legacy single-project export source.
+
+    The legacy exporter re-reads the project's ``source_file`` and joins by
+    segment id; ids are volume-scoped at persist time, so the re-read document
+    must be scoped to the same volume. Match by stored source path, falling back
+    to the first volume (single-source projects have exactly one).
+    """
+
+    rows = connection.execute(
+        "SELECT id, source_path FROM volumes ORDER BY volume_order, id"
+    ).fetchall()
+    if not rows:
+        raise ConfigError(
+            "Project has no volume to export. "
+            "Likely cause: database predates the volume model and was not migrated. "
+            "Next command: run `weaver inspect <project.toml>` to migrate, then retry."
+        )
+    target = str(source_path)
+    return next(
+        (int(row["id"]) for row in rows if row["source_path"] == target), int(rows[0]["id"])
     )
 
 

@@ -1,0 +1,31 @@
+<div class="browser">
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% else %}
+  <div class="browse-path">
+    <span class="meta">/{{ listing.rel_dir }}</span>
+    {% if listing.parent is not none %}
+    <a class="up" hx-get="/ui/browse?dir={{ listing.parent }}" hx-target="#browser" hx-swap="innerHTML">↑ up</a>
+    {% endif %}
+  </div>
+  {% if listing.entries %}
+  <ul class="browse-list">
+    {% for e in listing.entries %}
+    <li class="browse-entry">
+      {% if e.kind == "dir" %}
+      <a class="dir" hx-get="/ui/browse?dir={{ e.rel_path }}" hx-target="#browser" hx-swap="innerHTML">📁 {{ e.name }}/</a>
+      {% else %}
+      <span class="file">📄 {{ e.name }} <span class="meta">({{ e.kind }})</span></span>
+      <button type="button" class="use"
+        hx-on:click='document.getElementById("source_path").value = {{ e.rel_path|tojson }}; document.getElementById("selected_source").textContent = {{ e.name|tojson }};'>
+        use
+      </button>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty hint">No sub-folders or source files (.epub/.txt/.html) here.</p>
+  {% endif %}
+  {% endif %}
+</div>

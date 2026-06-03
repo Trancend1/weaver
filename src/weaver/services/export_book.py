@@ -36,6 +36,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+from weaver.core.ir import scope_document_to_volume
 from weaver.errors import ChapterNotFoundError, ExportError, VolumeNotFoundError
 from weaver.readers import read_epub
 from weaver.renderers.epub import render_translated_epub
@@ -448,7 +449,9 @@ def _render_volume(
 
     if target == "epub":
         if plan.source_format == "epub":
-            document = read_epub(plan.source_path)
+            # Scope the re-read source ids to this volume so block ids match the
+            # volume-scoped stored segment ids in `publishable` (Stage 11B-1.5).
+            document = scope_document_to_volume(read_epub(plan.source_path), plan.volume_id)
             render_translated_epub(
                 source_epub_path=plan.source_path,
                 output_path=plan.output_path,

@@ -60,6 +60,8 @@ def sync_document_segments(
         None.
     """
 
+    # Ids are scoped to the volume by the caller (``scope_document_to_volume``)
+    # before sync, so identical content across volumes does not collide here.
     for chapter in document.chapters:
         connection.execute(
             """

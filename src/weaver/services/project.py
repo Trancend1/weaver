@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from weaver.core.config import load_project_config
+from weaver.core.ir import scope_document_to_volume
 from weaver.core.templates import get_template
 from weaver.errors import ConfigError, ProviderError, WeaverError
 from weaver.providers import ProviderStatus, build_provider
@@ -161,7 +162,7 @@ def initialize_project(
                 connection,
                 project_id=project_id,
                 volume_id=volume_id,
-                document=document,
+                document=scope_document_to_volume(document, volume_id),
             )
             glossary_result = extract_and_store_project_glossary(
                 connection=connection,

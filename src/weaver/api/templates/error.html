@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Error · Weaver{% endblock %}
+{% block content %}
+<section class="panel">
+  <p class="crumbs"><a href="/ui">Dashboard</a> / <span>error</span></p>
+  <div class="error">
+    <h1>Something went wrong</h1>
+    <p>{{ message }}</p>
+    <p><a href="/ui">← Back to dashboard</a></p>
+  </div>
+</section>
+{% endblock %}

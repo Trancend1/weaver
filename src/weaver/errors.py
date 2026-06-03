@@ -61,6 +61,14 @@ class TranslationMemoryNotFoundError(WeaverError):
     """Requested translation-memory entry (by source hash) does not exist."""
 
 
+class SecretNotFoundError(WeaverError):
+    """Requested secret (by env-var name) is not in the local secret store."""
+
+
+class GlossaryCandidateNotFoundError(WeaverError):
+    """Requested glossary candidate id does not exist (or was already actioned)."""
+
+
 class ParserError(WeaverError):
     """Provider JSON output could not be parsed even after repair."""
 

@@ -1,0 +1,54 @@
+<div id="glossary-candidates">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <p class="meta">
+    pending {{ page.counts.pending }} · approved {{ page.counts.approved }} · rejected {{ page.counts.rejected }}
+    ({{ page.total_pending }} matching)
+  </p>
+  {% if page.items %}
+  <table class="grid">
+    <thead><tr><th>Source</th><th class="num">Freq</th><th>Approve as</th><th></th></tr></thead>
+    <tbody>
+      {% for c in page.items %}
+      <tr>
+        <td>{{ c.source }}</td>
+        <td class="num">{{ c.frequency }}</td>
+        <td>
+          <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/edit"
+                hx-target="#glossary-candidates" hx-swap="outerHTML">
+            <input type="hidden" name="offset" value="{{ page.offset }}">
+            <input name="target" value="{{ c.target or '' }}" placeholder="target (EN)">
+            <button type="submit">Edit + approve</button>
+          </form>
+        </td>
+        <td>
+          <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/approve"
+                hx-target="#glossary-candidates" hx-swap="outerHTML" style="display:inline">
+            <input type="hidden" name="offset" value="{{ page.offset }}">
+            <button type="submit">Approve</button>
+          </form>
+          <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/reject"
+                hx-target="#glossary-candidates" hx-swap="outerHTML" style="display:inline">
+            <input type="hidden" name="offset" value="{{ page.offset }}">
+            <button type="submit">Reject</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="pager">
+    {% if prev_offset is not none %}
+    <button type="button" class="link-btn"
+            hx-get="/ui/projects/{{ name }}/glossary/candidates?offset={{ prev_offset }}"
+            hx-target="#glossary-candidates" hx-swap="outerHTML">← prev</button>
+    {% endif %}
+    {% if next_offset is not none %}
+    <button type="button" class="link-btn"
+            hx-get="/ui/projects/{{ name }}/glossary/candidates?offset={{ next_offset }}"
+            hx-target="#glossary-candidates" hx-swap="outerHTML">next →</button>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="empty hint">No pending candidates.</p>
+  {% endif %}
+</div>

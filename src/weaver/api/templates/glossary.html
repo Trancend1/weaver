@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Glossary · {{ name }} · Weaver{% endblock %}
+{% block content %}
+<section class="panel">
+  <p class="crumbs"><a href="/ui">Dashboard</a> / <a href="/ui/projects/{{ name }}">{{ name }}</a> / <span>glossary</span></p>
+  <h1>Glossary — {{ name }}</h1>
+
+  <h2>Approved terms</h2>
+  {% include "partials/_glossary_terms.html" %}
+</section>
+
+<section class="panel">
+  <h2>Candidate review</h2>
+  {% include "partials/_glossary_candidates.html" %}
+</section>
+
+<section class="panel">
+  <h2>Conflicts</h2>
+  {% if conflicts %}
+  <ul>
+    {% for source, targets in conflicts %}
+    <li><code>{{ source }}</code> → {{ targets | join(", ") }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty hint">No approved-term conflicts.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Coverage diff</h2>
+  <form class="inline-form" hx-get="/ui/projects/{{ name }}/glossary/diff"
+        hx-target="#glossary-diff-result" hx-swap="outerHTML">
+    <label>Chapter A <input type="number" name="a" min="1" value="1"></label>
+    <label>Chapter B <input type="number" name="b" min="1" value="2"></label>
+    <button type="submit">Compare</button>
+  </form>
+  <div id="glossary-diff-result"></div>
+</section>
+{% endblock %}

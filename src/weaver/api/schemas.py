@@ -112,6 +112,157 @@ class ImportVolumeResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Create novel + file browser (Stage 10B)
+# ---------------------------------------------------------------------------
+
+
+class BrowseEntryResponse(BaseModel):
+    """One sandboxed listing item: a sub-directory or importable source file."""
+
+    name: str
+    kind: str  # "dir" | "epub" | "txt" | "html"
+    rel_path: str
+
+
+class BrowseListingResponse(BaseModel):
+    """A sandboxed directory listing relative to the cockpit base dir."""
+
+    rel_dir: str
+    parent: str | None
+    entries: list[BrowseEntryResponse]
+
+
+class CreateNovelResponse(BaseModel):
+    """Result of creating a new novel project from a source file."""
+
+    project_name: str
+    chapter_count: int
+    segment_count: int
+    glossary_candidate_count: int
+
+
+# ---------------------------------------------------------------------------
+# Provider / secret config (Stage 10C)
+# ---------------------------------------------------------------------------
+
+
+class ProviderConfigResponse(BaseModel):
+    """Redacted provider/model config. Never carries an API-key value."""
+
+    default_provider: str | None
+    default_model: str | None
+    project_name: str | None
+    provider_type: str | None
+    model: str | None
+    base_url: str | None
+    api_key_env: str | None
+    api_key_set: bool
+    secret_names: list[str]
+
+
+class ConfigUpdateRequest(BaseModel):
+    """Write provider/model config to ``project`` or ``global`` scope.
+
+    Carries no key value — only ``api_key_env`` (the env-var *name*). Project
+    scope requires ``project``.
+    """
+
+    scope: Literal["project", "global"] = "project"
+    project: str | None = None
+    provider_type: str | None = None
+    model: str | None = None
+    base_url: str | None = None
+    api_key_env: str | None = None
+
+
+class SecretUpdateRequest(BaseModel):
+    """Set one API-key secret. The value is stored, never echoed back."""
+
+    value: str
+
+
+class SecretResponse(BaseModel):
+    """Redacted secret state: a name and whether it is stored. No value."""
+
+    name: str
+    is_set: bool
+
+
+# ---------------------------------------------------------------------------
+# Glossary candidate review (Stage 10D)
+# ---------------------------------------------------------------------------
+
+
+class GlossaryCandidateResponse(BaseModel):
+    """One pending/actioned glossary candidate row."""
+
+    id: int
+    source: str
+    target: str | None
+    category: str | None
+    notes: str | None
+    status: str
+    frequency: int
+
+
+class GlossaryReviewCountsResponse(BaseModel):
+    """Queue totals for the candidate review surface."""
+
+    pending: int
+    approved: int
+    rejected: int
+
+
+class GlossaryCandidateListResponse(BaseModel):
+    """A page of pending candidates plus queue counts."""
+
+    candidates: list[GlossaryCandidateResponse]
+    total_pending: int
+    offset: int
+    limit: int
+    find: str | None
+    counts: GlossaryReviewCountsResponse
+
+
+class GlossaryCandidateEditRequest(BaseModel):
+    """Edit a candidate's target (and optional notes) before approving."""
+
+    target: str
+    notes: str | None = None
+
+
+class GlossaryCandidateActionResponse(BaseModel):
+    """Result of approve/edit/reject: the candidate id, action, refreshed counts."""
+
+    candidate_id: int
+    action: str
+    counts: GlossaryReviewCountsResponse
+
+
+class GlossaryConflictResponse(BaseModel):
+    """One approved-term conflict: a source mapped to multiple targets."""
+
+    source: str
+    targets: list[str]
+
+
+class GlossaryConflictsResponse(BaseModel):
+    """All approved-term conflicts for a project."""
+
+    conflicts: list[GlossaryConflictResponse]
+
+
+class GlossaryDiffResponse(BaseModel):
+    """Approved-term coverage diff between two chapters."""
+
+    chapter_a: int
+    chapter_b: int
+    only_in_a: list[str]
+    only_in_b: list[str]
+    in_both: list[str]
+
+
+# ---------------------------------------------------------------------------
 # Translation workspace (Stage 3A — read only)
 # ---------------------------------------------------------------------------
 

@@ -25,9 +25,9 @@ src/weaver/
 
 ## Module inventory (current)
 
-**`services/`** — `project.py` (init/inspect), `translation.py` (resumable orchestrator), `workspace_translate.py` (chapter/selection translate + safe-retranslate), `batch_translate.py` (chapter/volume/novel batch planning + run), `translation_memory.py`, `characters.py`, `glossary.py`, `glossary_review.py`, `glossary_diff.py`, `glossary_terms.py`, `export.py` (markdown + epub), `manual_edit.py`, `preview.py`, `qa.py`, `doctor.py`, `epubcheck.py`, `wizard.py`, `config_writer.py` (atomic provider/model writer), `project_discovery.py` (cockpit project listing).
+**`services/`** — `project.py` (init/inspect), `translation.py` (resumable orchestrator), `workspace_translate.py` (chapter/selection translate + safe-retranslate), `batch_translate.py` (chapter/volume/novel batch planning + run), `translation_memory.py`, `characters.py`, `glossary.py`, `glossary_review.py`, `glossary_diff.py`, `glossary_terms.py`, `export.py` (markdown + epub), `manual_edit.py`, `preview.py`, `qa.py`, `doctor.py`, `epubcheck.py`, `wizard.py`, `config_writer.py` (atomic provider/model writer), `project_discovery.py` (cockpit project listing), `source_browser.py` (sandboxed source-file browsing + upload sanitize/store; shared by Flask `web/file_browser.py` re-export and the FastAPI create/browse endpoints), `provider_config.py` (redacted read + write of provider/model config + secret store orchestration; reuses `config_writer` + `core/secret_store`; never returns key values).
 
-**`api/`** (FastAPI cockpit) — `app.py` (`create_api_app` factory), `jobs.py` (`JobRegistry` + `TranslationJob`/`BatchJob`/`ExportJob`, single-process thread workers + SSE), `schemas.py` (Pydantic boundary DTOs), routers `routers/{system,projects,translate,batch,export,glossary,characters,translation_memory}.py` (thin adapters over `services/*`).
+**`api/`** (FastAPI cockpit) — `app.py` (`create_api_app` factory), `jobs.py` (`JobRegistry` + `TranslationJob`/`BatchJob`/`ExportJob`, single-process thread workers + SSE), `schemas.py` (Pydantic boundary DTOs), routers `routers/{system,projects,translate,batch,export,glossary,glossary_review,characters,translation_memory,config}.py` (thin adapters over `services/*`). `routers/projects.py` covers list/tree/import plus **create-novel + sandboxed source browser** (`POST /projects/create`, `GET /projects/browse`, Sprint 10B); `routers/config.py` is the **provider/model + secret config** surface (`GET/PATCH /config`, `POST/DELETE /config/secrets/{env_name}`, Sprint 10C — key values never returned); `routers/glossary.py` is direct term CRUD and `routers/glossary_review.py` is the **candidate-review flow** (`…/glossary/candidates[/{id}/{approve,edit,reject}]`, `…/glossary/conflicts`, `…/glossary/diff`, Sprint 10D — approve/edit write the same `glossary_terms` rows; no second store).
 
 **`storage/`** — `db.py`, `schema.sql`, `migrations.py`, `projects.py`, `volumes.py`, `segments.py` (incl. ordered chapter-id helpers for batch scope), `translations.py`, `glossary.py`, `characters.py`, `translation_memory.py`.
 
@@ -42,8 +42,10 @@ src/weaver/
 
 ## Data / project flow
 
+**Chapter/segment identity is volume-scoped.** Reader ids (`core/segment.compute_chapter_id`/`compute_segment_id`, blake2b) carry no volume component, so a freshly-read `DocumentIR` is passed through `core/ir.scope_document_to_volume` **once** at every read→persist boundary (init, import, CLI translate re-read, legacy + volume-aware export write-back). This keeps two volumes of identical source content from colliding/re-parenting on the `chapters.id`/`segments.id` upsert, and lets a re-read source join 1:1 with persisted rows. `sync_document_segments` stores ids as-given (scope exactly once). No schema change — purely the id assigned at sync time.
+
 ```
-init:      EPUB → readers/epub → DocumentIR → storage (segments, glossary candidates) → .weaver/<name>/weaver.db
+init:      EPUB → readers/epub → DocumentIR → scope_document_to_volume → storage (segments, glossary candidates) → .weaver/<name>/weaver.db
 translate: pending segments → services/translation (context + glossary injection) → provider → storage (one segment = one txn)
 review:    glossary candidates → services/glossary_review → approved terms (injected into prompts)
 export:    storage → services/export_book → renderers/{epub | epub_synthesis | txt | html} → output/<target>/<per-volume>.<ext>   (legacy: services/export → markdown/single-epub)

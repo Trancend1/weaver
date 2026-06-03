@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from weaver.core.config import load_project_config
-from weaver.core.ir import BlockIR, DocumentIR
+from weaver.core.ir import BlockIR, DocumentIR, scope_document_to_volume
 from weaver.errors import ConfigError, ProviderError, ProviderUnavailable
 from weaver.providers import LLMProvider, build_provider
 from weaver.providers.types import (
@@ -237,6 +237,15 @@ def translate_project(
     source_path = _resolve_path(str(project_config["source_file"]), base_dir, project_toml.parent)
 
     document = read_source(source_path)
+    # Scope reader ids to this source's volume so the freshly-read document joins
+    # 1:1 with the persisted (volume-scoped) rows below (Stage 11B-1.5).
+    with closing(connect_database(db_path)) as id_connection:
+        scope_volume_id = _source_volume_id(
+            id_connection,
+            project_id=_load_single_project(id_connection).id,
+            source_path=source_path,
+        )
+    document = scope_document_to_volume(document, scope_volume_id)
     block_by_id = _index_blocks(document)
 
     if dry_run:

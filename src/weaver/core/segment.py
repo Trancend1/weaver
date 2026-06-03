@@ -51,6 +51,30 @@ def compute_chapter_id(book_identifier: str | None, spine_href: str) -> str:
     return hashlib.blake2b(identity, digest_size=8).hexdigest()
 
 
+def scope_id_to_volume(volume_id: int, raw_id: str) -> str:
+    """Fold the owning volume id into a content-derived chapter/segment id.
+
+    Chapter and segment ids are blake2b digests of source structure
+    (:func:`compute_chapter_id` / :func:`compute_segment_id`) and carry **no**
+    volume component. Two volumes built from identical source content would
+    therefore yield colliding ids and the ``ON CONFLICT(id)`` upsert in
+    ``sync_document_segments`` would re-parent the first volume's rows onto the
+    second. Scoping the stored id by volume keeps each volume's chapters and
+    segments distinct while staying deterministic and in the same 16-hex format
+    (re-syncing the *same* volume reproduces the same ids — idempotent).
+
+    Args:
+        volume_id: Owning volume row id.
+        raw_id: Content-derived chapter or segment id from the reader/IR.
+
+    Returns:
+        Blake2b digest as 16 lowercase hexadecimal characters, unique per volume.
+    """
+
+    identity = f"{volume_id}\x1f{raw_id}".encode()
+    return hashlib.blake2b(identity, digest_size=8).hexdigest()
+
+
 def compute_source_hash(normalized_source_text: str) -> str:
     """Compute source hash used for stale translation detection.
 
