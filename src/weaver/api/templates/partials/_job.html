@@ -1,0 +1,25 @@
+<div class="job-panel" id="job-panel"
+  {% if job.status == "running" %}
+  hx-get="/ui/projects/{{ name }}/jobs/{{ job.id }}"
+  hx-trigger="load delay:1s" hx-target="#job-panel" hx-swap="outerHTML"
+  {% endif %}>
+  <div class="job-head">
+    <strong>Translate</strong>
+    <span class="badge {{ 'ok' if job.status == 'done' else 'bad' if job.status == 'failed' else '' }}">{{ job.status }}</span>
+    <span class="meta">scope: {{ job.mode }}</span>
+  </div>
+
+  {% if job.status == "running" %}
+  <progress value="{{ progress.current }}" max="{{ progress.total or 1 }}"></progress>
+  <span class="meta">{{ progress.current }}/{{ progress.total }} · translated {{ progress.translated }} · failed {{ progress.failed }}</span>
+  <button type="button" hx-post="/ui/projects/{{ name }}/jobs/{{ job.id }}/cancel"
+          hx-target="#job-panel" hx-swap="outerHTML">Cancel</button>
+  {% elif job.status == "failed" %}
+  <p class="error">{{ job.error }}</p>
+  {% else %}
+  {% if job.result %}
+  <p class="meta">translated {{ job.result.translated }} · reused {{ job.result.reused_from_memory }} · skipped {{ job.result.skipped }} · failed {{ job.result.failed }}{% if job.status == "cancelled" %} · cancelled{% endif %}</p>
+  {% endif %}
+  <a href="/ui/projects/{{ name }}/chapters/{{ job.chapter_id }}">Reload chapter</a>
+  {% endif %}
+</div>

@@ -10,6 +10,25 @@
   <h1>{{ ws.chapter_title or "Chapter" }}</h1>
   <p class="meta">{{ ws.segment_count }} segments · {{ ws.translated_count }} translated</p>
 
+  <div class="job-controls">
+    <form hx-post="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/translate"
+          hx-target="#job-panel" hx-swap="outerHTML" class="inline-form">
+      <button type="submit">Translate untranslated</button>
+    </form>
+    <form hx-post="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/retranslate"
+          hx-target="#job-panel" hx-swap="outerHTML" class="inline-form">
+      <label>Retranslate
+        <select name="mode">
+          <option value="skip_existing">skip existing</option>
+          <option value="retranslate_non_manual">re-translate (protect manual)</option>
+          <option value="force_selected">force (overwrite manual)</option>
+        </select>
+      </label>
+      <button type="submit">Run</button>
+    </form>
+  </div>
+  <div id="job-panel"></div>
+
   {% set name = ws.project_name %}
   {% set chapter_id = ws.chapter_id %}
   {% if ws.segments %}

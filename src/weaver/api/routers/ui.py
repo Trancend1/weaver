@@ -18,6 +18,10 @@ from typing import Any
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from weaver.api.jobs import JobRegistry
+from weaver.api.routers.export import _start_export
+from weaver.api.routers.translate import _start_job as _start_translate_job
+from weaver.api.schemas import ExportRequest
 from weaver.api.templating import templates
 from weaver.core.global_config import load_global_config, resolve_config_value
 from weaver.errors import ChapterNotFoundError, SegmentNotFoundError, WeaverError
@@ -36,6 +40,10 @@ router = APIRouter(tags=["ui"], include_in_schema=False)
 
 def _base_dir(request: Request) -> Path:
     return request.app.state.base_dir  # type: ignore[no-any-return]
+
+
+def _jobs(request: Request) -> JobRegistry:
+    return request.app.state.jobs  # type: ignore[no-any-return]
 
 
 def _project_rows(base_dir: Path) -> list[dict[str, Any]]:
@@ -295,3 +303,114 @@ def workspace_history(
     except WeaverError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return templates.TemplateResponse(request, "partials/_history.html", {"history": history})
+
+
+# --- translate / retranslate + job progress (Stage 11B-3) -------------------
+
+
+def _job_error(request: Request, message: str, *, panel_id: str) -> HTMLResponse:
+    """Render a job-panel error fragment (keeps the panel id so HTMX swaps it)."""
+    return templates.TemplateResponse(
+        request, "partials/_job_error.html", {"message": message, "panel_id": panel_id}
+    )
+
+
+def _render_translate_job(request: Request, name: str, job_id: str) -> HTMLResponse:
+    job = _jobs(request).get(job_id)
+    if job is None or job.project_name != name:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found for '{name}'.")
+    return templates.TemplateResponse(
+        request, "partials/_job.html", {"job": job, "progress": job.snapshot(), "name": name}
+    )
+
+
+@router.post("/ui/projects/{name}/chapters/{chapter_id}/translate", response_class=HTMLResponse)
+def ui_translate(name: str, chapter_id: str, request: Request) -> HTMLResponse:
+    """Start a translate job for a chapter's untranslated segments (HTMX panel)."""
+    try:
+        started = _start_translate_job(
+            request,
+            name,
+            chapter_id,
+            segment_ids=None,
+            mode="skip_existing",
+            provider=None,
+            model=None,
+        )
+    except HTTPException as exc:
+        return _job_error(request, str(exc.detail), panel_id="job-panel")
+    return _render_translate_job(request, name, started.job_id)
+
+
+@router.post("/ui/projects/{name}/chapters/{chapter_id}/retranslate", response_class=HTMLResponse)
+def ui_retranslate(
+    name: str, chapter_id: str, request: Request, mode: str = Form("skip_existing")
+) -> HTMLResponse:
+    """Start a retranslate job under an explicit safe mode (HTMX panel)."""
+    try:
+        started = _start_translate_job(
+            request, name, chapter_id, segment_ids=None, mode=mode, provider=None, model=None
+        )
+    except HTTPException as exc:
+        return _job_error(request, str(exc.detail), panel_id="job-panel")
+    return _render_translate_job(request, name, started.job_id)
+
+
+@router.get("/ui/projects/{name}/jobs/{job_id}", response_class=HTMLResponse)
+def ui_job_status(name: str, job_id: str, request: Request) -> HTMLResponse:
+    """Poll a translate job's status/progress (HTMX self-refresh until terminal)."""
+    return _render_translate_job(request, name, job_id)
+
+
+@router.post("/ui/projects/{name}/jobs/{job_id}/cancel", response_class=HTMLResponse)
+def ui_job_cancel(name: str, job_id: str, request: Request) -> HTMLResponse:
+    """Cooperatively cancel a translate job, then render its current state."""
+    job = _jobs(request).get(job_id)
+    if job is None or job.project_name != name:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found for '{name}'.")
+    job.request_cancel()
+    return _render_translate_job(request, name, job_id)
+
+
+# --- export trigger + job progress (Stage 11B-3) ----------------------------
+
+
+def _render_export_job(request: Request, name: str, job_id: str) -> HTMLResponse:
+    job = _jobs(request).get_export(job_id)
+    if job is None or job.project_name != name:
+        raise HTTPException(
+            status_code=404, detail=f"Export job '{job_id}' not found for '{name}'."
+        )
+    return templates.TemplateResponse(
+        request, "partials/_export_job.html", {"job": job, "progress": job.snapshot(), "name": name}
+    )
+
+
+@router.post("/ui/projects/{name}/export", response_class=HTMLResponse)
+def ui_export(name: str, request: Request, target: str = Form("epub")) -> HTMLResponse:
+    """Start a novel-scope export job for the chosen target (HTMX panel)."""
+    try:
+        started = _start_export(
+            request, name, scope="novel", target_id=None, body=ExportRequest(target=target)
+        )
+    except HTTPException as exc:
+        return _job_error(request, str(exc.detail), panel_id="export-panel")
+    return _render_export_job(request, name, started.job_id)
+
+
+@router.get("/ui/projects/{name}/export/jobs/{job_id}", response_class=HTMLResponse)
+def ui_export_status(name: str, job_id: str, request: Request) -> HTMLResponse:
+    """Poll an export job's status/progress (HTMX self-refresh until terminal)."""
+    return _render_export_job(request, name, job_id)
+
+
+@router.post("/ui/projects/{name}/export/jobs/{job_id}/cancel", response_class=HTMLResponse)
+def ui_export_cancel(name: str, job_id: str, request: Request) -> HTMLResponse:
+    """Cooperatively cancel an export job, then render its current state."""
+    job = _jobs(request).get_export(job_id)
+    if job is None or job.project_name != name:
+        raise HTTPException(
+            status_code=404, detail=f"Export job '{job_id}' not found for '{name}'."
+        )
+    job.request_cancel()
+    return _render_export_job(request, name, job_id)

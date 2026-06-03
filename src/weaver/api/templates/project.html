@@ -9,6 +9,23 @@
 </section>
 
 <section class="panel">
+  <h2>Export novel</h2>
+  <p class="meta">One artifact per volume. Publishable segments use the latest translation; others fall back to source.</p>
+  <form hx-post="/ui/projects/{{ tree.project_name }}/export"
+        hx-target="#export-panel" hx-swap="outerHTML" class="inline-form">
+    <label>Format
+      <select name="target">
+        <option value="epub">EPUB</option>
+        <option value="txt">TXT</option>
+        <option value="html">HTML</option>
+      </select>
+    </label>
+    <button type="submit">Export</button>
+  </form>
+  <div id="export-panel"></div>
+</section>
+
+<section class="panel">
   <h2>Import a volume</h2>
   <p class="meta">Add another source (.epub/.txt/.html) as a new volume. The tree above refreshes on success.</p>
 

@@ -70,8 +70,18 @@ success. UI create/import reuse the same services as the JSON endpoints via
 chapter to a two-column JP/EN workspace; per-segment save (status → `manual`) swaps
 the refreshed segment row via HTMX; per-segment translation history loads on demand.
 Reuses `services/chapter_workspace`, `services/workspace_edit.save_segment_translation`,
-`services/segment_history` (no logic in the UI). Translate/retranslate controls (11B-3),
-export (11B-3), and glossary/character/TM/config (11C) screens follow.
+`services/segment_history` (no logic in the UI).
+
+**Sprint 11B-3 — translate/retranslate + jobs + export (shipped):** the workspace has a
+**Translate** button and a **Retranslate** mode select (`skip_existing` ·
+`retranslate_non_manual` · `force_selected`, the last only when explicitly chosen); the
+project page has an **Export** control (EPUB/TXT/HTML). Both start a background job via the
+same JSON-router start helpers (`translate._start_job`, `export._start_export`) over the
+shared `JobRegistry` + services — and render a **self-polling HTMX panel** (`hx-trigger="load
+delay:1s"`) that shows live progress, a **Cancel** button, and the terminal result (translate
+counts / export artifact paths). Terminal panels drop the poll trigger. Provider/secret config
+UI is **not** here — translate uses the project's configured provider (configure it via CLI
+`secrets`/`init` or the `/config` API until 11C). Glossary/character/TM/config screens (11C) follow.
 
 | Method | Path | Renders | Notes |
 |---|---|---|---|
@@ -81,6 +91,13 @@ export (11B-3), and glossary/character/TM/config (11C) screens follow.
 | GET | `/ui/projects/{name}/chapters/{chapter_id}` | `workspace.html` | Two-column JP/EN workspace (`partials/_segment.html` per segment); unknown chapter → 404 HTML. |
 | POST | `/ui/projects/{name}/chapters/{chapter_id}/segments/{segment_id}` | `partials/_segment.html` | Save translation (status → `manual`); returns the refreshed segment row (HTMX `outerHTML`). Empty text → row re-rendered with an error; unknown → 404. |
 | GET | `/ui/projects/{name}/chapters/{chapter_id}/segments/{segment_id}/history` | `partials/_history.html` | Full attempt history for a segment (HTMX fragment). |
+| POST | `/ui/projects/{name}/chapters/{chapter_id}/translate` | `partials/_job.html` | Start a translate job (skip already-translated/manual); returns a self-polling job panel. |
+| POST | `/ui/projects/{name}/chapters/{chapter_id}/retranslate` | `partials/_job.html` | Start a retranslate job under `mode` (skip_existing / retranslate_non_manual / force_selected). |
+| GET | `/ui/projects/{name}/jobs/{job_id}` | `partials/_job.html` | Poll translate-job progress (self-refresh until terminal). |
+| POST | `/ui/projects/{name}/jobs/{job_id}/cancel` | `partials/_job.html` | Cooperative cancel; renders current state. |
+| POST | `/ui/projects/{name}/export` | `partials/_export_job.html` | Start a novel-scope export job for `target` ∈ {epub,txt,html}. |
+| GET | `/ui/projects/{name}/export/jobs/{job_id}` | `partials/_export_job.html` | Poll export-job progress; terminal shows per-volume artifact paths. |
+| POST | `/ui/projects/{name}/export/jobs/{job_id}/cancel` | `partials/_export_job.html` | Cooperative cancel; renders current state. |
 | GET | `/ui/new` | `new.html` | Create form + source browser. |
 | POST | `/ui/new` | → 303 to project view | Create from upload/browsed source (reuses `resolve_intake_source` + `initialize_project`); duplicate/no-source/bad-source → form re-render with error (400). |
 | GET | `/ui/browse?dir=` | `partials/_browse.html` | Sandboxed listing fragment (dirs navigate via HTMX; files set the hidden `source_path`). Escape/missing → inline error. |
