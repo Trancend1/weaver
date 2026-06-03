@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from weaver.core.config import load_project_config
-from weaver.errors import ConfigError
+from weaver.errors import ConfigError, GlossaryCandidateNotFoundError
 from weaver.storage.db import connect_database, connect_readonly_database, transaction
 from weaver.storage.glossary import (
     GlossaryCandidateRecord,
@@ -301,7 +301,7 @@ def act_on_candidate(
                 else:
                     reject_glossary_candidate(connection, candidate_id=candidate_id)
         except LookupError as exc:
-            raise ConfigError(
+            raise GlossaryCandidateNotFoundError(
                 f"Glossary candidate not found: {candidate_id}. "
                 "Likely cause: stale page or the candidate was already actioned. "
                 "Next command: reload the glossary page."

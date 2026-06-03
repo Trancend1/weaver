@@ -189,6 +189,80 @@ class SecretResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Glossary candidate review (Stage 10D)
+# ---------------------------------------------------------------------------
+
+
+class GlossaryCandidateResponse(BaseModel):
+    """One pending/actioned glossary candidate row."""
+
+    id: int
+    source: str
+    target: str | None
+    category: str | None
+    notes: str | None
+    status: str
+    frequency: int
+
+
+class GlossaryReviewCountsResponse(BaseModel):
+    """Queue totals for the candidate review surface."""
+
+    pending: int
+    approved: int
+    rejected: int
+
+
+class GlossaryCandidateListResponse(BaseModel):
+    """A page of pending candidates plus queue counts."""
+
+    candidates: list[GlossaryCandidateResponse]
+    total_pending: int
+    offset: int
+    limit: int
+    find: str | None
+    counts: GlossaryReviewCountsResponse
+
+
+class GlossaryCandidateEditRequest(BaseModel):
+    """Edit a candidate's target (and optional notes) before approving."""
+
+    target: str
+    notes: str | None = None
+
+
+class GlossaryCandidateActionResponse(BaseModel):
+    """Result of approve/edit/reject: the candidate id, action, refreshed counts."""
+
+    candidate_id: int
+    action: str
+    counts: GlossaryReviewCountsResponse
+
+
+class GlossaryConflictResponse(BaseModel):
+    """One approved-term conflict: a source mapped to multiple targets."""
+
+    source: str
+    targets: list[str]
+
+
+class GlossaryConflictsResponse(BaseModel):
+    """All approved-term conflicts for a project."""
+
+    conflicts: list[GlossaryConflictResponse]
+
+
+class GlossaryDiffResponse(BaseModel):
+    """Approved-term coverage diff between two chapters."""
+
+    chapter_a: int
+    chapter_b: int
+    only_in_a: list[str]
+    only_in_b: list[str]
+    in_both: list[str]
+
+
+# ---------------------------------------------------------------------------
 # Translation workspace (Stage 3A — read only)
 # ---------------------------------------------------------------------------
 

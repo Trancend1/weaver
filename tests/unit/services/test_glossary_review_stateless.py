@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from weaver.errors import ConfigError
+from weaver.errors import ConfigError, GlossaryCandidateNotFoundError
 from weaver.services.glossary_review import act_on_candidate, list_pending
 from weaver.services.project import initialize_project
 
@@ -115,5 +115,5 @@ def test_act_unknown_action_raises(tmp_path: Path) -> None:
 
 def test_act_missing_candidate_raises(tmp_path: Path) -> None:
     project_toml = _init(tmp_path)
-    with pytest.raises(ConfigError):
+    with pytest.raises(GlossaryCandidateNotFoundError):
         act_on_candidate(project_toml, 999999, "approve", cwd=tmp_path)

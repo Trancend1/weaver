@@ -58,6 +58,26 @@ selecting* projects without the Flask UI. All paths are sandboxed to the cockpit
 | POST | `/projects/create` | `initialize_project` (+ `source_browser`) | Create a novel from an uploaded `file` **or** a browsed `source_path` (multipart; upload preferred). Optional `provider`/`template`. Name derives from the source stem. → `201` `{project_name, chapter_count, segment_count, glossary_candidate_count}`. No source → `422`; duplicate name → `409`; bad source/provider → `422`. **Sourceless creation is unsupported** (the source defines the project name + initial volume). |
 | POST | `/projects/{name}/import` | `import_volume` | Import another source as a new volume (upload only). → `201`. |
 
+## FastAPI glossary candidate-review API (Sprint 10D — `src/weaver/api/`)
+
+Exposes the existing candidate-review flow (the same one the CLI `glossary review`
+and Flask `/glossary` use) over JSON. Thin adapter over `services/glossary_review`
++ `services/glossary_diff`. **Approve/edit write into the project `glossary_terms`
+table** — the same rows direct glossary CRUD reads and `build_context` injects.
+There is **no second glossary store**; direct CRUD (`routers/glossary.py`) is
+unchanged. The candidate routes (`…/glossary/candidates/…`, `…/glossary/conflicts`,
+`…/glossary/diff`) do not shadow the CRUD term routes (`…/glossary`,
+`…/glossary/{source}`).
+
+| Method | Path | Service | Notes |
+|---|---|---|---|
+| GET | `/projects/{name}/glossary/candidates?offset=&limit=&find=` | `glossary_review.list_pending` | Page of pending candidates + queue `counts` (`pending`/`approved`/`rejected`) + `total_pending`. `find` filters by source substring. |
+| POST | `/projects/{name}/glossary/candidates/{candidate_id}/approve` | `act_on_candidate` | Approve → writes the term into `glossary_terms`. → `{candidate_id, action, counts}`. Unknown id → `404`. |
+| POST | `/projects/{name}/glossary/candidates/{candidate_id}/edit` | `act_on_candidate` | Body `{target, notes?}`: edit then approve. Empty target → `422`; unknown id → `404`. |
+| POST | `/projects/{name}/glossary/candidates/{candidate_id}/reject` | `act_on_candidate` | Reject (no term written). Unknown id → `404`. |
+| GET | `/projects/{name}/glossary/conflicts` | `list_project_glossary_conflicts` | Approved-term conflicts: `[{source, targets[]}]` (sources mapped to >1 target). |
+| GET | `/projects/{name}/glossary/diff?a=&b=` | `glossary_diff` | Approved-term coverage diff between chapters `a` and `b` (1-indexed): `only_in_a`/`only_in_b`/`in_both`. Out-of-range/missing → `422`. |
+
 ## FastAPI provider/secret config API (Sprint 10C — `src/weaver/api/`)
 
 Persists provider/model config and API-key secrets from the API (closes the
