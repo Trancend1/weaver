@@ -2,7 +2,7 @@
 
 The web cockpit is a **local, single-user** browser UI for the same translator workflow the CLI drives. It is the **primary development focus** going forward.
 
-> **Stack status.** The cockpit runs on **Flask (sync) + vendored HTMX + Jinja2** today — the shipped, working baseline. The chosen forward direction is **FastAPI** (typed Pydantic schemas, `APIRouter`, ASGI/Uvicorn) per [ADR 004](decisions/004-fastapi-cockpit-technical-direction.md). Migration is **staged, route-by-route**; Flask is **not** deleted until FastAPI reaches parity. Until then, this doc describes the Flask cockpit.
+> **Stack status (Sprint 12B, 2026-06-03).** `weaver serve` now runs the **FastAPI cockpit** (Jinja2 + vendored HTMX UI + typed JSON API, ASGI/Uvicorn) per [ADR 004](decisions/004-fastapi-cockpit-technical-direction.md) — the default after the Sprint 12 parity audit confirmed FastAPI is a functional superset of the Flask UI. The legacy **Flask** cockpit remains available as `weaver serve-flask` (fallback; not removed, not deprecated). `weaver serve-api` runs the same FastAPI app headless (no browser). The Flask sections below describe `serve-flask`.
 
 ## Purpose
 
@@ -11,9 +11,11 @@ Kill the CLI's daily friction points: long project paths, provider/model switchi
 ## Run it
 ```bash
 pip install 'weaver[web]'
-weaver serve                          # http://127.0.0.1:8765, opens a browser
+weaver serve                          # FastAPI cockpit, http://127.0.0.1:8765, opens a browser
 weaver serve --port 9000 --no-browser
 weaver serve --books-dir ~/novels     # discover projects under another root
+weaver serve-api                      # same FastAPI app, headless (no browser), :8000
+weaver serve-flask                    # legacy Flask cockpit (fallback), :8765
 ```
 
 ## Security model (carried forward from archived ADR 0017 → ADR 004)
@@ -45,7 +47,8 @@ HTMX provides liveness (progress, partial updates) without a JS build step.
 
 ## FastAPI browser UI (Sprint 11 — `src/weaver/api/`, ADR `007`)
 
-`weaver serve-api` now serves a server-rendered browser UI **alongside** its JSON
+The FastAPI cockpit (`weaver serve` since Sprint 12B; also `weaver serve-api`
+headless) serves a server-rendered browser UI **alongside** its JSON
 API. Stack: **Jinja2 + HTMX, no build, no SPA** (ADR `007`); HTMX is vendored at
 `api/static/htmx.min.js` (pinned 1.9.12, no CDN). The UI is **presentation only**
 — `routers/ui.py` is a thin adapter over the same services the JSON routers use
@@ -53,8 +56,11 @@ API. Stack: **Jinja2 + HTMX, no build, no SPA** (ADR `007`); HTMX is vendored at
 redirects there; the JSON API surface is unchanged and UI routes are excluded
 from the OpenAPI schema.
 
-`weaver serve` (Flask) remains the default/legacy cockpit — **no default flip,
-Flask untouched** (gated on the Sprint 12 UI parity audit).
+**Sprint 12B default flip (2026-06-03):** `weaver serve` → FastAPI cockpit
+(default); `weaver serve-flask` → legacy Flask cockpit (fallback, **not removed,
+not deprecated**); `weaver serve-api` → same FastAPI app headless. The flip is a
+default-command change only — no Flask route/template/dependency removal — and is
+reversible. See [SPRINT12_UI_PARITY_AUDIT.md](SPRINT12_UI_PARITY_AUDIT.md).
 
 **Sprint 11A — shell (shipped):** dashboard/home (project list + global provider
 default), project view (Novel→Volume→Chapter tree), navigation, and the read-screen

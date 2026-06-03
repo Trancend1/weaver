@@ -38,9 +38,11 @@ Output lands in `.weaver/aozora_sample/output/{markdown,epub}/`. Full flow + fla
 ## Web cockpit
 ```bash
 pip install 'weaver[web]'      # or: uv sync --extra web
-uv run weaver serve            # http://127.0.0.1:8765, opens a browser
+uv run weaver serve            # FastAPI cockpit, http://127.0.0.1:8765, opens a browser
+uv run weaver serve-api        # same FastAPI app, headless (no browser), :8000
+uv run weaver serve-flask      # legacy Flask cockpit (fallback), :8765
 ```
-Binds `127.0.0.1` only, no auth. Discover/create projects, set provider/model, translate with live progress + stop, review glossary, export — no path typing. Details: [COCKPIT_WORKFLOW.md](COCKPIT_WORKFLOW.md).
+Binds `127.0.0.1` only, no auth. `weaver serve` is the **FastAPI cockpit** (default since Sprint 12B); the legacy Flask cockpit stays available as `weaver serve-flask`. Discover/create projects, set provider/model, translate with live progress + stop, review glossary, export — no path typing. Details: [COCKPIT_WORKFLOW.md](COCKPIT_WORKFLOW.md).
 
 ## Real providers
 ```bash

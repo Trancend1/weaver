@@ -4,12 +4,13 @@ Compact map of the codebase and its boundaries. Deep pre-reset detail (full IR t
 
 ## Layers (ADR 002)
 
-Three binding layers. The split is the project's key asset for the Flask→FastAPI migration (ADR 004): only `web/` is framework-coupled.
+Binding layers. The split is the project's key asset for the Flask→FastAPI migration (ADR 004): only `api/` (FastAPI) and `web/` (legacy Flask) are framework-coupled; shared/core stays framework-agnostic.
 
 ```
 src/weaver/
 ├── cli/          ← CLI surface (typer). Terminal I/O only.
-├── web/          ← Web cockpit (Flask today; FastAPI target). HTTP + templates only.
+├── api/          ← FastAPI cockpit (default `weaver serve`/`serve-api`). HTTP + JSON + Jinja2/HTMX UI.
+├── web/          ← legacy Flask cockpit (`weaver serve-flask`, fallback). HTTP + templates only.
 ├── services/     ← shared/core: domain orchestration
 ├── storage/      ← shared/core: SQLite (WAL, no ORM)
 ├── core/         ← shared/core: value types, config, secret store
@@ -35,7 +36,7 @@ src/weaver/
 
 **`providers/`** — `registry.py` (registry-driven types), `base.py`, `types.py`, `parser.py` (JSON parse + repair), `prompts.py`, and adapters `deepseek.py`, `gemini.py`, `ollama.py`, `fake.py`. `custom` (OpenAI-compatible) is registry-driven.
 
-**`web/`** (Flask) — `app.py` (factory, `127.0.0.1` bind), `job_manager.py` (single-job + SSE), route blueprints `routes_{projects,translate,new,config,export,glossary}.py`, `file_browser.py` (sandboxed), `templates/*.html`, vendored `static/htmx.min.js`.
+**`web/`** (legacy Flask, `weaver serve-flask` fallback) — `app.py` (factory, `127.0.0.1` bind), `job_manager.py` (single-job + SSE), route blueprints `routes_{projects,translate,new,config,export,glossary}.py`, `file_browser.py` (sandboxed), `templates/*.html`, vendored `static/htmx.min.js`. **Sprint 12B flip:** default `weaver serve` now runs the FastAPI cockpit (`api/`); Flask stays available as `serve-flask` (not removed/deprecated).
 
 **`readers/`** — `epub.py`, `txt.py`, `html.py` (EPUB/TXT/HTML → IR) with `read_source` dispatch; shared `html_blocks.py` + `synthetic_document.py`.
 **`renderers/`** — `epub.py` (EPUB write-back), `epub_synthesis.py` (synthesize EPUB for TXT/HTML-sourced volumes), `txt.py` + `html.py` (plain-text / HTML output), and `rendered_document.py` (shared `RenderChapter` + `block_to_html`). Volume-aware export orchestration lives in `services/export_book.py`; legacy Markdown/single-EPUB export in `services/export.py`. **Export surface split (web-first MVP):** the **FastAPI cockpit** (`api/routers/export.py` → `services/export_book.py`) is the volume-aware EPUB/TXT/HTML exporter for the Novel→Volume→Chapter model; the **CLI `export` command** (and Flask "Export") still drives the **legacy single-project exporter** (`services/export.py` → `export_epub_project`/`export_markdown_project`). The legacy path is intentionally not back-ported to the volume model — exporting full novels is a cockpit workflow. *DOCX output + export UI are MVP gaps (deferred).*
