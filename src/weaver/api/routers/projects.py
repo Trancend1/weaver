@@ -35,11 +35,8 @@ from weaver.services.project import initialize_project, project_exists
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_tree import project_tree
 from weaver.services.segment_history import segment_translation_history
-from weaver.services.source_browser import (
-    list_directory,
-    resolve_source,
-    store_uploaded_source,
-)
+from weaver.services.source_browser import list_directory
+from weaver.services.source_intake import resolve_intake_source
 from weaver.services.workspace_edit import save_segment_translation
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -125,22 +122,10 @@ async def create_novel(
     initial volume.
     """
     base = _base_dir(request)
+    uploaded = (file.filename, await file.read()) if file is not None and file.filename else None
 
     try:
-        if file is not None and file.filename:
-            data = await file.read()
-            source = store_uploaded_source(base, file.filename, data)
-        elif source_path and source_path.strip():
-            source = resolve_source(base, source_path.strip())
-        else:
-            raise HTTPException(
-                status_code=422,
-                detail=(
-                    "No source selected. Likely cause: neither an uploaded file nor a "
-                    "browsed source_path was provided. Next command: upload or pick an "
-                    "EPUB, TXT, or HTML source."
-                ),
-            )
+        source = resolve_intake_source(base, uploaded=uploaded, source_path=source_path)
         if project_exists(source, cwd=base):
             raise HTTPException(
                 status_code=409,

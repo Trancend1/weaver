@@ -1,0 +1,31 @@
+<div id="tree">
+  {% if tree.volumes %}
+  <ul class="tree">
+    {% for v in tree.volumes %}
+    <li class="vol">
+      <div class="vol-head">
+        <span class="vol-title">{{ v.title }}</span>
+        <span class="meta">{{ v.source_format }} · {{ v.chapter_count }} ch · {{ v.segment_count }} seg</span>
+      </div>
+      {% if v.chapters %}
+      <ul class="chapters">
+        {% for c in v.chapters %}
+        <li class="chapter">
+          <span class="ch-title">{{ c.title }}</span>
+          <span class="meta num">{{ c.segment_count }} seg</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty hint">No chapters in this volume.</p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="empty">
+    <p>This project has no volumes yet.</p>
+    <p class="hint">Import a source (TXT/EPUB/HTML) below.</p>
+  </div>
+  {% endif %}
+</div>

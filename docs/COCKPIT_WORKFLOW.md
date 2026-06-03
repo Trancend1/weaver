@@ -58,14 +58,24 @@ Flask untouched** (gated on the Sprint 12 UI parity audit).
 
 **Sprint 11A — shell (shipped):** dashboard/home (project list + global provider
 default), project view (Novel→Volume→Chapter tree), navigation, and the read-screen
-state primitives (loading/empty/error/404). Create/import, workspace, translate,
-export, glossary/character/TM/config screens land in 11B/11C.
+state primitives (loading/empty/error/404).
+
+**Sprint 11B-1 — create/import + browser (shipped):** new-project form (upload **or**
+browsed source + optional provider/template), sandboxed source browser (HTMX
+fragment), and volume import on the project view with **HTMX tree refresh** on
+success. UI create/import reuse the same services as the JSON endpoints via
+`services/source_intake.resolve_intake_source` (no logic in the UI layer). Workspace,
+translate, export (11B-2/11B-3) and glossary/character/TM/config (11C) screens follow.
 
 | Method | Path | Renders | Notes |
 |---|---|---|---|
 | GET | `/` | → 307 `/ui` | Redirect to the UI home. |
-| GET | `/ui` | `dashboard.html` | Project list + global provider/model default; empty state when none. |
-| GET | `/ui/projects/{name}` | `project.html` | Novel→Volume→Chapter tree; unknown name → 404 HTML, project error → 422 HTML. |
+| GET | `/ui` | `dashboard.html` | Project list + global provider/model default; empty state + "New novel" link. |
+| GET | `/ui/projects/{name}` | `project.html` | Tree (`partials/_tree.html`) + import panel + browser; unknown → 404 HTML, error → 422 HTML. |
+| GET | `/ui/new` | `new.html` | Create form + source browser. |
+| POST | `/ui/new` | → 303 to project view | Create from upload/browsed source (reuses `resolve_intake_source` + `initialize_project`); duplicate/no-source/bad-source → form re-render with error (400). |
+| GET | `/ui/browse?dir=` | `partials/_browse.html` | Sandboxed listing fragment (dirs navigate via HTMX; files set the hidden `source_path`). Escape/missing → inline error. |
+| POST | `/ui/projects/{name}/import` | `partials/_tree.html` | Import a volume (reuses `resolve_intake_source` + `import_volume`); returns the refreshed `#tree`. Errors → `partials/_import_error.html` with `HX-Retarget: #import_error` so the tree is preserved. |
 | GET | `/static/*` | vendored assets | `htmx.min.js` (1.9.12), `app.css`. |
 
 ## FastAPI project management API (Sprint 2C + 10B — `src/weaver/api/`)

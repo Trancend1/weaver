@@ -5,34 +5,31 @@
   <p class="crumbs"><a href="/ui">Dashboard</a> / <span>{{ tree.project_name }}</span></p>
   <h1>{{ tree.project_name }}</h1>
 
-  {% if tree.volumes %}
-  <ul class="tree">
-    {% for v in tree.volumes %}
-    <li class="vol">
-      <div class="vol-head">
-        <span class="vol-title">{{ v.title }}</span>
-        <span class="meta">{{ v.source_format }} · {{ v.chapter_count }} ch · {{ v.segment_count }} seg</span>
-      </div>
-      {% if v.chapters %}
-      <ul class="chapters">
-        {% for c in v.chapters %}
-        <li class="chapter">
-          <span class="ch-title">{{ c.title }}</span>
-          <span class="meta num">{{ c.segment_count }} seg</span>
-        </li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p class="empty hint">No chapters in this volume.</p>
-      {% endif %}
-    </li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <div class="empty">
-    <p>This project has no volumes yet.</p>
-    <p class="hint">Import a source (TXT/EPUB/HTML) — import UI lands in Sprint 11B.</p>
+  {% include "partials/_tree.html" %}
+</section>
+
+<section class="panel">
+  <h2>Import a volume</h2>
+  <p class="meta">Add another source (.epub/.txt/.html) as a new volume. The tree above refreshes on success.</p>
+
+  <div class="error" id="import_error" hidden></div>
+
+  <form hx-post="/ui/projects/{{ tree.project_name }}/import"
+        hx-target="#tree" hx-swap="outerHTML"
+        hx-encoding="multipart/form-data" class="stack">
+    <label>Upload source
+      <input type="file" name="file" accept=".epub,.txt,.html,.htm">
+    </label>
+    <div class="field">Browsed source: <span id="selected_source" class="meta">(none)</span>
+      <input type="hidden" name="source_path" id="source_path">
+    </div>
+    <button type="submit">Import volume</button>
+    <span class="htmx-indicator meta">importing…</span>
+  </form>
+
+  <h3>Browse sources</h3>
+  <div id="browser" hx-get="/ui/browse?dir=" hx-trigger="load" hx-swap="innerHTML">
+    <span class="meta">loading…</span>
   </div>
-  {% endif %}
 </section>
 {% endblock %}
