@@ -25,8 +25,8 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 | [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md) | MVP features, gap analysis, sprint mapping, acceptance |
 | [docs/MVP_STABILIZATION_REPORT.md](docs/MVP_STABILIZATION_REPORT.md) | Sprint 9 baseline: validation matrix, acceptance audit, **consolidated deferred/known-gaps list** |
 | [docs/MAINTENANCE.md](docs/MAINTENANCE.md) | Cleanup, testing, regression, release, migration discipline |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | Active ADR index (`001`–`005`) |
-| [docs/decisions/](docs/decisions/) | Active ADRs `001`–`005` |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Active ADR index (`001`–`007`) |
+| [docs/decisions/](docs/decisions/) | Active ADRs `001`–`007` |
 | [ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md) · [PROMPT_DESIGN.md](docs/PROMPT_DESIGN.md) · [SECURITY_AND_PERFORMANCE.md](docs/SECURITY_AND_PERFORMANCE.md) · [AI_SLOP_PREVENTION.md](docs/AI_SLOP_PREVENTION.md) | Supplementary reference specs (still active) |
 | [docs/archive/](docs/archive/) | Archived ADRs `0001`–`0020`, pre-reset specs (PRD_v2, SYSTEM_ARCHITECTURE), strategy docs — historical |
 
