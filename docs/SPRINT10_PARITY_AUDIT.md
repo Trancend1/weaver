@@ -165,3 +165,90 @@ before any decommission work is considered.
 | 1 — web UI surface | — | ⬜ Open |
 
 Re-audit (and any decommission decision) remains gated on gap 1 (web UI) also closing — the **only** remaining parity gap. FastAPI now covers every Flask *capability* headlessly.
+
+---
+
+## 9. Re-Audit (Gate 10E — after gaps #2/#3/#4 closed)
+
+Ground truth re-enumerated from live route maps (not memory): **Flask 13 routes**,
+**FastAPI 53 route objects** (≈49 functional + 4 auto-docs: `/docs`, `/redoc`,
+`/openapi.json`, `/docs/oauth2-redirect`).
+
+### 9.1 Updated parity matrix (capability → FastAPI coverage)
+
+Every Flask route is mapped to its FastAPI equivalent. Parity = does FastAPI cover
+the capability for a programmatic client.
+
+| Flask route | Capability | FastAPI equivalent | Parity |
+|---|---|---|---|
+| `GET /` | Project discovery/list | `GET /projects` | ✅ data (UI ❌) |
+| `GET /project/<name>` | Read cockpit (inspect) | `GET /projects/{name}/tree` + `…/chapters/{id}/workspace` | ✅ data (UI ❌) |
+| `GET /new` | New-project page | — (data via create/browse) | ✅ data (UI ❌) |
+| `GET /api/browse` | Sandboxed file browser | `GET /projects/browse` | ✅ |
+| `POST /new/init` | Create novel | `POST /projects/create` | ✅ |
+| `POST /project/<name>/import` | Import volume | `POST /projects/{name}/import` | ✅ |
+| `POST /project/<name>/config` | Provider/model + secret write | `GET/PATCH /config` + `POST/DELETE /config/secrets/{env_name}` | ✅ superset |
+| `POST /project/<name>/translate` | Start translate | `POST …/chapters/{id}/translate[-segments]` + `…/batch/*` | ✅ superset |
+| `POST /project/<name>/translate/stop` | Cancel job | `POST …/jobs/{id}/cancel` | ✅ |
+| `GET /project/<name>/events` | Progress SSE | `GET …/jobs/{id}/events` | ✅ |
+| `POST /project/<name>/export` | Export | `POST …/export/{novel\|volumes/{id}\|chapters/{id}}` + jobs | ✅ superset (legacy md vs volume-aware EPUB/TXT/HTML) |
+| `GET /project/<name>/glossary` | Glossary review (pending/conflicts/diff) | `GET …/glossary/candidates` + `…/conflicts` + `…/diff` | ✅ |
+| `POST /project/<name>/glossary/<id>` | Approve/edit/reject candidate | `POST …/glossary/candidates/{id}/{approve,edit,reject}` | ✅ |
+
+**FastAPI-only surplus (no Flask equivalent):** workspace per-segment save +
+revision history, safe-retranslate modes, batch at volume/novel scope, translation
+memory, character DB, volume-aware EPUB/TXT/HTML export, typed HTTP errors.
+
+### 9.2 Remaining gap list
+
+| # | Gap | Status | Notes |
+|---|---|---|---|
+| 1 | **Web UI surface** | ⬜ Open — **deliberately deferred (ADR 005)** | Flask renders 4 HTML templates (`dashboard`/`cockpit`/`new`/`glossary`); FastAPI is JSON-only. UI polish is explicitly post-MVP. Not a capability regression. |
+| 2 | Provider/secret config-write API | ✅ Closed (10C) | |
+| 3 | Glossary candidate-review flow | ✅ Closed (10D) | |
+| 4 | Create-novel + file browser | ✅ Closed (10B) | |
+
+**All functional/domain parity is closed.** The sole remaining difference is the
+rendered UI, which is a deferred deliverable — not a missing capability.
+
+### 9.3 Validation (Gate 10E)
+
+| Check | Result |
+|---|---|
+| `pytest` | **622 passed, 4 skipped** (expected live-provider + POSIX-mode skips) |
+| `pyright` | **0 errors, 0 warnings** |
+| `ruff check` / `format --check` | **clean / 227 files formatted** |
+| CLI smoke | 15 commands + 3 groups load |
+| Flask smoke | `/` → 200, **13 routes** |
+| FastAPI smoke | `/health`·`/version`·`/projects` → 200, **53 route objects** |
+
+No code or behavior changed in this stage (audit only).
+
+### 9.4 Decommission risk assessment
+
+| Risk | Severity | Detail / mitigation |
+|---|---|---|
+| **No browser cockpit if Flask removed now** | 🔴 High | Flask is the *only* HTML UI. CLI + FastAPI cover all capabilities, but a browser user would have nothing until a FastAPI UI ships (deferred, ADR 005). This alone blocks removal. |
+| **Code coupling** | 🟢 Low | Flask is a thin layer over shared `services/*`. The only shared touchpoint is `web/file_browser.py` → re-export shim of `services/source_browser.py` (FastAPI uses the service directly). Removing Flask = delete `web/` package + templates + `serve` command + the shim + `flask`/`werkzeug` from the `weaver[web]` extra. No core logic lives in Flask. |
+| **Test coverage loss** | 🟡 Medium | Flask has its own route/smoke tests; removal drops them. The underlying services keep their own tests, so domain coverage is unaffected. |
+| **Operational surface change** | 🟡 Medium | `weaver serve` (Flask) would disappear or be repointed; users/scripts invoking it must move to `serve-api`. Needs a deprecation window + changelog. |
+| **Secret/redaction parity** | 🟢 Low | FastAPI config API already redacts (verified vs responses + OpenAPI). No regression risk. |
+
+### 9.5 Recommendation
+
+**Option 1 — KEEP Flask as the legacy UI / fallback. Do not deprecate, do not
+remove, do not flip default `serve` yet.**
+
+Reasoning: functional parity is complete, but Flask remains the **only browser
+surface** and the FastAPI UI is deliberately deferred (ADR 005). Marking Flask
+*deprecated* (Option 2) would signal an imminent migration path that **does not yet
+exist** for UI users — premature and contradictory. Decommission planning (Option 3)
+should begin **only after** a FastAPI UI ships and is accepted, at which point the
+sequence is: build FastAPI UI → re-audit → deprecate Flask (with changelog +
+window) → flip default `serve` → remove `web/` + extra.
+
+> **Gate 10E: STOP.** Functional parity = complete; UI gap = deferred (ADR 005).
+> Recommended posture unchanged: **keep Flask as legacy UI/fallback.** Awaiting
+> maintainer decision among: (1) keep as legacy UI/fallback [recommended],
+> (2) mark deprecated-but-available, (3) authorize decommission planning.
+> No removal/deprecation/default-flip without explicit approval.
