@@ -1,0 +1,71 @@
+/* Weaver FastAPI cockpit — functional-parity UI (Sprint 11A).
+   Minimal layout + semantic status color only. Visual polish is deferred
+   (ADR 005). No framework, no build. */
+
+:root {
+  --fg: #1c1f24;
+  --muted: #5c6470;
+  --line: #d8dde4;
+  --bg: #ffffff;
+  --panel: #f6f8fa;
+  --ok: #1a7f37;
+  --bad: #b42318;
+  --link: #0b5cad;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 700; text-decoration: none; color: var(--fg); }
+.topnav a { margin-right: 0.75rem; color: var(--link); text-decoration: none; }
+.api-hint { margin-left: auto; color: var(--muted); font-size: 0.85rem; }
+
+.content { padding: 1.25rem; max-width: 1100px; margin: 0 auto; }
+.footer { padding: 0.75rem 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.8rem; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 1rem 1.25rem; }
+h1 { font-size: 1.3rem; margin: 0.2rem 0 0.6rem; }
+.meta { color: var(--muted); font-size: 0.85rem; }
+.crumbs { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.5rem; }
+.crumbs a { color: var(--link); text-decoration: none; }
+code { background: #eceff3; padding: 0.05rem 0.3rem; border-radius: 3px; }
+
+.grid { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+.grid th, .grid td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--line); }
+.grid th { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; }
+.grid td a { color: var(--link); text-decoration: none; }
+.num { text-align: right; }
+
+.badge { font-size: 0.75rem; padding: 0.1rem 0.45rem; border-radius: 10px; border: 1px solid var(--line); }
+.badge.ok { color: var(--ok); border-color: var(--ok); }
+.badge.bad { color: var(--bad); border-color: var(--bad); }
+
+.tree { list-style: none; padding-left: 0; }
+.vol { border: 1px solid var(--line); border-radius: 5px; margin-bottom: 0.6rem; background: var(--bg); }
+.vol-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--line); }
+.vol-title { font-weight: 600; }
+.chapters { list-style: none; margin: 0; padding: 0.3rem 0.75rem; }
+.chapter { display: flex; justify-content: space-between; padding: 0.2rem 0; border-bottom: 1px dashed var(--line); }
+.chapter:last-child { border-bottom: none; }
+
+.empty { padding: 1rem; color: var(--muted); }
+.empty .hint, .hint { font-size: 0.85rem; }
+.error { color: var(--bad); }
+.error a { color: var(--link); }
+
+/* HTMX loading state (used from 11B onward; styled now so the primitive exists). */
+.htmx-indicator { opacity: 0; transition: opacity 120ms ease-in; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }

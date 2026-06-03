@@ -43,6 +43,31 @@ long jobs: routes_translate → web/job_manager (single background thread) → S
 ```
 HTMX provides liveness (progress, partial updates) without a JS build step.
 
+## FastAPI browser UI (Sprint 11 — `src/weaver/api/`, ADR `007`)
+
+`weaver serve-api` now serves a server-rendered browser UI **alongside** its JSON
+API. Stack: **Jinja2 + HTMX, no build, no SPA** (ADR `007`); HTMX is vendored at
+`api/static/htmx.min.js` (pinned 1.9.12, no CDN). The UI is **presentation only**
+— `routers/ui.py` is a thin adapter over the same services the JSON routers use
+(no business logic, no storage access). All HTML lives under **`/ui`**; `GET /`
+redirects there; the JSON API surface is unchanged and UI routes are excluded
+from the OpenAPI schema.
+
+`weaver serve` (Flask) remains the default/legacy cockpit — **no default flip,
+Flask untouched** (gated on the Sprint 12 UI parity audit).
+
+**Sprint 11A — shell (shipped):** dashboard/home (project list + global provider
+default), project view (Novel→Volume→Chapter tree), navigation, and the read-screen
+state primitives (loading/empty/error/404). Create/import, workspace, translate,
+export, glossary/character/TM/config screens land in 11B/11C.
+
+| Method | Path | Renders | Notes |
+|---|---|---|---|
+| GET | `/` | → 307 `/ui` | Redirect to the UI home. |
+| GET | `/ui` | `dashboard.html` | Project list + global provider/model default; empty state when none. |
+| GET | `/ui/projects/{name}` | `project.html` | Novel→Volume→Chapter tree; unknown name → 404 HTML, project error → 422 HTML. |
+| GET | `/static/*` | vendored assets | `htmx.min.js` (1.9.12), `app.css`. |
+
 ## FastAPI project management API (Sprint 2C + 10B — `src/weaver/api/`)
 
 Project discovery, creation, import, and a sandboxed source browser. The browser

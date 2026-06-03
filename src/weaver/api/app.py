@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 
 from weaver import __version__
 from weaver.api.jobs import JobRegistry
@@ -22,6 +23,8 @@ from weaver.api.routers.projects import router as projects_router
 from weaver.api.routers.system import router as system_router
 from weaver.api.routers.translate import router as translate_router
 from weaver.api.routers.translation_memory import router as translation_memory_router
+from weaver.api.routers.ui import router as ui_router
+from weaver.api.templating import mount_static
 from weaver.core.secret_store import apply_secrets_to_env
 
 
@@ -52,4 +55,15 @@ def create_api_app(base_dir: Path | None = None) -> FastAPI:
     app.include_router(characters_router)
     app.include_router(translation_memory_router)
     app.include_router(config_router)
+
+    # Browser UI (ADR 007): server-rendered Jinja2 + HTMX under /ui, vendored
+    # static assets at /static. JSON API above is unchanged. Flask stays the
+    # default `weaver serve` cockpit — no default flip.
+    mount_static(app)
+    app.include_router(ui_router)
+
+    @app.get("/", include_in_schema=False)
+    def _root_redirect() -> RedirectResponse:
+        return RedirectResponse(url="/ui")
+
     return app

@@ -1,8 +1,10 @@
 # Sprint 11A — FastAPI UI Shell (Implementation Plan)
 
-> **Status: DRAFT — awaiting maintainer approval before any code.**
-> Stack fixed by ADR `007` (Jinja2 + HTMX, no build, no SPA). Goal: **functional
-> parity, not visual polish.** Flask untouched; no default-`serve` flip.
+> **Status: IMPLEMENTED (Gate 11A passed, 2026-06-03).** Approach unchanged from
+> the approved plan. Stack per ADR `007` (Jinja2 + HTMX, no build, no SPA). Goal
+> met: **functional parity, not visual polish.** Flask untouched; no default-`serve`
+> flip. URL layout: `/ui` prefix + `GET /`→`/ui` (option 1, approved). HTMX 1.9.12
+> vendored. See COCKPIT_WORKFLOW "FastAPI browser UI" + CLAUDE.md §2 for the result.
 
 ## 1. Goal & scope
 
