@@ -85,6 +85,22 @@ button:hover { border-color: var(--link); }
 .browse-entry .file { flex: 1; }
 .browse-entry .use { font-size: 0.75rem; padding: 0.1rem 0.45rem; }
 
+/* Workspace two-column JP/EN view (Stage 11B-2) — layout only. */
+.ws-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem 0.8rem; margin-top: 0.6rem; }
+.ws-head { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 0.2rem; }
+.ws-seg { display: contents; }
+.ws-seg .ws-src, .ws-seg .ws-tx { border-bottom: 1px dashed var(--line); padding: 0.45rem 0; }
+.seg-kind { font-size: 0.7rem; color: var(--muted); }
+.seg-source { margin: 0.1rem 0 0; white-space: pre-wrap; }
+.seg-input { width: 100%; font: inherit; padding: 0.3rem; border: 1px solid var(--line); border-radius: 4px; resize: vertical; }
+.seg-bar { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; flex-wrap: wrap; }
+.saved-note { color: var(--ok); font-size: 0.8rem; }
+.link-btn { background: none; border: none; color: var(--link); cursor: pointer; padding: 0; font: inherit; }
+.seg-history { grid-column: 2; }
+.history-tbl { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0.3rem 0; }
+.history-tbl th, .history-tbl td { text-align: left; padding: 0.2rem 0.4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.history-tbl tr.current { background: #eef6ee; }
+
 /* HTMX loading state (used from 11B onward; styled now so the primitive exists). */
 .htmx-indicator { opacity: 0; transition: opacity 120ms ease-in; }
 .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }

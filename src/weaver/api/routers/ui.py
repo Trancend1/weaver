@@ -15,18 +15,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, Query, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from weaver.api.templating import templates
 from weaver.core.global_config import load_global_config, resolve_config_value
-from weaver.errors import WeaverError
+from weaver.errors import ChapterNotFoundError, SegmentNotFoundError, WeaverError
+from weaver.services.chapter_workspace import chapter_workspace
 from weaver.services.import_source import import_volume
 from weaver.services.project import initialize_project, project_exists
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_tree import project_tree
+from weaver.services.segment_history import segment_translation_history
 from weaver.services.source_browser import list_directory
 from weaver.services.source_intake import resolve_intake_source
+from weaver.services.workspace_edit import save_segment_translation
 
 router = APIRouter(tags=["ui"], include_in_schema=False)
 
@@ -194,3 +197,101 @@ def _import_error(request: Request, message: str) -> HTMLResponse:
     response.headers["HX-Retarget"] = "#import_error"
     response.headers["HX-Reswap"] = "outerHTML"
     return response
+
+
+# --- workspace read / save / history (Stage 11B-2) --------------------------
+
+
+def _resolve_project_toml(request: Request, name: str) -> Path:
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    if dp is None:
+        raise ChapterNotFoundError(f"No project named {name!r} under {base}.")
+    if dp.error:
+        raise WeaverError(dp.error)
+    return dp.project_toml
+
+
+@router.get("/ui/projects/{name}/chapters/{chapter_id}", response_class=HTMLResponse)
+def workspace_view(name: str, chapter_id: str, request: Request) -> HTMLResponse:
+    """Two-column JP/EN workspace for one chapter (read-only render of segments)."""
+    base = _base_dir(request)
+    try:
+        project_toml = _resolve_project_toml(request, name)
+        ws = chapter_workspace(project_toml, chapter_id, cwd=base)
+    except (ChapterNotFoundError, SegmentNotFoundError) as exc:
+        return templates.TemplateResponse(
+            request, "not_found.html", {"message": str(exc)}, status_code=404
+        )
+    except WeaverError as exc:
+        return templates.TemplateResponse(
+            request, "error.html", {"message": str(exc)}, status_code=422
+        )
+    return templates.TemplateResponse(request, "workspace.html", {"ws": ws})
+
+
+def _render_segment(
+    request: Request,
+    name: str,
+    chapter_id: str,
+    segment_id: str,
+    *,
+    saved: bool = False,
+    error: str | None = None,
+) -> HTMLResponse:
+    """Render one segment row from its latest stored state (used after save)."""
+    base = _base_dir(request)
+    project_toml = _resolve_project_toml(request, name)
+    ws = chapter_workspace(project_toml, chapter_id, cwd=base)
+    seg = next((s for s in ws.segments if s.id == segment_id), None)
+    if seg is None:
+        raise SegmentNotFoundError(f"Segment {segment_id!r} not found in chapter {chapter_id!r}.")
+    return templates.TemplateResponse(
+        request,
+        "partials/_segment.html",
+        {"seg": seg, "name": name, "chapter_id": chapter_id, "saved": saved, "error": error},
+    )
+
+
+@router.post(
+    "/ui/projects/{name}/chapters/{chapter_id}/segments/{segment_id}",
+    response_class=HTMLResponse,
+)
+def workspace_save(
+    name: str,
+    chapter_id: str,
+    segment_id: str,
+    request: Request,
+    translated_text: str = Form(...),
+) -> HTMLResponse:
+    """Save one segment's translation (status → manual); return the refreshed row."""
+    base = _base_dir(request)
+    try:
+        project_toml = _resolve_project_toml(request, name)
+        save_segment_translation(project_toml, chapter_id, segment_id, translated_text, cwd=base)
+    except ValueError as exc:
+        return _render_segment(request, name, chapter_id, segment_id, error=str(exc))
+    except (ChapterNotFoundError, SegmentNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _render_segment(request, name, chapter_id, segment_id, saved=True)
+
+
+@router.get(
+    "/ui/projects/{name}/chapters/{chapter_id}/segments/{segment_id}/history",
+    response_class=HTMLResponse,
+)
+def workspace_history(
+    name: str, chapter_id: str, segment_id: str, request: Request
+) -> HTMLResponse:
+    """Render one segment's full translation attempt history (HTMX fragment)."""
+    base = _base_dir(request)
+    try:
+        project_toml = _resolve_project_toml(request, name)
+        history = segment_translation_history(project_toml, chapter_id, segment_id, cwd=base)
+    except (ChapterNotFoundError, SegmentNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return templates.TemplateResponse(request, "partials/_history.html", {"history": history})

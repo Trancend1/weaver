@@ -1,0 +1,23 @@
+<div class="ws-seg" id="seg-{{ seg.id }}">
+  <div class="ws-src">
+    <span class="seg-kind">{{ seg.kind }}</span>
+    <p class="seg-source">{{ seg.source_text }}</p>
+  </div>
+  <div class="ws-tx">
+    <form hx-post="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}"
+          hx-target="#seg-{{ seg.id }}" hx-swap="outerHTML">
+      <textarea name="translated_text" rows="3" class="seg-input">{{ seg.translated_text or "" }}</textarea>
+      <div class="seg-bar">
+        <button type="submit">Save</button>
+        <span class="badge {{ 'ok' if seg.status in ('manual', 'translated') else '' }}">{{ seg.status }}</span>
+        {% if saved %}<span class="saved-note">Saved ✓</span>{% endif %}
+        {% if error %}<span class="error">{{ error }}</span>{% endif %}
+        <button type="button" class="link-btn"
+                hx-get="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/history"
+                hx-target="#seg-{{ seg.id }}-history" hx-swap="innerHTML">History</button>
+        <span class="htmx-indicator meta">…</span>
+      </div>
+    </form>
+    <div class="seg-history" id="seg-{{ seg.id }}-history"></div>
+  </div>
+</div>

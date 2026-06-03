@@ -1,0 +1,21 @@
+<div class="history">
+  {% if history.attempts %}
+  <table class="history-tbl">
+    <thead><tr><th>#</th><th>Provider</th><th>Model</th><th>When</th><th>Text</th></tr></thead>
+    <tbody>
+      {% for a in history.attempts %}
+      <tr{% if loop.last %} class="current"{% endif %}>
+        <td class="num">{{ a.attempt }}</td>
+        <td>{{ a.provider }}</td>
+        <td>{{ a.model }}</td>
+        <td class="meta">{{ a.created_at }}</td>
+        <td>{{ a.text }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="meta">{{ history.attempts | length }} attempt(s) · status: {{ history.status }}</p>
+  {% else %}
+  <p class="empty hint">No translation attempts yet.</p>
+  {% endif %}
+</div>

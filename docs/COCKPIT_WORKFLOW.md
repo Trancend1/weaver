@@ -64,14 +64,23 @@ state primitives (loading/empty/error/404).
 browsed source + optional provider/template), sandboxed source browser (HTMX
 fragment), and volume import on the project view with **HTMX tree refresh** on
 success. UI create/import reuse the same services as the JSON endpoints via
-`services/source_intake.resolve_intake_source` (no logic in the UI layer). Workspace,
-translate, export (11B-2/11B-3) and glossary/character/TM/config (11C) screens follow.
+`services/source_intake.resolve_intake_source` (no logic in the UI layer).
+
+**Sprint 11B-2 — workspace read/save/history (shipped):** the project tree links each
+chapter to a two-column JP/EN workspace; per-segment save (status → `manual`) swaps
+the refreshed segment row via HTMX; per-segment translation history loads on demand.
+Reuses `services/chapter_workspace`, `services/workspace_edit.save_segment_translation`,
+`services/segment_history` (no logic in the UI). Translate/retranslate controls (11B-3),
+export (11B-3), and glossary/character/TM/config (11C) screens follow.
 
 | Method | Path | Renders | Notes |
 |---|---|---|---|
 | GET | `/` | → 307 `/ui` | Redirect to the UI home. |
 | GET | `/ui` | `dashboard.html` | Project list + global provider/model default; empty state + "New novel" link. |
-| GET | `/ui/projects/{name}` | `project.html` | Tree (`partials/_tree.html`) + import panel + browser; unknown → 404 HTML, error → 422 HTML. |
+| GET | `/ui/projects/{name}` | `project.html` | Tree (`partials/_tree.html`, chapters link to the workspace) + import panel + browser; unknown → 404 HTML, error → 422 HTML. |
+| GET | `/ui/projects/{name}/chapters/{chapter_id}` | `workspace.html` | Two-column JP/EN workspace (`partials/_segment.html` per segment); unknown chapter → 404 HTML. |
+| POST | `/ui/projects/{name}/chapters/{chapter_id}/segments/{segment_id}` | `partials/_segment.html` | Save translation (status → `manual`); returns the refreshed segment row (HTMX `outerHTML`). Empty text → row re-rendered with an error; unknown → 404. |
+| GET | `/ui/projects/{name}/chapters/{chapter_id}/segments/{segment_id}/history` | `partials/_history.html` | Full attempt history for a segment (HTMX fragment). |
 | GET | `/ui/new` | `new.html` | Create form + source browser. |
 | POST | `/ui/new` | → 303 to project view | Create from upload/browsed source (reuses `resolve_intake_source` + `initialize_project`); duplicate/no-source/bad-source → form re-render with error (400). |
 | GET | `/ui/browse?dir=` | `partials/_browse.html` | Sandboxed listing fragment (dirs navigate via HTMX; files set the hidden `source_path`). Escape/missing → inline error. |

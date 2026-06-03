@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ ws.chapter_title or "Chapter" }} · {{ ws.project_name }} · Weaver{% endblock %}
+{% block content %}
+<section class="panel">
+  <p class="crumbs">
+    <a href="/ui">Dashboard</a> /
+    <a href="/ui/projects/{{ ws.project_name }}">{{ ws.project_name }}</a> /
+    <span>{{ ws.volume_title }}</span> / <span>{{ ws.chapter_title or "Chapter" }}</span>
+  </p>
+  <h1>{{ ws.chapter_title or "Chapter" }}</h1>
+  <p class="meta">{{ ws.segment_count }} segments · {{ ws.translated_count }} translated</p>
+
+  {% set name = ws.project_name %}
+  {% set chapter_id = ws.chapter_id %}
+  {% if ws.segments %}
+  <div class="ws-grid">
+    <div class="ws-head ws-src">Source (JP)</div>
+    <div class="ws-head ws-tx">Translation (EN)</div>
+    {% for seg in ws.segments %}
+      {% include "partials/_segment.html" %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty"><p>This chapter has no segments.</p></div>
+  {% endif %}
+</section>
+{% endblock %}
