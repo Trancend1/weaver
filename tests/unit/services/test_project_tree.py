@@ -27,3 +27,28 @@ def test_project_tree_lists_volumes_with_chapters(tmp_path) -> None:
     assert tree.volumes[0].chapters[0].segment_count >= 1
     # nothing translated yet
     assert all(c.translated_count == 0 for v in tree.volumes for c in v.chapters)
+    assert all(c.done_count == 0 for v in tree.volumes for c in v.chapters)
+
+
+def test_done_count_includes_manual_edits(tmp_path) -> None:
+    from weaver.services.chapter_workspace import chapter_workspace
+    from weaver.services.workspace_edit import save_segment_translation
+
+    init = initialize_project(FIXTURE_EPUB, cwd=tmp_path, provider="fake")
+    chapter = project_tree(init.project_toml, cwd=tmp_path).volumes[0].chapters[0]
+    assert chapter.done_count == 0
+
+    ws = chapter_workspace(init.project_toml, chapter.id, cwd=tmp_path)
+    save_segment_translation(
+        init.project_toml, chapter.id, ws.segments[0].id, "MANUAL EN", cwd=tmp_path
+    )
+
+    refreshed = next(
+        c
+        for v in project_tree(init.project_toml, cwd=tmp_path).volumes
+        for c in v.chapters
+        if c.id == chapter.id
+    )
+    # a manual edit counts as "done" but not as auto-"translated"
+    assert refreshed.done_count == 1
+    assert refreshed.translated_count == 0

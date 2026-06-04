@@ -56,6 +56,10 @@ code { background: #eceff3; padding: 0.05rem 0.3rem; border-radius: 3px; }
 .grid th { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; }
 .grid td a { color: var(--link); text-decoration: none; }
 .num { text-align: right; }
+.grid tbody tr:nth-child(even) { background: rgba(0, 0, 0, 0.02); }
+.grid tbody tr:hover { background: #eef3f8; }
+.grid progress { width: 64px; height: 0.55rem; vertical-align: middle; }
+.progress-cell { display: flex; align-items: center; gap: 0.4rem; justify-content: flex-end; }
 
 .badge { font-size: 0.75rem; padding: 0.1rem 0.45rem; border-radius: 10px; border: 1px solid var(--line); }
 .badge.ok { color: var(--ok); border-color: var(--ok); }
@@ -82,8 +86,10 @@ textarea:focus-visible,
 .vol-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--line); }
 .vol-title { font-weight: 600; }
 .chapters { list-style: none; margin: 0; padding: 0.3rem 0.75rem; }
-.chapter { display: flex; justify-content: space-between; padding: 0.2rem 0; border-bottom: 1px dashed var(--line); }
+.chapter { display: flex; justify-content: space-between; gap: 1rem; padding: 0.2rem 0; border-bottom: 1px dashed var(--line); }
 .chapter:last-child { border-bottom: none; }
+.ch-progress { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+.ch-progress progress { width: 60px; height: 0.5rem; vertical-align: middle; }
 
 .empty { padding: 1rem; color: var(--muted); }
 .empty .hint, .hint { font-size: 0.85rem; }

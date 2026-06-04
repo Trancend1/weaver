@@ -19,12 +19,18 @@ from weaver.storage.volumes import VolumeRecord, list_volumes
 
 @dataclass(frozen=True)
 class ChapterView:
-    """One chapter row with counts for the tree."""
+    """One chapter row with counts for the tree.
+
+    ``translated_count`` counts only auto-``translated`` segments (kept for the
+    JSON API). ``done_count`` also counts ``manual`` edits, so the tree can show
+    an honest "finished" progress that doesn't drop when a segment is hand-edited.
+    """
 
     id: str
     title: str | None
     segment_count: int
     translated_count: int
+    done_count: int
 
 
 @dataclass(frozen=True)
@@ -77,7 +83,8 @@ def _volume_view(connection: sqlite3.Connection, volume: VolumeRecord) -> Volume
         SELECT c.id AS id,
                c.title AS title,
                COUNT(s.id) AS segment_count,
-               SUM(CASE WHEN s.status = 'translated' THEN 1 ELSE 0 END) AS translated_count
+               SUM(CASE WHEN s.status = 'translated' THEN 1 ELSE 0 END) AS translated_count,
+               SUM(CASE WHEN s.status IN ('translated', 'manual') THEN 1 ELSE 0 END) AS done_count
         FROM chapters c
         LEFT JOIN segments s ON s.chapter_id = c.id
         WHERE c.volume_id = ?
@@ -92,6 +99,7 @@ def _volume_view(connection: sqlite3.Connection, volume: VolumeRecord) -> Volume
             title=row["title"],
             segment_count=int(row["segment_count"]),
             translated_count=int(row["translated_count"] or 0),
+            done_count=int(row["done_count"] or 0),
         )
         for row in rows
     ]

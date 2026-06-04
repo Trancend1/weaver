@@ -28,10 +28,18 @@
         <td class="num">{{ p.volume_count }}</td>
         <td class="num">{{ p.chapter_count }}</td>
         <td class="num">{{ p.segment_count }}</td>
-        <td class="num">{{ p.translated_count }}</td>
+        <td class="num">
+          <span class="progress-cell">
+            {{ p.translated_count }}
+            <progress value="{{ p.translated_count }}" max="{{ p.segment_count or 1 }}"
+              title="{{ p.translated_count }} of {{ p.segment_count }} translated"></progress>
+          </span>
+        </td>
         <td class="num">{{ p.pending_count }}</td>
         <td>
-          {% if p.error %}<span class="badge bad" title="{{ p.error }}">error</span>
+          {% if p.error %}
+          <span class="badge bad">error</span>
+          <div class="meta error">{{ p.error }}</div>
           {% else %}<span class="badge ok">ready</span>{% endif %}
         </td>
       </tr>
