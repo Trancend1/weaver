@@ -6,8 +6,8 @@ adapter that calls the same shared services the JSON routers use
 and renders a template. No business logic, no storage access here (CLAUDE.md §4.2).
 
 All HTML lives under ``/ui`` so the JSON API surface stays cleanly separable
-(``/`` redirects to ``/ui``). Flask remains the default ``weaver serve`` cockpit;
-this UI ships on ``weaver serve-api`` alongside the JSON API. No default flip.
+(``/`` redirects to ``/ui``). This UI is the default ``weaver serve`` cockpit and
+ships on ``weaver serve-api`` alongside the JSON API (Flask removed in Sprint 13B).
 """
 
 from __future__ import annotations

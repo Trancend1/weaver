@@ -5,7 +5,7 @@ is a thin adapter over the existing services (`glossary_terms`, `glossary_review
 `glossary_diff`, `characters`, `translation_memory`, `provider_config`). No
 business logic, no storage access, no behavior change. API-key *values* are only
 ever accepted by the secret-set form and are never rendered back. Lives under
-``/ui``; Flask and the JSON API are untouched.
+``/ui``; the JSON API is untouched.
 """
 
 from __future__ import annotations

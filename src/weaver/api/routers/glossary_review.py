@@ -1,8 +1,8 @@
 """Glossary candidate-review endpoints (Stage 10D).
 
 Thin adapter over the existing candidate-review services (`services/glossary_review`,
-`services/glossary_diff`) — the same flow the CLI `glossary review` and Flask
-`/glossary` surfaces use. Approve/edit write into the project `glossary_terms`
+`services/glossary_diff`) — the same flow the CLI `glossary review` surface uses.
+Approve/edit write into the project `glossary_terms`
 table (the one `build_context` injects); there is **no second glossary store**.
 Direct glossary CRUD (`routers/glossary.py`) is unchanged.
 """

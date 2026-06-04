@@ -9,7 +9,7 @@ events can be streamed as Server-Sent Events.
 # Do not build Celery, Redis, RabbitMQ, Kafka, Dramatiq, RQ, or distributed workers.
 # Single-process thread worker only.
 
-Stdlib + shared service types only; no FastAPI or Flask imports so the registry
+Stdlib + shared service types only; no FastAPI imports so the registry
 stays trivially testable and framework-agnostic (ADR 004).
 """
 

@@ -1,7 +1,7 @@
 """ASGI application factory for the FastAPI cockpit.
 
-Runs in parallel with the Flask cockpit baseline (ADR 004). This module must not
-import Flask; it wires routers and consumes shared services only.
+The FastAPI cockpit is the only web surface (ADR 004; Flask removed in Sprint
+13B). This module wires routers and consumes shared services only.
 """
 
 from __future__ import annotations
@@ -58,8 +58,8 @@ def create_api_app(base_dir: Path | None = None) -> FastAPI:
     app.include_router(config_router)
 
     # Browser UI (ADR 007): server-rendered Jinja2 + HTMX under /ui, vendored
-    # static assets at /static. JSON API above is unchanged. Flask stays the
-    # default `weaver serve` cockpit — no default flip.
+    # static assets at /static. JSON API above is unchanged. This UI is the
+    # default `weaver serve` cockpit (Flask removed in Sprint 13B).
     mount_static(app)
     app.include_router(ui_router)
     app.include_router(ui_admin_router)
