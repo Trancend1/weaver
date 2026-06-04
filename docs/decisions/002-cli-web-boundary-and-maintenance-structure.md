@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted · **Update (Sprint 13B, 2026-06-04):** the web cockpit is now FastAPI only — the `web/` (Flask) layer was removed; substitute `api/` (FastAPI app, routers, Pydantic schemas, Jinja2/HTMX UI) for the `web/` references below. The CLI / web / shared-core boundary rule is unchanged.
 
 ## Context
 

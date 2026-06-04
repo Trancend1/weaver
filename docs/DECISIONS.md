@@ -9,7 +9,7 @@ Active ADRs only. Active numbering was reset to `001` during the controlled rese
 | [001](decisions/001-docs-cleanup-and-adr-reset.md) | Docs Cleanup and ADR Reset | Archive old ADRs + strategy docs, reset active set to 001–005, compress `CLAUDE.md`. |
 | [002](decisions/002-cli-web-boundary-and-maintenance-structure.md) | CLI / Web / Shared-Core Boundary | Three binding layers; shared-core stays framework-agnostic. |
 | [003](decisions/003-mvp-baseline-for-light-novel-translator.md) | MVP Baseline | Eight MVP areas; consistency machinery (glossary, character DB, TM) is first-class. |
-| [004](decisions/004-fastapi-cockpit-technical-direction.md) | FastAPI Cockpit Direction | FastAPI is the target; Flask stays the working baseline until migration parity. Supersedes archived `0016`. |
+| [004](decisions/004-fastapi-cockpit-technical-direction.md) | FastAPI Cockpit Direction | FastAPI is the web cockpit. Migration complete — Flask removed in Sprint 13B. Supersedes archived `0016`. |
 | [005](decisions/005-cockpit-ui-ux-direction.md) | Cockpit UI/UX Direction | Calm, semantic-color, two-column workspace; HTMX-light, not SPA. |
 | [006](decisions/006-novel-volume-chapter-data-model.md) | Novel/Volume/Chapter Data Model | Project=Novel, import=Volume; schema v3 + v2→v3 migration; `init` preserved. |
 | [007](decisions/007-fastapi-ui-stack.md) | FastAPI Cockpit UI Stack | Server-rendered Jinja2 + HTMX, no Node/build, no SPA; no business logic in UI. Pins ADR `005`'s direction for Sprint 11. |

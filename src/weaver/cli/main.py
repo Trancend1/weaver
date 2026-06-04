@@ -1189,8 +1189,7 @@ def _run_fastapi_cockpit(
         "Examples:\n"
         "  weaver serve\n"
         "  weaver serve --port 9000 --books-dir ~/novels\n"
-        "  weaver serve --no-browser\n"
-        "Legacy Flask cockpit: weaver serve-flask"
+        "  weaver serve --no-browser"
     ),
 )
 def serve_command(
@@ -1215,11 +1214,7 @@ def serve_command(
         help="Enable auto-reload (development only).",
     ),
 ) -> None:
-    """Run the local web cockpit (FastAPI UI; binds 127.0.0.1 only).
-
-    This is the default cockpit. The legacy Flask cockpit remains available as
-    `weaver serve-flask`.
-    """
+    """Run the local web cockpit (FastAPI UI; binds 127.0.0.1 only)."""
 
     _run_fastapi_cockpit(
         port=port,
@@ -1253,54 +1248,6 @@ def serve_api_command(
         open_browser=False,
         reload=reload,
     )
-
-
-@app.command(
-    "serve-flask",
-    epilog=(
-        "Examples:\n"
-        "  weaver serve-flask\n"
-        "  weaver serve-flask --port 9000 --books-dir ~/novels\n"
-        "  weaver serve-flask --no-browser"
-    ),
-)
-def serve_flask_command(
-    port: int = typer.Option(
-        8765,
-        "--port",
-        help="TCP port to bind on 127.0.0.1.",
-    ),
-    books_dir: Path | None = typer.Option(
-        None,
-        "--books-dir",
-        help="Root directory to discover projects under (default: current directory).",
-    ),
-    no_browser: bool = typer.Option(
-        False,
-        "--no-browser",
-        help="Do not open a browser window on startup.",
-    ),
-) -> None:
-    """Run the legacy Flask web cockpit (binds 127.0.0.1 only).
-
-    Legacy fallback. The default cockpit is now `weaver serve` (FastAPI UI).
-    """
-
-    root = books_dir or Path.cwd()
-    try:
-        from weaver.web.app import run_server
-    except ImportError as exc:
-        _exit_with_error(
-            ConfigError(
-                "The Flask web cockpit requires the optional `web` extra. "
-                "Likely cause: Flask is not installed. "
-                "Next command: run `pip install weaver[web]`."
-            )
-        )
-        raise AssertionError("unreachable") from exc  # _exit_with_error never returns
-
-    console.print(f"Weaver legacy Flask cockpit on http://127.0.0.1:{port} (Ctrl+C to stop)")
-    run_server(books_dir=root, port=port, open_browser=not no_browser)
 
 
 @secrets_app.command(

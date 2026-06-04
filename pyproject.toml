@@ -48,7 +48,6 @@ wizard = [
     "questionary>=2.0",
 ]
 web = [
-    "flask>=3.0",
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "python-multipart>=0.0.9",

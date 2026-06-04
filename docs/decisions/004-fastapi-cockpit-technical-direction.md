@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted · **Migration complete (Sprint 13B, 2026-06-04):** the staged Flask→FastAPI migration finished — `weaver serve` flipped to FastAPI in Sprint 12B, a real-workflow soak confirmed stability ([SPRINT13A5_SOAK_RESULT.md](../SPRINT13A5_SOAK_RESULT.md)), and Sprint 13B removed the Flask cockpit entirely (`serve-flask`, `src/weaver/web/**`, Flask-only tests, and the `flask` dependency). FastAPI is now the sole web cockpit. The Flask-era discussion below is retained as historical rationale.
 
 ## Context
 

@@ -178,7 +178,6 @@ weaver init my_novel.epub --from-template light-novel
 | `weaver glossary diff <project.toml> <A> <B>` | Show which approved terms appear in chapter A but not B, and vice versa |
 | `weaver serve [--port 8765] [--books-dir PATH] [--no-browser]` | Launch the local web cockpit (**FastAPI UI**, default); binds `127.0.0.1` only (requires `pip install 'weaver[web]'`) |
 | `weaver serve-api [--port 8000] [--reload]` | Run the same FastAPI cockpit **headless** (no browser) |
-| `weaver serve-flask [--port 8765] [--books-dir PATH] [--no-browser]` | Launch the **legacy Flask** cockpit (fallback) |
 | `weaver secrets set <ENV_VAR> [--value V]` / `list` / `rm <ENV_VAR>` | Manage API keys in the local secret store (`~/.weaver/secrets.toml`); values never printed |
 
 ### Optional extras
@@ -193,9 +192,8 @@ pip install 'weaver[all]'     # all of the above
 ### Web cockpit
 
 `weaver serve` runs a local, single-user web cockpit for managing projects in
-the browser. Since the Sprint 12 parity audit, `serve` runs the **FastAPI
-cockpit** (UI + JSON API); the legacy Flask cockpit stays available as
-`weaver serve-flask`, and `weaver serve-api` runs the same FastAPI app headless.
+the browser. `serve` runs the **FastAPI cockpit** (UI + JSON API); `weaver
+serve-api` runs the same FastAPI app headless.
 It binds **`127.0.0.1` only** (no remote access, no authentication —
 see [docs/COCKPIT_WORKFLOW.md](docs/COCKPIT_WORKFLOW.md) and ADR `004`), defaults to port `8765`, and discovers every project under
 `--books-dir` (default: current directory) so you never type a project path.

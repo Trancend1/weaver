@@ -1,13 +1,14 @@
-"""Integration tests for `weaver serve` command routing (Sprint 12B flip).
+"""Integration tests for `weaver serve` command routing.
 
-After the Sprint 12B default-serve flip:
-- `weaver serve`       -> FastAPI cockpit (UI), default.
-- `weaver serve-api`   -> FastAPI cockpit, headless (no browser).
-- `weaver serve-flask` -> legacy Flask cockpit (fallback).
+After the Sprint 13 Flask decommission:
+- `weaver serve`     -> FastAPI cockpit (UI), default.
+- `weaver serve-api` -> FastAPI cockpit, headless (no browser).
 
-The serve commands launch long-running servers, so the launch primitives
-(``uvicorn.run`` / ``weaver.web.app.run_server``) are patched; the body returns
-immediately and we assert which primitive was invoked.
+(The legacy `weaver serve-flask` command was removed in Sprint 13B.)
+
+The serve commands launch a long-running server, so the launch primitive
+(``uvicorn.run``) is patched; the body returns immediately and we assert which
+factory was invoked.
 """
 
 from __future__ import annotations
@@ -28,14 +29,11 @@ def test_serve_help_describes_fastapi_default() -> None:
     assert result.exit_code == 0
     assert "FastAPI" in result.output
     assert "127.0.0.1" in result.output
-    assert "serve-flask" in result.output
 
 
-def test_serve_flask_command_is_registered() -> None:
+def test_serve_flask_command_is_gone() -> None:
     result = runner.invoke(app, ["serve-flask", "--help"])
-    assert result.exit_code == 0
-    assert "Flask" in result.output
-    assert "127.0.0.1" in result.output
+    assert result.exit_code != 0
 
 
 def test_serve_api_command_is_registered() -> None:
@@ -57,14 +55,6 @@ def test_serve_routes_to_fastapi(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_uvicorn.run = fake_run  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
 
-    # Flask launcher must NOT be touched.
-    def fail_run_server(**kwargs: object) -> None:  # pragma: no cover - guard
-        raise AssertionError("serve must not start the Flask server")
-
-    import weaver.web.app as flask_app
-
-    monkeypatch.setattr(flask_app, "run_server", fail_run_server)
-
     result = runner.invoke(app, ["serve", "--no-browser", "--port", "9123"])
     assert result.exit_code == 0
     assert calls["import_string"] == "weaver.api.app:create_api_app"
@@ -75,19 +65,22 @@ def test_serve_routes_to_fastapi(monkeypatch: pytest.MonkeyPatch) -> None:
     assert kwargs["factory"] is True
 
 
-def test_serve_flask_routes_to_flask(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`weaver serve-flask` must launch the legacy Flask server."""
+def test_serve_api_routes_to_fastapi(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`weaver serve-api` uses the same FastAPI factory, headless."""
 
     calls: dict[str, object] = {}
 
-    def fake_run_server(**kwargs: object) -> None:
-        calls.update(kwargs)
+    def fake_run(import_string: str, **kwargs: object) -> None:
+        calls["import_string"] = import_string
+        calls["kwargs"] = kwargs
 
-    import weaver.web.app as flask_app
+    fake_uvicorn = types.ModuleType("uvicorn")
+    fake_uvicorn.run = fake_run  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
 
-    monkeypatch.setattr(flask_app, "run_server", fake_run_server)
-
-    result = runner.invoke(app, ["serve-flask", "--no-browser", "--port", "9124"])
+    result = runner.invoke(app, ["serve-api", "--port", "9124"])
     assert result.exit_code == 0
-    assert calls["port"] == 9124
-    assert calls["open_browser"] is False
+    assert calls["import_string"] == "weaver.api.app:create_api_app"
+    kwargs = calls["kwargs"]
+    assert isinstance(kwargs, dict)
+    assert kwargs["port"] == 9124

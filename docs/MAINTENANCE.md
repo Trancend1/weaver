@@ -35,7 +35,7 @@ uv run ruff check .               # All checks passed
 uv run ruff format --check .      # all files already formatted
 uv run weaver --help              # CLI smoke — 15 commands
 ```
-Web smoke (no port binding): construct `create_api_app()` + FastAPI `TestClient` and assert `/health`·`/version`·`/projects` → 200; construct Flask `create_app(books_dir)` + `test_client()` and assert `/` → 200.
+Web smoke (no port binding): construct `create_api_app()` + FastAPI `TestClient` and assert `/health`·`/version`·`/projects` → 200 and the UI `/`→307·`/ui`·`/ui/new`·`/ui/config` → 200.
 
 **Expected skips (4 — none a regression):** `test_deepseek_live.py` (no `DEEPSEEK_API_KEY`), `test_gemini_live.py` (no `GEMINI_API_KEY`), `test_ollama_live.py` (no local Ollama), `test_secret_store.py::…` POSIX file-mode (Windows host). Live-provider tests are gated by `requires_cloud` / `requires_ollama` and need real keys / a running Ollama — they are **not** run in CI by design.
 
@@ -52,10 +52,10 @@ Web smoke (no port binding): construct `create_api_app()` + FastAPI `TestClient`
 - [ ] No AI attribution trailer / bot author in commits (CLAUDE.md §4.6)
 - [ ] Docs match changes; no dangling links
 
-## Migration discipline (Flask → FastAPI, ADR 004)
-- Migrate route-by-route; preserve every existing behavior; transitional coexistence must be clearly marked.
-- Keep async confined to `web/`; never leak it into shared-core. Pydantic at the boundary only.
-- Do not remove Flask until FastAPI reaches feature/behavior parity and the regression checklist passes on the FastAPI surface.
+## Web framework discipline (FastAPI, ADR 004)
+- The Flask→FastAPI migration is **complete** (Sprint 13B removed Flask; FastAPI is the only web cockpit).
+- Keep async confined to `api/`; never leak it into shared-core. Pydantic at the boundary only.
+- UI routers stay presentation-only thin adapters over `services/*` — no business logic, no storage access.
 
 ## Release / baseline process
 - Bump `pyproject.toml` version; update `CHANGELOG.md`.

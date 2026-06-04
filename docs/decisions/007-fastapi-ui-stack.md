@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (maintainer, 2026-06-03)
+Accepted (maintainer, 2026-06-03) · **Coexistence ended (Sprint 13B, 2026-06-04):** the Flask cockpit was removed; the FastAPI Jinja2+HTMX UI described here is now the only web UI. References below to Flask coexistence/fallback are historical.
 
 ## Context
 
