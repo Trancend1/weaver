@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from weaver.errors import ConfigError
@@ -26,6 +27,11 @@ def run_dashboard(project_toml: Path, *, no_color: bool = False) -> None:
     """
     _require_textual()
 
+    # Textual/Rich honor the standard NO_COLOR env var; App.__init__ has no
+    # color toggle, so route --no-color through the environment.
+    if no_color:
+        os.environ["NO_COLOR"] = "1"
+
     from textual.app import App, ComposeResult  # type: ignore[import-not-found]
     from textual.widgets import DataTable, Footer, Header, Label  # type: ignore[import-not-found]
 
@@ -39,8 +45,8 @@ def run_dashboard(project_toml: Path, *, no_color: bool = False) -> None:
         Label { color: #ffffff; margin: 1; }
         """
 
-        def __init__(self, toml_path: Path, **kwargs: object) -> None:
-            super().__init__(**kwargs)
+        def __init__(self, toml_path: Path) -> None:
+            super().__init__()
             self._toml_path = toml_path
 
         def compose(self) -> ComposeResult:
@@ -85,4 +91,4 @@ def run_dashboard(project_toml: Path, *, no_color: bool = False) -> None:
         def action_quit(self) -> None:
             self.exit()
 
-    WeaverDashboardApp(project_toml, no_color=no_color).run()
+    WeaverDashboardApp(project_toml).run()

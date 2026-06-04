@@ -39,6 +39,8 @@ Web smoke (no port binding): construct `create_api_app()` + FastAPI `TestClient`
 
 **Expected skips (4 — none a regression):** `test_deepseek_live.py` (no `DEEPSEEK_API_KEY`), `test_gemini_live.py` (no `GEMINI_API_KEY`), `test_ollama_live.py` (no local Ollama), `test_secret_store.py::…` POSIX file-mode (Windows host). Live-provider tests are gated by `requires_cloud` / `requires_ollama` and need real keys / a running Ollama — they are **not** run in CI by design.
 
+**Optional `tui` extra (textual):** the Textual dashboard (`weaver dashboard`) is typed against `textual`, which is **not** installed in the base/CI env — so `weaver.tui.*` type errors and the `tui/test_dashboard_app.py` regression tests stay latent unless you install the extra. Before changing `src/weaver/tui/**`, run the gate with it: `uv sync --extra web --extra dev --extra tui --extra wizard`, then `uv run pyright` (must be 0 with textual present) + `uv run pytest -q`.
+
 ## Regression checklist (before merge / release)
 - [ ] `pytest` green (CI subset)
 - [ ] ruff lint + format clean
