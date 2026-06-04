@@ -5,7 +5,7 @@ Weaver is an offline-capable, glossary-aware **Japanese→English light-novel tr
 Two surfaces drive the **same** core:
 
 - **CLI** (`weaver …`) — the original, complete surface. Scriptable, resumable.
-- **Web cockpit** (`weaver serve`) — a local single-user browser UI. Currently **Flask** (the shipped, working baseline); the chosen forward direction is **FastAPI** (see [ADR 004](decisions/004-fastapi-cockpit-technical-direction.md)), migrated in stages without breaking the CLI.
+- **Web cockpit** (`weaver serve`) — a local single-user browser UI on **FastAPI** (Jinja2 + HTMX UI + typed JSON API; see [ADR 004](decisions/004-fastapi-cockpit-technical-direction.md)). The legacy Flask cockpit was removed in Sprint 13B; FastAPI is now the only web surface.
 
 **Current focus:** the **MVP Web Cockpit Foundation** — building the consistency-first translator workflow (project/novel/volume/chapter, workspace, glossary, character DB, translation memory, batch, export) before any UI polish. See [MVP_SCOPE.md](MVP_SCOPE.md).
 

@@ -2,7 +2,7 @@
 
 The web cockpit is a **local, single-user** browser UI for the same translator workflow the CLI drives. It is the **primary development focus** going forward.
 
-> **Stack status (Sprint 12B, 2026-06-03).** `weaver serve` now runs the **FastAPI cockpit** (Jinja2 + vendored HTMX UI + typed JSON API, ASGI/Uvicorn) per [ADR 004](decisions/004-fastapi-cockpit-technical-direction.md) — the default after the Sprint 12 parity audit confirmed FastAPI is a functional superset of the Flask UI. The legacy **Flask** cockpit remains available as `weaver serve-flask` (fallback; not removed, not deprecated). `weaver serve-api` runs the same FastAPI app headless (no browser). The Flask sections below describe `serve-flask`.
+> **Stack status (Sprint 13B, 2026-06-04).** `weaver serve` runs the **FastAPI cockpit** (Jinja2 + vendored HTMX UI + typed JSON API, ASGI/Uvicorn) per [ADR 004](decisions/004-fastapi-cockpit-technical-direction.md) — the only web cockpit. `weaver serve-api` runs the same FastAPI app headless (no browser). The legacy Flask cockpit was **removed in Sprint 13B** (after the 12B default flip + a real-workflow soak proved the FastAPI default stable; `weaver serve-flask` and `src/weaver/web/**` no longer exist). See [SPRINT13A_DECOMMISSION_READINESS.md](SPRINT13A_DECOMMISSION_READINESS.md) + [SPRINT13A5_SOAK_RESULT.md](SPRINT13A5_SOAK_RESULT.md).
 
 ## Purpose
 
@@ -15,7 +15,6 @@ weaver serve                          # FastAPI cockpit, http://127.0.0.1:8765, 
 weaver serve --port 9000 --no-browser
 weaver serve --books-dir ~/novels     # discover projects under another root
 weaver serve-api                      # same FastAPI app, headless (no browser), :8000
-weaver serve-flask                    # legacy Flask cockpit (fallback), :8765
 ```
 
 ## Security model (carried forward from archived ADR 0017 → ADR 004)
@@ -34,14 +33,14 @@ weaver serve-flask                    # legacy Flask cockpit (fallback), :8765
 | Provider/model config | Write project `[provider]` or global default from a dropdown; API key writes to the secret store only. |
 | Translate | Start (first-N / retry-failed), live **SSE** progress, cooperative **stop** (committed segments stay). |
 | Glossary review | Paginated approve / edit / reject of pending candidates; approved-term conflicts + per-chapter coverage diff shown read-only. |
-| Export | Trigger Markdown or EPUB export (**legacy single-project** exporter, `services/export.py`). Volume-aware EPUB/TXT/HTML export is the FastAPI surface — see below. |
+| Export | Trigger **volume-aware** EPUB/TXT/HTML export (one artifact per volume) — see the FastAPI export surface below. (The CLI `export` command still drives the legacy single-project exporter, `services/export.py`.) |
 
-## Request/UI flow (Flask today)
+## Request/UI flow
 ```
-browser → Flask route blueprint (web/routes_*.py)
-        → services/* (project_discovery, translation, glossary_review, export, config_writer)
+browser → FastAPI UI router (api/routers/ui*.py)
+        → services/* (project_discovery, chapter_workspace, translation, glossary_review, export, provider_config)
         → storage/* (SQLite)
-long jobs: routes_translate → web/job_manager (single background thread) → SSE stream → htmx-updated page
+long jobs: api/routers/{translate,batch,export} → api/jobs.py (JobRegistry, single-process thread workers) → SSE stream → htmx-updated panel
 ```
 HTMX provides liveness (progress, partial updates) without a JS build step.
 
@@ -56,11 +55,14 @@ API. Stack: **Jinja2 + HTMX, no build, no SPA** (ADR `007`); HTMX is vendored at
 redirects there; the JSON API surface is unchanged and UI routes are excluded
 from the OpenAPI schema.
 
-**Sprint 12B default flip (2026-06-03):** `weaver serve` → FastAPI cockpit
-(default); `weaver serve-flask` → legacy Flask cockpit (fallback, **not removed,
-not deprecated**); `weaver serve-api` → same FastAPI app headless. The flip is a
-default-command change only — no Flask route/template/dependency removal — and is
-reversible. See [SPRINT12_UI_PARITY_AUDIT.md](SPRINT12_UI_PARITY_AUDIT.md).
+**Sprint 12B default flip → Sprint 13B decommission:** 12B flipped `weaver serve`
+to the FastAPI cockpit (Flask kept temporarily as `serve-flask`); after a real
+multi-format/multi-volume workflow soak proved the FastAPI default stable
+([SPRINT13A5_SOAK_RESULT.md](SPRINT13A5_SOAK_RESULT.md)), **Sprint 13B removed
+Flask entirely** — `serve-flask`, `src/weaver/web/**`, the Flask-only tests, and
+the `flask` dependency are gone. `weaver serve` (UI) and `weaver serve-api`
+(headless) are the only web entry points. See
+[SPRINT12_UI_PARITY_AUDIT.md](SPRINT12_UI_PARITY_AUDIT.md).
 
 **Sprint 11A — shell (shipped):** dashboard/home (project list + global provider
 default), project view (Novel→Volume→Chapter tree), navigation, and the read-screen
@@ -127,8 +129,8 @@ lives at `/ui/config` (global + per-project scope); project pages link to glossa
 ## FastAPI project management API (Sprint 2C + 10B — `src/weaver/api/`)
 
 Project discovery, creation, import, and a sandboxed source browser. The browser
-and create endpoints (Sprint 10B) close the FastAPI parity gap for *creating /
-selecting* projects without the Flask UI. All paths are sandboxed to the cockpit
+and create endpoints (Sprint 10B) let you *create / select* projects entirely in
+the browser. All paths are sandboxed to the cockpit
 `base_dir` (ADR `0017`) — `..` traversal and absolute paths are rejected.
 
 | Method | Path | Service | Notes |
@@ -142,7 +144,7 @@ selecting* projects without the Flask UI. All paths are sandboxed to the cockpit
 ## FastAPI glossary candidate-review API (Sprint 10D — `src/weaver/api/`)
 
 Exposes the existing candidate-review flow (the same one the CLI `glossary review`
-and Flask `/glossary` use) over JSON. Thin adapter over `services/glossary_review`
+uses) over JSON. Thin adapter over `services/glossary_review`
 + `services/glossary_diff`. **Approve/edit write into the project `glossary_terms`
 table** — the same rows direct glossary CRUD reads and `build_context` injects.
 There is **no second glossary store**; direct CRUD (`routers/glossary.py`) is
@@ -161,8 +163,8 @@ unchanged. The candidate routes (`…/glossary/candidates/…`, `…/glossary/co
 
 ## FastAPI provider/secret config API (Sprint 10C — `src/weaver/api/`)
 
-Persists provider/model config and API-key secrets from the API (closes the
-Flask `/config` parity gap). Thin adapter over `services/provider_config.py`,
+Persists provider/model config and API-key secrets from the API. Thin adapter
+over `services/provider_config.py`,
 which reuses `services/config_writer` (provider/model write) + `core/secret_store`
 (secrets). **API-key values are accepted only by `POST /config/secrets/{env_name}`
 and are never returned by any endpoint** — responses carry key *presence* (a bool)
@@ -177,7 +179,7 @@ and stored secret *names* only (CLAUDE.md §4.2, ADR `0017`/`0020`).
 
 > Secrets are keyed by **env-var name** (e.g. `DEEPSEEK_API_KEY`), not by provider
 > — this is the existing secret-store abstraction (`core/secret_store`), shared
-> with the CLI `secrets` group and the Flask `/config` route. The provider config's
+> with the CLI `secrets` group and the cockpit `/config` route. The provider config's
 > `api_key_env` field names which env var holds its key.
 
 ## FastAPI workspace API (Sprint 3 — `src/weaver/api/`)
@@ -252,7 +254,7 @@ Batch translation runs the per-chapter pipeline across many chapters as **one ba
 
 Export renders translated content to a **per-volume artifact** (EPUB / TXT / HTML) as **one background job** with per-volume progress. Logic lives in `services/export_book.py` (`prepare_export` → `run_export`); the `api/jobs.py` `JobRegistry` owns a separate `ExportJob` lifecycle (`submit_export`/`get_export`). Translation, TM, and provider paths are **untouched**.
 
-> **Surface split (web-first MVP).** This FastAPI export is the **volume-aware** exporter for the Novel→Volume→Chapter model (one artifact per volume, EPUB/TXT/HTML). The **CLI `export` command** and the Flask "Export" page above drive the **legacy single-project exporter** (`services/export.py`, Markdown/single-EPUB) and are not back-ported to the volume model — exporting full novels is a cockpit workflow. This is an accepted MVP boundary, not a gap.
+> **Surface split (web-first MVP).** This FastAPI export is the **volume-aware** exporter for the Novel→Volume→Chapter model (one artifact per volume, EPUB/TXT/HTML). The **CLI `export` command** drives the **legacy single-project exporter** (`services/export.py`, Markdown/single-EPUB) and is not back-ported to the volume model — exporting full novels is a cockpit workflow. This is an accepted MVP boundary, not a gap.
 
 | Method | Path | Notes |
 |---|---|---|
@@ -280,7 +282,7 @@ Project-scoped data that feeds the prompt and reuse layer. Each router is a thin
 | GET | `/projects/{name}/memory` | Translation-memory overview: `total_entries`, `exact_hits`, `reused_from_memory`, `entries[]`. |
 | DELETE | `/projects/{name}/memory/{source_hash}` | Delete one TM entry (the `translation_memory` row only). → `204`; unknown hash → `404`. Translation history, manual edits, glossary, and character data are **never** touched. |
 
-- **Translation memory** is keyed by the stored `segment.source_hash` (project-scoped). `translate_one_segment` looks it up before the provider call: exact match → reuse + record a `memory`-tagged attempt + skip the model; miss → call the model and save the result. **Manual edits are the source of truth** — manual saves write to TM and provider saves never overwrite a `manual` row. Explicit retranslate bypasses the lookup but still refreshes provider entries. Reuse count surfaces as `reused_from_memory` in job status, the SSE `done` event, the Flask job summary, and the CLI translate output.
+- **Translation memory** is keyed by the stored `segment.source_hash` (project-scoped). `translate_one_segment` looks it up before the provider call: exact match → reuse + record a `memory`-tagged attempt + skip the model; miss → call the model and save the result. **Manual edits are the source of truth** — manual saves write to TM and provider saves never overwrite a `manual` row. Explicit retranslate bypasses the lookup but still refreshes provider entries. Reuse count surfaces as `reused_from_memory` in job status, the SSE `done` event, and the CLI translate output.
 
 ## Boundary rules (ADR 002 / 004)
 - `web/` holds HTTP + templates + job lifecycle only. **Zero** translation/glossary/export logic — all of it is in `services/`, shared with the CLI.

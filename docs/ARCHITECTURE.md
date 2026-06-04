@@ -4,13 +4,12 @@ Compact map of the codebase and its boundaries. Deep pre-reset detail (full IR t
 
 ## Layers (ADR 002)
 
-Binding layers. The split is the project's key asset for the Flask→FastAPI migration (ADR 004): only `api/` (FastAPI) and `web/` (legacy Flask) are framework-coupled; shared/core stays framework-agnostic.
+Binding layers. The split is the project's key asset (ADR 004): only `api/` (FastAPI) is framework-coupled; shared/core stays framework-agnostic. (The legacy Flask cockpit `web/` was removed in Sprint 13B; the FastAPI cockpit is now the only web surface.)
 
 ```
 src/weaver/
 ├── cli/          ← CLI surface (typer). Terminal I/O only.
-├── api/          ← FastAPI cockpit (default `weaver serve`/`serve-api`). HTTP + JSON + Jinja2/HTMX UI.
-├── web/          ← legacy Flask cockpit (`weaver serve-flask`, fallback). HTTP + templates only.
+├── api/          ← FastAPI cockpit (`weaver serve`/`serve-api`). HTTP + JSON + Jinja2/HTMX UI.
 ├── services/     ← shared/core: domain orchestration
 ├── storage/      ← shared/core: SQLite (WAL, no ORM)
 ├── core/         ← shared/core: value types, config, secret store
@@ -26,7 +25,7 @@ src/weaver/
 
 ## Module inventory (current)
 
-**`services/`** — `project.py` (init/inspect), `translation.py` (resumable orchestrator), `workspace_translate.py` (chapter/selection translate + safe-retranslate), `batch_translate.py` (chapter/volume/novel batch planning + run), `translation_memory.py`, `characters.py`, `glossary.py`, `glossary_review.py`, `glossary_diff.py`, `glossary_terms.py`, `export.py` (markdown + epub), `manual_edit.py`, `preview.py`, `qa.py`, `doctor.py`, `epubcheck.py`, `wizard.py`, `config_writer.py` (atomic provider/model writer), `project_discovery.py` (cockpit project listing), `source_browser.py` (sandboxed source-file browsing + upload sanitize/store; shared by Flask `web/file_browser.py` re-export and the FastAPI create/browse endpoints), `provider_config.py` (redacted read + write of provider/model config + secret store orchestration; reuses `config_writer` + `core/secret_store`; never returns key values).
+**`services/`** — `project.py` (init/inspect), `translation.py` (resumable orchestrator), `workspace_translate.py` (chapter/selection translate + safe-retranslate), `batch_translate.py` (chapter/volume/novel batch planning + run), `translation_memory.py`, `characters.py`, `glossary.py`, `glossary_review.py`, `glossary_diff.py`, `glossary_terms.py`, `export.py` (markdown + epub), `manual_edit.py`, `preview.py`, `qa.py`, `doctor.py`, `epubcheck.py`, `wizard.py`, `config_writer.py` (atomic provider/model writer), `project_discovery.py` (cockpit project listing), `source_browser.py` (sandboxed source-file browsing + upload sanitize/store; consumed by the FastAPI create/browse endpoints), `provider_config.py` (redacted read + write of provider/model config + secret store orchestration; reuses `config_writer` + `core/secret_store`; never returns key values).
 
 **`api/`** (FastAPI cockpit) — `app.py` (`create_api_app` factory), `jobs.py` (`JobRegistry` + `TranslationJob`/`BatchJob`/`ExportJob`, single-process thread workers + SSE), `schemas.py` (Pydantic boundary DTOs), routers `routers/{system,projects,translate,batch,export,glossary,glossary_review,characters,translation_memory,config}.py` (thin adapters over `services/*`). `routers/projects.py` covers list/tree/import plus **create-novel + sandboxed source browser** (`POST /projects/create`, `GET /projects/browse`, Sprint 10B); `routers/config.py` is the **provider/model + secret config** surface (`GET/PATCH /config`, `POST/DELETE /config/secrets/{env_name}`, Sprint 10C — key values never returned); `routers/glossary.py` is direct term CRUD and `routers/glossary_review.py` is the **candidate-review flow** (`…/glossary/candidates[/{id}/{approve,edit,reject}]`, `…/glossary/conflicts`, `…/glossary/diff`, Sprint 10D — approve/edit write the same `glossary_terms` rows; no second store).
 
@@ -36,10 +35,8 @@ src/weaver/
 
 **`providers/`** — `registry.py` (registry-driven types), `base.py`, `types.py`, `parser.py` (JSON parse + repair), `prompts.py`, and adapters `deepseek.py`, `gemini.py`, `ollama.py`, `fake.py`. `custom` (OpenAI-compatible) is registry-driven.
 
-**`web/`** (legacy Flask, `weaver serve-flask` fallback) — `app.py` (factory, `127.0.0.1` bind), `job_manager.py` (single-job + SSE), route blueprints `routes_{projects,translate,new,config,export,glossary}.py`, `file_browser.py` (sandboxed), `templates/*.html`, vendored `static/htmx.min.js`. **Sprint 12B flip:** default `weaver serve` now runs the FastAPI cockpit (`api/`); Flask stays available as `serve-flask` (not removed/deprecated).
-
 **`readers/`** — `epub.py`, `txt.py`, `html.py` (EPUB/TXT/HTML → IR) with `read_source` dispatch; shared `html_blocks.py` + `synthetic_document.py`.
-**`renderers/`** — `epub.py` (EPUB write-back), `epub_synthesis.py` (synthesize EPUB for TXT/HTML-sourced volumes), `txt.py` + `html.py` (plain-text / HTML output), and `rendered_document.py` (shared `RenderChapter` + `block_to_html`). Volume-aware export orchestration lives in `services/export_book.py`; legacy Markdown/single-EPUB export in `services/export.py`. **Export surface split (web-first MVP):** the **FastAPI cockpit** (`api/routers/export.py` → `services/export_book.py`) is the volume-aware EPUB/TXT/HTML exporter for the Novel→Volume→Chapter model; the **CLI `export` command** (and Flask "Export") still drives the **legacy single-project exporter** (`services/export.py` → `export_epub_project`/`export_markdown_project`). The legacy path is intentionally not back-ported to the volume model — exporting full novels is a cockpit workflow. *DOCX output + export UI are MVP gaps (deferred).*
+**`renderers/`** — `epub.py` (EPUB write-back), `epub_synthesis.py` (synthesize EPUB for TXT/HTML-sourced volumes), `txt.py` + `html.py` (plain-text / HTML output), and `rendered_document.py` (shared `RenderChapter` + `block_to_html`). Volume-aware export orchestration lives in `services/export_book.py`; legacy Markdown/single-EPUB export in `services/export.py`. **Export surface split (web-first MVP):** the **FastAPI cockpit** (`api/routers/export.py` → `services/export_book.py`) is the volume-aware EPUB/TXT/HTML exporter for the Novel→Volume→Chapter model; the **CLI `export` command** still drives the **legacy single-project exporter** (`services/export.py` → `export_epub_project`/`export_markdown_project`). The legacy path is intentionally not back-ported to the volume model — exporting full novels is a cockpit workflow. *DOCX output + export UI are MVP gaps (deferred).*
 
 ## Data / project flow
 
@@ -73,4 +70,4 @@ Shipped since the reset baseline: Volume tier (schema v3), character database (`
 
 ## Dependencies
 
-Core: typer, rich, pydantic v2, ebooklib, openai SDK, google-generativeai, jinja2, httpx, sqlite3/tomllib (stdlib). Optional extras: `web` (flask → FastAPI target), `tui` (textual), `wizard` (questionary). See [pyproject.toml](../pyproject.toml).
+Core: typer, rich, pydantic v2, ebooklib, openai SDK, google-generativeai, jinja2, httpx, sqlite3/tomllib (stdlib). Optional extras: `web` (FastAPI + uvicorn), `tui` (textual), `wizard` (questionary). See [pyproject.toml](../pyproject.toml).

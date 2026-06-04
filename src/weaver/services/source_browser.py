@@ -3,11 +3,10 @@
 Framework-agnostic: lists sub-directories and importable source files
 (``.epub``/``.txt``/``.html``/``.htm``) under a sandbox root, and sanitizes
 upload filenames. Every requested path is resolved and confirmed to stay inside
-the root — ``..`` traversal escapes are rejected. The web/API layers never
-expose paths outside the sandbox.
+the root — ``..`` traversal escapes are rejected. The API layer never exposes
+paths outside the sandbox.
 
-Consumed by both the Flask cockpit (``weaver.web.file_browser`` re-exports this)
-and the FastAPI cockpit (``api/routers/projects.py``). Holds no web types.
+Consumed by the FastAPI cockpit (``api/routers/projects.py``). Holds no web types.
 """
 
 from __future__ import annotations
