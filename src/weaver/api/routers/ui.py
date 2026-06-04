@@ -319,9 +319,15 @@ def _render_translate_job(request: Request, name: str, job_id: str) -> HTMLRespo
     job = _jobs(request).get(job_id)
     if job is None or job.project_name != name:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found for '{name}'.")
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         request, "partials/_job.html", {"job": job, "progress": job.snapshot(), "name": name}
     )
+    # When the job finishes, tell the workspace grid to refresh itself once. The
+    # signal rides on a response header (not an hx-trigger in the panel) so the
+    # terminal panel itself stays quiet (no further polling).
+    if job.status in {"done", "cancelled"}:
+        response.headers["HX-Trigger"] = "refreshGrid"
+    return response
 
 
 @router.post("/ui/projects/{name}/chapters/{chapter_id}/translate", response_class=HTMLResponse)

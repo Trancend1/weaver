@@ -1,4 +1,5 @@
 <div class="history">
+  <button type="button" class="link-btn" hx-on:click="this.closest('.history').remove()">Hide history</button>
   {% if history.attempts %}
   <table class="history-tbl">
     <thead><tr><th>#</th><th>Provider</th><th>Model</th><th>When</th><th>Text</th></tr></thead>
