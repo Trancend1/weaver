@@ -7,7 +7,7 @@ Get a translated EPUB from a Japanese source using the bundled fixture and the `
 git clone https://github.com/Trancend1/weaver.git
 cd weaver
 uv sync --extra dev
-uv run weaver --version        # weaver 0.6.0
+uv run weaver --version        # weaver 0.7.0
 ```
 
 ## CLI: end-to-end with the `fake` provider

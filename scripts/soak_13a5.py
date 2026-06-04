@@ -19,6 +19,11 @@ from pathlib import Path
 
 import httpx
 
+# Force UTF-8 stdout so Japanese step logs render on legacy Windows codepages
+# (cp1252) instead of crashing the run with UnicodeEncodeError.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 PROVIDER = "fake"
 TERMINAL = ("done", "failed", "cancelled")
 

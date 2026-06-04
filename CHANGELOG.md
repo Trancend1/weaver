@@ -4,7 +4,71 @@ All notable changes to Weaver are recorded here. Format follows [Keep a Changelo
 
 ## [Unreleased]
 
-No unreleased changes yet.
+MVP "Web Cockpit Foundation" release candidate. This entry consolidates the work
+that landed after the `0.1.0` alpha (intermediate `0.2.0`–`0.6.0` internal version
+strings were never released or changelogged). The headline change is a complete
+local **web cockpit on FastAPI** plus the retirement of the original Flask
+cockpit. The CLI remains fully functional.
+
+### Added
+
+- **FastAPI web cockpit** (`weaver serve`) — local, single-user, loopback-only
+  (`127.0.0.1`, no auth) browser UI built with server-rendered Jinja2 + vendored
+  HTMX (no Node, no build, no SPA; ADR `004`/`007`). Ships behind the optional
+  `weaver[web]` extra.
+- **Headless API** (`weaver serve-api`) — the same FastAPI app without a browser,
+  exposing the typed JSON API.
+- **Novel → Volume → Chapter project model** with multi-format import (EPUB / TXT
+  / HTML); `weaver import` adds a source as a new volume.
+- **Translation workspace** — two-column JP/EN read, per-segment edit/save
+  (status → `manual`), and revision history.
+- **Provider & AI translation** in the cockpit — configurable provider/model,
+  per-request overrides, chapter/selection translate, and **safe retranslate**
+  modes (`skip_existing`, `retranslate_non_manual`, `force_selected`; manual
+  edits are protected).
+- **Glossary & character database** — project-scoped CRUD plus glossary candidate
+  review (approve/edit/reject, conflicts, coverage diff); both injected into the
+  translation prompt.
+- **Translation memory** — source→target store with lookup-before-AI reuse and
+  AI fallback on miss; manual edits are the memory source of truth.
+- **Batch translation** — chapter / volume / novel scope with live progress,
+  per-unit status, cooperative cancel, and SSE streaming (single-process thread
+  worker; no external queue).
+- **Export** — volume-aware **EPUB / TXT / HTML** artifacts from the cockpit
+  (`POST /projects/{name}/export/{novel|volumes/{id}|chapters/{id}}`).
+- **Secret store** — API keys in `~/.weaver/secrets.toml` (mode `0o600`); shell
+  env wins; keys are never written to config, logged, or rendered.
+
+### Changed
+
+- **Web framework is FastAPI** (ADR `004`). `weaver serve` defaults to the
+  FastAPI cockpit UI; `weaver serve-api` runs it headless.
+- Shared/core stays framework-agnostic; Pydantic and web types are confined to
+  the `api/` boundary (ADR `002`).
+
+### Removed
+
+- **Legacy Flask cockpit** (BREAKING for the web surface): `weaver serve-flask`,
+  `src/weaver/web/**`, Flask-only tests, and the `flask` dependency were removed
+  in Sprint 13B after a parity audit, a default flip, and a real-workflow soak.
+  FastAPI is now the only web cockpit.
+
+### Fixed
+
+- Import volume-id collision: chapter/segment ids are now scoped per volume, so
+  importing content that collides with an existing volume no longer re-parents
+  its chapters.
+- DeepSeek provider healthcheck JSON-mode handling.
+
+### Known Limitations / Deferred (not RC blockers)
+
+- **DOCX export** is out of MVP — `target="docx"` returns HTTP 422 (handled, not
+  a crash).
+- **Cockpit UI is functional parity, not visual polish** (ADR `005`); empty
+  states, layout, and visual hierarchy are deferred.
+- Combined EPUB/ZIP bundle export deferred.
+- Legacy CLI `weaver translate` / `weaver export` remain **single-volume**;
+  multi-volume translate/export is the cockpit's job.
 
 ## [0.1.0] - 2026-05-19
 

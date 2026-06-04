@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "weaver"
-version = "0.6.0"
+version = "0.7.0"
 description = "Offline-capable, glossary-aware JP-EN novel translation workbench."
 readme = "README.md"
 requires-python = ">=3.11"

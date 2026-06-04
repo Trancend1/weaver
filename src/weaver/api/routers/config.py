@@ -8,7 +8,7 @@ overrides only.
 Security (CLAUDE.md §4.2, ADR ``0017``/``0020``): API-key *values* are only ever
 accepted via ``POST /config/secrets/{env_name}`` and are **never returned** by
 any endpoint — responses report key *presence* (a bool) and secret *names* only.
-The CLI ``secrets`` group and the Flask ``/config`` route are untouched.
+The CLI ``secrets`` group is untouched.
 """
 
 from __future__ import annotations

@@ -4,7 +4,7 @@
 
 Weaver is a local CLI that turns a Japanese EPUB into a translated EPUB and a Markdown review file. It manages glossary consistency, resumable translation runs, and deterministic QA — no GUI, no accounts, no telemetry.
 
-**Status:** v0.6.0 alpha · single maintainer · MIT license
+**Status:** v0.7.0-rc.1 · single maintainer · MIT license
 
 ---
 
@@ -38,7 +38,7 @@ git clone https://github.com/Trancend1/weaver.git
 cd weaver
 uv sync --extra dev
 uv run weaver --version
-# weaver 0.6.0
+# weaver 0.7.0
 ```
 
 Once published to PyPI, end users install with:
@@ -202,15 +202,16 @@ disk, or rendered in the UI.
 
 From the browser you can:
 
-- **Create a project** — browse the sandboxed books directory or upload an EPUB,
-  pick a provider and template, and run `init` (no `..` traversal; uploads land
-  in `.weaver/_uploads/`).
+- **Create a project** — browse the sandboxed books directory or upload a source
+  file (EPUB/TXT/HTML), pick a provider and template, and run `init` (no `..`
+  traversal; uploads land in `.weaver/_uploads/`).
 - **Set provider/model** — write the project `[provider]` table or the global
   `~/.weaver/config.toml` default from a dropdown (keys stay in env).
-- **Translate** — start with first-N / retry-failed, watch live Server-Sent
-  Events progress, and **stop** a run cooperatively (already-translated segments
-  stay committed).
-- **Export** — trigger Markdown or EPUB export.
+- **Translate** — translate a chapter or retranslate with an explicit mode
+  (skip-existing / non-manual / force-selected), watch live Server-Sent Events
+  progress, and **stop** a run cooperatively (already-translated segments stay
+  committed).
+- **Export** — trigger EPUB / TXT / HTML export (per-volume artifacts).
 - **Review the glossary** — paginated approve / edit / reject of pending
   candidates, with approved-term conflicts and per-chapter coverage diff surfaced
   read-only.
