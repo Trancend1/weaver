@@ -1,7 +1,8 @@
 <div id="memory">
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <p class="meta">{{ overview.total_entries }} entries · reused from memory {{ overview.reused_from_memory }}</p>
   {% if overview.entries %}
+  <div class="table-scroll">
   <table class="grid">
     <thead><tr><th>Source (JP)</th><th>Target (EN)</th><th>Provider</th><th>Updated</th><th></th></tr></thead>
     <tbody>
@@ -14,12 +15,14 @@
         <td>
           <button type="button" class="link-btn"
                   hx-post="/ui/projects/{{ name }}/memory/{{ e.source_hash }}/delete"
-                  hx-target="#memory" hx-swap="outerHTML">Delete</button>
+                  hx-target="#memory" hx-swap="outerHTML"
+                  hx-confirm="Delete this translation-memory entry? (TM row only; chapter translations and history are kept.)">Delete</button>
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <p class="empty hint">No translation-memory entries yet.</p>
   {% endif %}

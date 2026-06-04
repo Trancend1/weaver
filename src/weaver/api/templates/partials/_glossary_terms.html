@@ -1,6 +1,7 @@
 <div id="glossary-terms">
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   {% if terms %}
+  <div class="table-scroll">
   <table class="grid">
     <thead><tr><th>Source (JP)</th><th>Target (EN)</th><th>Category</th><th>Notes</th><th></th></tr></thead>
     <tbody>
@@ -10,9 +11,9 @@
         <td>
           <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/terms/{{ t.source }}/update"
                 hx-target="#glossary-terms" hx-swap="outerHTML">
-            <input name="target" value="{{ t.target }}">
-            <input name="category" value="{{ t.category or '' }}" placeholder="category">
-            <input name="notes" value="{{ t.notes or '' }}" placeholder="notes">
+            <input name="target" value="{{ t.target }}" aria-label="Target (English)">
+            <input name="category" value="{{ t.category or '' }}" placeholder="category" aria-label="Category">
+            <input name="notes" value="{{ t.notes or '' }}" placeholder="notes" aria-label="Notes">
             <button type="submit">Save</button>
           </form>
         </td>
@@ -21,22 +22,24 @@
         <td>
           <button type="button" class="link-btn"
                   hx-post="/ui/projects/{{ name }}/glossary/terms/{{ t.source }}/delete"
-                  hx-target="#glossary-terms" hx-swap="outerHTML">Delete</button>
+                  hx-target="#glossary-terms" hx-swap="outerHTML"
+                  hx-confirm="Delete glossary term '{{ t.source }}'? This cannot be undone.">Delete</button>
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <p class="empty hint">No approved glossary terms yet.</p>
   {% endif %}
 
   <form class="inline-form" hx-post="/ui/projects/{{ name }}/glossary/terms"
         hx-target="#glossary-terms" hx-swap="outerHTML">
-    <input name="source" placeholder="source (JP)" required>
-    <input name="target" placeholder="target (EN)" required>
-    <input name="category" placeholder="category">
-    <input name="notes" placeholder="notes">
+    <input name="source" placeholder="source (JP)" required aria-label="New term — source (Japanese)">
+    <input name="target" placeholder="target (EN)" required aria-label="New term — target (English)">
+    <input name="category" placeholder="category" aria-label="New term — category">
+    <input name="notes" placeholder="notes" aria-label="New term — notes">
     <button type="submit">Add term</button>
   </form>
 </div>

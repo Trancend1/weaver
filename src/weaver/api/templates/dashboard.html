@@ -10,6 +10,7 @@
   </p>
 
   {% if projects %}
+  <div class="table-scroll">
   <table class="grid">
     <thead>
       <tr>
@@ -37,10 +38,11 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <div class="empty">
     <p>No projects found under <code>{{ books_dir }}</code>.</p>
-    <p class="hint">Create one with the CLI (<code>weaver init &lt;source&gt;</code>) — the create/import UI lands in Sprint 11B.</p>
+    <p class="hint">Use <a href="/ui/new">+ New novel</a> above to import a source (TXT/EPUB/HTML), or create one from the CLI with <code>weaver init &lt;source&gt;</code>.</p>
   </div>
   {% endif %}
 </section>

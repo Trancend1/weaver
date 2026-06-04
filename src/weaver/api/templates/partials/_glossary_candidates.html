@@ -1,10 +1,11 @@
 <div id="glossary-candidates">
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <p class="meta">
     pending {{ page.counts.pending }} · approved {{ page.counts.approved }} · rejected {{ page.counts.rejected }}
     ({{ page.total_pending }} matching)
   </p>
   {% if page.items %}
+  <div class="table-scroll">
   <table class="grid">
     <thead><tr><th>Source</th><th class="num">Freq</th><th>Approve as</th><th></th></tr></thead>
     <tbody>
@@ -16,7 +17,7 @@
           <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/edit"
                 hx-target="#glossary-candidates" hx-swap="outerHTML">
             <input type="hidden" name="offset" value="{{ page.offset }}">
-            <input name="target" value="{{ c.target or '' }}" placeholder="target (EN)">
+            <input name="target" value="{{ c.target or '' }}" placeholder="target (EN)" aria-label="Approve '{{ c.source }}' as (English)">
             <button type="submit">Edit + approve</button>
           </form>
         </td>
@@ -36,6 +37,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
   <div class="pager">
     {% if prev_offset is not none %}
     <button type="button" class="link-btn"

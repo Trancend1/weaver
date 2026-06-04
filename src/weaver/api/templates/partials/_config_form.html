@@ -1,6 +1,6 @@
 <div id="config-form">
-  {% if saved %}<p class="saved-note">Saved ✓</p>{% endif %}
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if saved %}<p class="saved-note" role="status">Saved ✓</p>{% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
 
   <p class="meta">
     Global defaults: provider <code>{{ view.default_provider or "—" }}</code> · model <code>{{ view.default_model or "—" }}</code>

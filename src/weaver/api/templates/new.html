@@ -6,7 +6,7 @@
   <h1>Create a novel</h1>
   <p class="meta">Upload a source file <strong>or</strong> pick one from the books dir below. The project name comes from the source filename.</p>
 
-  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
 
   <form method="post" action="/ui/new" enctype="multipart/form-data" class="stack">
     <label>Upload source
