@@ -38,7 +38,7 @@ def test_run_dashboard_constructs_app_without_no_color_typeerror(
     project_toml = _init_project(tmp_path)
 
     # Patch the blocking UI loop so run_dashboard returns after construction.
-    from textual.app import App
+    from textual.app import App  # type: ignore[import-not-found]
 
     monkeypatch.setattr(App, "run", lambda self: None)
     monkeypatch.delenv("NO_COLOR", raising=False)
@@ -57,7 +57,7 @@ def test_run_dashboard_without_no_color_does_not_force_env(
     monkeypatch.chdir(tmp_path)
     project_toml = _init_project(tmp_path)
 
-    from textual.app import App
+    from textual.app import App  # type: ignore[import-not-found]
 
     monkeypatch.setattr(App, "run", lambda self: None)
     monkeypatch.delenv("NO_COLOR", raising=False)
