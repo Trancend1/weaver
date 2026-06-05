@@ -4,13 +4,17 @@ All notable changes to Weaver are recorded here. Format follows [Keep a Changelo
 
 ## [Unreleased]
 
-MVP "Web Cockpit Foundation" release candidate. This entry consolidates the work
-that landed after the `0.1.0` alpha (intermediate `0.2.0`–`0.6.0` internal version
-strings were never released or changelogged). The headline change is a complete
-local **web cockpit on FastAPI** plus the retirement of the original Flask
-cockpit. The CLI remains fully functional.
+## [0.7.0] - 2026-06-05
+
+This release promotes the `v0.7.0-rc.1` release candidate to stable. It consolidates the
+work that landed after the `0.1.0` alpha (intermediate `0.2.0`–`0.6.0` internal version
+strings were never released or changelogged). The headline changes are a complete local
+**web cockpit on FastAPI**, **UI/UX polish**, and a read-only **Translation QA** system
+before export. The CLI remains fully functional.
 
 ### Added
+
+#### Web Cockpit (MVP Sprints 1–13)
 
 - **FastAPI web cockpit** (`weaver serve`) — local, single-user, loopback-only
   (`127.0.0.1`, no auth) browser UI built with server-rendered Jinja2 + vendored
@@ -39,6 +43,46 @@ cockpit. The CLI remains fully functional.
 - **Secret store** — API keys in `~/.weaver/secrets.toml` (mode `0o600`); shell
   env wins; keys are never written to config, logged, or rendered.
 
+#### UI/UX Polish (Phase A)
+
+- **Consistent shell** — shared header/nav, breadcrumb trail, `.flash-message`
+  feedback bar, and descriptive `<title>` on every page.
+- **Accessibility** — keyboard-navigable primary paths, visible focus ring,
+  skip-nav link, `prefers-reduced-motion` respected, WCAG AA contrast on all
+  status badges and action buttons.
+- **Responsive at 390px** — all primary paths (project list, workspace, glossary,
+  character DB, settings) usable at mobile viewport width.
+- **Workspace UX** — improved two-column segment layout, inline save feedback,
+  retranslate-mode labels clarified, segment status badges consistent.
+- **Dashboard & project clarity** — project cards show volume/chapter/segment
+  counts, status summary badges, and meaningful empty states.
+- **Admin usability** — settings and secrets forms with validation feedback;
+  glossary and character list pages gain search and pagination; provider selects
+  use human-readable labels.
+
+#### Translation QA (Phase B)
+
+- **QA engine** (`services/translation_qa.py`) — read-only, deterministic,
+  no provider/LLM calls, no mutation. Eleven rules across three scopes
+  (novel / volume / chapter):
+  - *Critical:* `failed_segment`, `empty_translation`, `untranslated_japanese`
+  - *Warning:* `stale_segment`, `suspiciously_short`, `glossary_mismatch`,
+    `untranslated_segment`, `character_name_missing`,
+    `repeated_identical_translation`, `fallback_heavy_chapter`
+  - *Info:* `mixed_status_chapter`
+- **JSON QA API** — `GET /projects/{name}/qa`, `…/volumes/{id}/qa`,
+  `…/chapters/{id}/qa`; returns `QAReport` with counts, issues, and
+  per-chapter/per-volume roll-ups. Severity values: `info`, `warning`,
+  `critical` (no `error` at the wire layer; ADR `008`).
+- **QA report pages** (`/ui/projects/{name}/qa`, `…/volumes/{id}/qa`,
+  `…/chapters/{id}/qa`) — badge (`clean` / `warnings` / `errors`), severity and
+  category filters, per-segment links to the workspace, per-chapter links to
+  chapter QA. No auto-fix; report only.
+- **Advisory pre-export QA warning** (`GET …/export/preflight`) — shows QA
+  summary before export; "Export anyway" always available; existing export
+  route and source-fallback behaviour unchanged.
+- ADR `008` documents the QA architecture and severity contract.
+
 ### Changed
 
 - **Web framework is FastAPI** (ADR `004`). `weaver serve` defaults to the
@@ -60,19 +104,21 @@ cockpit. The CLI remains fully functional.
   its chapters.
 - DeepSeek provider healthcheck JSON-mode handling.
 
-### Known Limitations / Deferred (not RC blockers)
+### Known Limitations / Deferred
 
-- **DOCX export** is out of MVP — `target="docx"` returns HTTP 422 (handled, not
-  a crash).
-- **Cockpit UI is functional parity, not visual polish** (ADR `005`); empty
-  states, layout, and visual hierarchy are deferred.
-- Combined EPUB/ZIP bundle export deferred.
+- **DOCX export** is out of scope for this release — `target="docx"` returns
+  HTTP 422 (handled, not a crash). Planned for Phase D.
+- Combined EPUB/ZIP bundle export deferred to Phase D.
 - Legacy CLI `weaver translate` / `weaver export` remain **single-volume**;
   multi-volume translate/export is the cockpit's job.
+- QA threshold configuration (e.g. `fallback_heavy_chapter` ratio) is hardcoded
+  as module constants; a config surface is planned for Phase D.
+- Per-chapter QA badges on the project tree are deferred (QA only runs on
+  explicit QA pages, not on every tree render).
 
 ## [0.1.0] - 2026-05-19
 
-First public alpha release. Implements the full MVP-0 command set defined in [PRD_v2.md](docs/PRD_v2.md) section 6 and built per [BLUEPRINT_EXECUTION_PLAN.md](docs/BLUEPRINT_EXECUTION_PLAN.md) phases 0-10.
+First public alpha release. Implements the full MVP-0 command set.
 
 ### Added
 
@@ -107,8 +153,8 @@ First public alpha release. Implements the full MVP-0 command set defined in [PR
 
 - `weaver.core.config.load_project_config(path)` centralizes `project.toml` parsing and turns TOML errors into `ConfigError`.
 - 200-chapter / 10,000-block synthetic EPUB fixture in `tests/fixtures/synthetic_200_chapter.epub`.
-- Repeatable benchmark runner in `bench/run_performance_budgets.py`; latest results recorded in [docs/benchmarks.md](docs/benchmarks.md).
-- Repeatable AC-1 through AC-9 release gate in `bench/run_acceptance_gate.py`; latest results recorded in [docs/release_acceptance.md](docs/release_acceptance.md).
+- Repeatable benchmark runner in `bench/run_performance_budgets.py`; benchmark results in git history.
+- Repeatable AC-1 through AC-9 release gate in `bench/run_acceptance_gate.py`; acceptance results in git history.
 - MkDocs site config (`mkdocs.yml`) and GitHub Pages workflow (`.github/workflows/pages.yml`).
 - Five ADRs in [docs/decisions/](docs/decisions/).
 
@@ -126,5 +172,6 @@ First public alpha release. Implements the full MVP-0 command set defined in [PR
 - The hands-on acceptance pass uses the bundled public-domain `aozora_sample.epub` fixture (2 chapters / 6 segments); scale budgets use the separate 200-chapter synthetic fixture.
 - `project.toml` pydantic schema validation from PRD section 9 is not yet implemented; `load_project_config` enforces required tables but not every field-level constraint.
 
-[Unreleased]: https://github.com/Trancend1/weaver/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Trancend1/weaver/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Trancend1/weaver/compare/v0.1.0...v0.7.0
 [0.1.0]: https://github.com/Trancend1/weaver/releases/tag/v0.1.0
