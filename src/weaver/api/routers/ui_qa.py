@@ -151,7 +151,9 @@ def _render(
 
 
 @router.get("/ui/projects/{name}/export/preflight", response_class=HTMLResponse)
-def export_preflight(name: str, request: Request, target: str = Query("epub")) -> HTMLResponse:
+def export_preflight(
+    name: str, request: Request, target: str = Query("epub"), bundle: bool = Query(False)
+) -> HTMLResponse:
     """Advisory pre-export QA summary (Stage B5).
 
     Export is **never** blocked: the panel always offers an "Export anyway" action
@@ -177,6 +179,7 @@ def export_preflight(name: str, request: Request, target: str = Query("epub")) -
         {
             "name": name,
             "target": target,
+            "bundle": bundle,
             "report": report,
             "qa_error": qa_error,
             "advisories": _advisories(report) if report is not None else None,

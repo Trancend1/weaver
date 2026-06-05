@@ -122,6 +122,17 @@ def test_project_page_export_form_uses_preflight(client: TestClient) -> None:
         assert f'value="{target}"' in page
 
 
+def test_preflight_forwards_bundle_choice(client: TestClient) -> None:
+    # The bundle checkbox value survives the preflight as a hidden field so the
+    # final POST carries it.
+    with_bundle = client.get("/ui/projects/clean/export/preflight?target=docx&bundle=true").text
+    assert 'name="bundle" value="true"' in with_bundle
+    assert "bundle ZIP" in with_bundle
+
+    without = client.get("/ui/projects/clean/export/preflight?target=docx").text
+    assert 'name="bundle" value="false"' in without
+
+
 def test_preflight_missing_project_is_non_fatal(client: TestClient) -> None:
     # Even when QA can't run, the panel renders and still offers an export action.
     response = client.get("/ui/projects/ghost/export/preflight")

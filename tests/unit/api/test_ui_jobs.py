@@ -197,6 +197,23 @@ def test_export_starts_job_and_renders_artifacts(jobs_client: TestClient, target
     assert "hx-trigger" not in panel
 
 
+def test_project_page_has_bundle_checkbox(jobs_client: TestClient) -> None:
+    name = _name(jobs_client)
+    page = jobs_client.get(f"/ui/projects/{name}").text
+    assert 'name="bundle"' in page
+
+
+def test_export_bundle_round_trips_through_ui(jobs_client: TestClient) -> None:
+    name = _name(jobs_client)
+    r = jobs_client.post(f"/ui/projects/{name}/export", data={"target": "txt", "bundle": "true"})
+    assert r.status_code == 200
+    job_id = next(iter(jobs_client.app.state.jobs._export_jobs))  # type: ignore[attr-defined]
+
+    assert _wait_terminal(jobs_client, f"/projects/{name}/export/jobs/{job_id}") == "done"
+    panel = jobs_client.get(f"/ui/projects/{name}/export/jobs/{job_id}").text
+    assert "bundle-txt.zip" in panel
+
+
 def test_export_cancel_unknown_404(jobs_client: TestClient) -> None:
     name = _name(jobs_client)
     assert jobs_client.post(f"/ui/projects/{name}/export/jobs/ghost/cancel").status_code == 404

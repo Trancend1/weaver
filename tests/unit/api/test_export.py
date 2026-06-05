@@ -233,3 +233,32 @@ def test_export_docx_target_via_endpoint(client_with_projects: TestClient) -> No
     artifact = result["artifacts"][0]
     assert artifact["output_path"].endswith(".docx")
     assert Path(artifact["output_path"]).exists()
+
+
+# --------------------------------------------------------------------------- #
+# Combined ZIP bundle (Phase D)
+# --------------------------------------------------------------------------- #
+
+
+def test_export_bundle_via_endpoint(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    resp = client_with_projects.post(
+        f"/projects/{name}/export/novel", json={"target": "txt", "bundle": True}
+    )
+    assert resp.status_code == 202
+    job_id = resp.json()["job_id"]
+
+    _wait_export(client_with_projects, job_id)
+    result = client_with_projects.get(f"/projects/{name}/export/jobs/{job_id}").json()["result"]
+    assert result["bundle_path"] is not None
+    assert result["bundle_path"].endswith("bundle-txt.zip")
+    assert Path(result["bundle_path"]).exists()
+
+
+def test_export_default_has_null_bundle_path(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    resp = client_with_projects.post(f"/projects/{name}/export/novel", json={"target": "txt"})
+    job_id = resp.json()["job_id"]
+    _wait_export(client_with_projects, job_id)
+    result = client_with_projects.get(f"/projects/{name}/export/jobs/{job_id}").json()["result"]
+    assert result["bundle_path"] is None

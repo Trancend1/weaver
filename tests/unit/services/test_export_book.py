@@ -793,3 +793,70 @@ def test_export_docx_does_not_reread_epub_source(tmp_path: Path, monkeypatch) ->
     result = export_novel(project_toml, target="docx")
     assert result.artifacts[0].output_path.suffix == ".docx"
     assert result.artifacts[0].output_path.exists()
+
+
+# --------------------------------------------------------------------------- #
+# Combined ZIP bundle (Phase D)
+# --------------------------------------------------------------------------- #
+
+
+def _seed_two_volume_novel(tmp_path: Path) -> Path:
+    project_toml, db_path = _init(tmp_path)
+    with closing(initialize_database(db_path)) as conn, transaction(conn):
+        project_id = create_project(
+            conn, name="demo", source_path="x", source_lang="ja", target_lang="en"
+        )
+        for vol in ("A", "B"):
+            _add_synth_volume(
+                conn,
+                project_id=project_id,
+                title=f"Vol {vol}",
+                source_format="txt",
+                source_path=f"{vol}.txt",
+                chapters=[(f"c{vol}", 0, [("p1", "paragraph", "本文", "translated", "EN")])],
+            )
+    return project_toml
+
+
+def test_export_novel_bundle_zips_per_volume_artifacts(tmp_path: Path) -> None:
+    project_toml = _seed_two_volume_novel(tmp_path)
+
+    result = export_novel(project_toml, target="docx", bundle=True)
+
+    assert result.bundle_path is not None
+    assert result.bundle_path.exists()
+    assert result.bundle_path.name == "bundle-docx.zip"
+    # the per-volume artifacts still exist individually
+    assert len(result.artifacts) == 2
+    assert all(a.output_path.exists() for a in result.artifacts)
+    # the ZIP contains exactly the per-volume artifacts, stored by basename
+    with zipfile.ZipFile(result.bundle_path) as archive:
+        names = sorted(archive.namelist())
+    assert names == sorted(a.output_path.name for a in result.artifacts)
+    assert all(name.endswith(".docx") for name in names)
+
+
+def test_export_bundle_works_for_txt_target(tmp_path: Path) -> None:
+    project_toml = _seed_two_volume_novel(tmp_path)
+    result = export_novel(project_toml, target="txt", bundle=True)
+    assert result.bundle_path is not None
+    assert result.bundle_path.name == "bundle-txt.zip"
+    with zipfile.ZipFile(result.bundle_path) as archive:
+        assert all(name.endswith(".txt") for name in archive.namelist())
+
+
+def test_export_without_bundle_has_no_bundle_path(tmp_path: Path) -> None:
+    project_toml = _seed_two_volume_novel(tmp_path)
+    result = export_novel(project_toml, target="txt")
+    assert result.bundle_path is None
+
+
+def test_bundle_skipped_when_no_artifacts(tmp_path: Path) -> None:
+    project_toml, db_path = _init(tmp_path)
+    with closing(initialize_database(db_path)) as conn, transaction(conn):
+        create_project(conn, name="demo", source_path="x", source_lang="ja", target_lang="en")
+
+    result = export_novel(project_toml, target="txt", bundle=True)
+
+    assert result.artifacts == ()
+    assert result.bundle_path is None

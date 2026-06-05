@@ -257,7 +257,7 @@ Export renders translated content to a **per-volume artifact** (EPUB / TXT / HTM
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/projects/{name}/export/novel` | Export every volume to its own artifact (no cross-EPUB merge). Body: optional `target` ∈ `{epub, txt, html, docx}` (defaults `epub`). → `202` `{job_id, status, scope, scope_id, target}`. |
+| POST | `/projects/{name}/export/novel` | Export every volume to its own artifact (no cross-EPUB merge). Body: optional `target` ∈ `{epub, txt, html, docx}` (defaults `epub`) + optional `bundle` (default `false`; when true, also writes `output/<target>/bundle-<target>.zip`, reported as `result.bundle_path`). → `202` `{job_id, status, scope, scope_id, target}`. |
 | POST | `/projects/{name}/export/volumes/{volume_id}` | Export one volume. → `202`. |
 | POST | `/projects/{name}/export/chapters/{chapter_id}` | Export one chapter. → `202`. |
 | GET | `/projects/{name}/export/jobs/{job_id}` | Poll: `status`, per-volume `progress` (`volumes_total/done`, `current_volume_*`, `translated_segments`/`fallback_segments`), `result` (once done: per-volume `artifacts[]` with `output_path` + `fallback_by_status`), `error`. |
@@ -268,7 +268,8 @@ Export renders translated content to a **per-volume artifact** (EPUB / TXT / HTM
 - **Distinct id namespace.** Export jobs live under `/export/jobs/`; an export `job_id` is **not** resolvable via the chapter `/jobs/` or batch `/batch/jobs/` routes.
 - **No external queue.** Single-process thread worker, same as chapter/batch jobs.
 - Errors: unknown project / volume / chapter → `404`; unsupported `target` (e.g. `pdf`) → `422`; unknown job → `404`.
-- **EPUB / TXT / HTML / DOCX** output (Sprint 8A/8C + Phase D; TXT/HTML/DOCX build from the DB, one file per volume under `output/<target>/`). DOCX is a custom minimal OOXML writer (no `python-docx`, no new dependency) synthesized from the DB — no write-back. A combined single-EPUB / ZIP bundle is deferred.
+- **EPUB / TXT / HTML / DOCX** output (Sprint 8A/8C + Phase D; TXT/HTML/DOCX build from the DB, one file per volume under `output/<target>/`). DOCX is a custom minimal OOXML writer (no `python-docx`, no new dependency) synthesized from the DB — no write-back.
+- **Combined ZIP bundle** (Phase D): an optional `bundle` flag also packages a novel's per-volume artifacts into `output/<target>/bundle-<target>.zip` (any target). Off by default; the per-volume files are still written; the result/job carries `bundle_path`; skipped on cancel or empty export. A *merged-omnibus* single EPUB is not built — the ZIP-of-per-volume-files is the chosen safe form.
 
 ## FastAPI translation QA API + UI (Phase B — read-only, report-first)
 
@@ -309,4 +310,4 @@ Project-scoped data that feeds the prompt and reuse layer. Each router is a thin
 - The FastAPI migration must preserve every behavior above and keep Pydantic at the boundary only.
 
 ## Not yet in the cockpit (MVP gaps → [MVP_SCOPE.md](MVP_SCOPE.md))
-Novel/Volume/Chapter navigation, TXT/HTML import, two-column workspace with auto-save/revisions, character DB UI, translation-memory UI, batch monitor **UI** (the batch API exists — Sprint 7). A combined single-EPUB / ZIP bundle for novel scope is deferred (EPUB/TXT/HTML/DOCX per-volume export ships).
+Novel/Volume/Chapter navigation, TXT/HTML import, two-column workspace with auto-save/revisions, character DB UI, translation-memory UI, batch monitor **UI** (the batch API exists — Sprint 7). A *merged-omnibus* single EPUB (one EPUB spanning all volumes) is deferred; EPUB/TXT/HTML/DOCX per-volume export and a combined **ZIP bundle** both ship.

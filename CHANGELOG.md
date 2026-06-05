@@ -31,6 +31,14 @@ All notable changes to Weaver are recorded here. Format follows [Keep a Changelo
   out-of-range → `ConfigError`); foreign `[qa]` keys (the per-segment flags) are
   ignored. The same thresholds apply across the CLI/API/UI QA paths
   (`services/translation_qa.py`). New module `qa/thresholds.py`.
+- **Combined ZIP bundle export** (Phase D) — an optional `bundle` flag packages a
+  novel export's per-volume artifacts into one `output/<target>/bundle-<target>.zip`
+  (any target, incl. DOCX). Off by default; the per-volume files are still written.
+  Exposed as `ExportRequest.bundle` (API) and a "Bundle all volumes into one ZIP"
+  checkbox in the cockpit export form; `ExportResult`/the job result now carry
+  `bundle_path`. The bundle is skipped on cancel or when nothing was exported. New
+  module `services/export_bundle.py`. (A *merged-omnibus* single EPUB is not built —
+  a ZIP of per-volume files is the chosen, safe form.)
 
 ### Changed
 

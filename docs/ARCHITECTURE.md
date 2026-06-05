@@ -36,7 +36,7 @@ src/weaver/
 **`providers/`** — `registry.py` (registry-driven types), `base.py`, `types.py`, `parser.py` (JSON parse + repair), `prompts.py`, and adapters `deepseek.py`, `gemini.py`, `ollama.py`, `fake.py`. `custom` (OpenAI-compatible) is registry-driven.
 
 **`readers/`** — `epub.py`, `txt.py`, `html.py` (EPUB/TXT/HTML → IR) with `read_source` dispatch; shared `html_blocks.py` + `synthetic_document.py`.
-**`renderers/`** — `epub.py` (EPUB write-back), `epub_synthesis.py` (synthesize EPUB for TXT/HTML-sourced volumes), `txt.py` + `html.py` (plain-text / HTML output), `docx.py` (Word output via a custom minimal OOXML writer — no `python-docx`, no new dependency; synthesized from the DB, no write-back), and `rendered_document.py` (shared `RenderChapter` + `block_to_html`). Volume-aware export orchestration lives in `services/export_book.py`; legacy Markdown/single-EPUB export in `services/export.py`. **Export surface split (web-first MVP):** the **FastAPI cockpit** (`api/routers/export.py` → `services/export_book.py`) is the volume-aware EPUB/TXT/HTML/DOCX exporter for the Novel→Volume→Chapter model; the **CLI `export` command** still drives the **legacy single-project exporter** (`services/export.py` → `export_epub_project`/`export_markdown_project`). The legacy path is intentionally not back-ported to the volume model — exporting full novels is a cockpit workflow. *A combined single-EPUB / ZIP bundle is deferred.*
+**`renderers/`** — `epub.py` (EPUB write-back), `epub_synthesis.py` (synthesize EPUB for TXT/HTML-sourced volumes), `txt.py` + `html.py` (plain-text / HTML output), `docx.py` (Word output via a custom minimal OOXML writer — no `python-docx`, no new dependency; synthesized from the DB, no write-back), and `rendered_document.py` (shared `RenderChapter` + `block_to_html`). Volume-aware export orchestration lives in `services/export_book.py`; legacy Markdown/single-EPUB export in `services/export.py`. **Export surface split (web-first MVP):** the **FastAPI cockpit** (`api/routers/export.py` → `services/export_book.py`) is the volume-aware EPUB/TXT/HTML/DOCX exporter for the Novel→Volume→Chapter model; the **CLI `export` command** still drives the **legacy single-project exporter** (`services/export.py` → `export_epub_project`/`export_markdown_project`). The legacy path is intentionally not back-ported to the volume model — exporting full novels is a cockpit workflow. An optional **ZIP bundle** of the per-volume artifacts is written by `services/export_bundle.py` when requested; a *merged-omnibus* single EPUB is deferred.
 
 ## Data / project flow
 
@@ -46,7 +46,7 @@ src/weaver/
 init:      EPUB → readers/epub → DocumentIR → scope_document_to_volume → storage (segments, glossary candidates) → .weaver/<name>/weaver.db
 translate: pending segments → services/translation (context + glossary injection) → provider → storage (one segment = one txn)
 review:    glossary candidates → services/glossary_review → approved terms (injected into prompts)
-export:    storage → services/export_book → renderers/{epub | epub_synthesis | txt | html | docx} → output/<target>/<per-volume>.<ext>   (legacy: services/export → markdown/single-epub)
+export:    storage → services/export_book → renderers/{epub | epub_synthesis | txt | html | docx} → output/<target>/<per-volume>.<ext>   (+ optional services/export_bundle → output/<target>/bundle-<target>.zip; legacy: services/export → markdown/single-epub)
 qa (CLI):  storage → qa/checks → services/qa → report (JSON, schema_version 1; `weaver validate`)
 qa (web):  storage → qa/{checks,consistency_checks,scope_checks} → services/translation_qa → QAReport (novel/volume/chapter; read-only, schema_version 2) → api/routers/{qa,ui_qa}
 ```
@@ -65,7 +65,7 @@ Per-project on-disk layout:
 
 ## Not yet in the model (MVP gaps → ADR 003 / MVP_SCOPE.md)
 
-- **Combined single-EPUB / ZIP bundle for novel scope** — per-volume EPUB/TXT/HTML/DOCX export (`services/export_book.py`) + FastAPI export endpoints (`api/routers/export.py` + `ExportJob`) + the export UI all ship; merging a novel's volumes into one artifact / a ZIP bundle is deferred.
+- **Merged-omnibus single EPUB for novel scope** — per-volume EPUB/TXT/HTML/DOCX export (`services/export_book.py`) + a combined **ZIP bundle** (`services/export_bundle.py`) + FastAPI export endpoints + the export UI all ship; merging a novel's volumes into one EPUB is deferred.
 
 Shipped since the reset baseline: Volume tier (schema v3), character database (`storage/characters.py`, schema v4), translation memory (`storage/translation_memory.py` + `services/translation_memory.py`, schema v5), the FastAPI two-column workspace with per-segment save + revision history, **batch translation at chapter/volume/novel scope** (`services/batch_translate.py` + `api/routers/batch.py` + `BatchJob` in `api/jobs.py`, Sprint 7), **volume-aware EPUB export** (`services/export_book.py` orchestrator + `renderers/epub_synthesis.py`, Sprint 8A), and **DOCX export output** (`renderers/docx.py`, custom minimal OOXML writer, Phase D).
 
