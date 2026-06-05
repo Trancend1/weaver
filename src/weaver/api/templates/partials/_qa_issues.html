@@ -1,0 +1,31 @@
+<div id="qa-issues">
+  {% set sev_class = {"info": "", "warning": "warn", "critical": "bad"} %}
+  {% if issues %}
+  <div class="table-scroll">
+    <table class="grid">
+      <thead>
+        <tr><th>Severity</th><th>Category</th><th>Rule</th><th>Message</th><th>Where</th></tr>
+      </thead>
+      <tbody>
+        {% for i in issues %}
+        <tr>
+          <td><span class="badge {{ sev_class[i.severity] }}">{{ i.severity }}</span></td>
+          <td>{{ i.category }}</td>
+          <td><code>{{ i.rule }}</code></td>
+          <td class="cell-clip">{{ i.message }}</td>
+          <td>
+            {% if i.chapter_id and i.segment_id %}
+            <a href="/ui/projects/{{ name }}/chapters/{{ i.chapter_id }}#seg-{{ i.segment_id }}">segment</a>
+            {% elif i.chapter_id %}
+            <a href="/ui/projects/{{ name }}/chapters/{{ i.chapter_id }}">chapter</a>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><p>No QA issues found.</p></div>
+  {% endif %}
+</div>

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}QA · {{ report.project }} · Weaver{% endblock %}
+{% block content %}
+<section class="panel">
+  <p class="crumbs">
+    <a href="/ui">Dashboard</a> /
+    <a href="/ui/projects/{{ report.project }}">{{ report.project }}</a> /
+    <span>QA</span>
+  </p>
+  <h1>QA report — {{ scope_label }}</h1>
+  {% if report.scope == "chapter" %}
+  <p class="meta"><a href="/ui/projects/{{ name }}/chapters/{{ report.scope_id }}">← Back to workspace</a></p>
+  {% endif %}
+  {% include "partials/_qa_summary.html" %}
+</section>
+
+<section class="panel">
+  <h2>Issues</h2>
+  <form class="inline-form" hx-get="{{ qa_url }}"
+        hx-target="#qa-issues" hx-select="#qa-issues" hx-swap="outerHTML">
+    <label>Severity
+      <select name="severity">
+        <option value=""{% if not severity %} selected{% endif %}>all</option>
+        {% for s in severities %}
+        <option value="{{ s }}"{% if severity == s %} selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Category
+      <select name="category">
+        <option value=""{% if not category %} selected{% endif %}>all</option>
+        {% for c in categories %}
+        <option value="{{ c }}"{% if category == c %} selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Apply</button>
+    <span class="htmx-indicator meta">…</span>
+  </form>
+
+  {% include "partials/_qa_issues.html" %}
+</section>
+{% endblock %}
