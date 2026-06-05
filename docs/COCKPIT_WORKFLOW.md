@@ -2,7 +2,7 @@
 
 The web cockpit is a **local, single-user** browser UI for the same translator workflow the CLI drives. It is the **primary development focus** going forward.
 
-> **Stack status (Sprint 13B, 2026-06-04).** `weaver serve` runs the **FastAPI cockpit** (Jinja2 + vendored HTMX UI + typed JSON API, ASGI/Uvicorn) per [ADR 004](decisions/004-fastapi-cockpit-technical-direction.md) — the only web cockpit. `weaver serve-api` runs the same FastAPI app headless (no browser). The legacy Flask cockpit was **removed in Sprint 13B** (after the 12B default flip + a real-workflow soak proved the FastAPI default stable; `weaver serve-flask` and `src/weaver/web/**` no longer exist). See [SPRINT13A_DECOMMISSION_READINESS.md](SPRINT13A_DECOMMISSION_READINESS.md) + [SPRINT13A5_SOAK_RESULT.md](SPRINT13A5_SOAK_RESULT.md).
+> **Stack status (Sprint 13B, 2026-06-04).** `weaver serve` runs the **FastAPI cockpit** (Jinja2 + vendored HTMX UI + typed JSON API, ASGI/Uvicorn) per [ADR 004](decisions/004-fastapi-cockpit-technical-direction.md) — the only web cockpit. `weaver serve-api` runs the same FastAPI app headless (no browser). The legacy Flask cockpit was **removed in Sprint 13B** (after the 12B default flip + a real-workflow soak proved the FastAPI default stable; `weaver serve-flask` and `src/weaver/web/**` no longer exist). Decommission-readiness + soak evidence are in git history.
 
 ## Purpose
 
@@ -57,12 +57,11 @@ from the OpenAPI schema.
 
 **Sprint 12B default flip → Sprint 13B decommission:** 12B flipped `weaver serve`
 to the FastAPI cockpit (Flask kept temporarily as `serve-flask`); after a real
-multi-format/multi-volume workflow soak proved the FastAPI default stable
-([SPRINT13A5_SOAK_RESULT.md](SPRINT13A5_SOAK_RESULT.md)), **Sprint 13B removed
-Flask entirely** — `serve-flask`, `src/weaver/web/**`, the Flask-only tests, and
-the `flask` dependency are gone. `weaver serve` (UI) and `weaver serve-api`
-(headless) are the only web entry points. See
-[SPRINT12_UI_PARITY_AUDIT.md](SPRINT12_UI_PARITY_AUDIT.md).
+multi-format/multi-volume workflow soak proved the FastAPI default stable,
+**Sprint 13B removed Flask entirely** — `serve-flask`, `src/weaver/web/**`, the
+Flask-only tests, and the `flask` dependency are gone. `weaver serve` (UI) and
+`weaver serve-api` (headless) are the only web entry points. (The Flask→FastAPI
+parity audits + soak results are in git history.)
 
 **Sprint 11A — shell (shipped):** dashboard/home (project list + global provider
 default), project view (Novel→Volume→Chapter tree), navigation, and the read-screen
@@ -270,6 +269,26 @@ Export renders translated content to a **per-volume artifact** (EPUB / TXT / HTM
 - **No external queue.** Single-process thread worker, same as chapter/batch jobs.
 - Errors: unknown project / volume / chapter → `404`; unsupported `target` (e.g. `docx`) → `422`; unknown job → `404`.
 - **EPUB / TXT / HTML** output (Sprint 8A/8C; TXT/HTML build from the DB, one file per volume under `output/<target>/`). DOCX output, a combined single-EPUB, ZIP packaging, and the export UI are deferred.
+
+## FastAPI translation QA API + UI (Phase B — read-only, report-first)
+
+Deterministic, **read-only** quality/consistency reports surfaced before export. No mutation, no provider call, no auto-fix, no semantic/vector analysis (ADR 008). Logic lives in `services/translation_qa.py` and reuses the `qa/checks.py` primitives — **no parallel QA system**. Severity is `info | warning | critical`; the UI may label `critical` as "Error" (presentation only). The legacy CLI `weaver validate` is unchanged.
+
+**JSON API** (`api/routers/qa.py`, thin adapter):
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/projects/{name}/qa` | Whole-novel report (per-volume + per-chapter roll-ups). |
+| GET | `/projects/{name}/volumes/{volume_id}/qa` | One volume (per-chapter roll-up). |
+| GET | `/projects/{name}/chapters/{chapter_id}/qa` | One chapter. |
+
+Response (`QAReportResponse`): `schema_version` (2), `scope`, `scope_id`, `total_segments`, `total_issues`, `info_count`/`warning_count`/`critical_count`, `badge` ∈ `{clean, warnings, errors}`, `issues[]` (`rule`, `category`, `severity`, `message`, `segment_id?`, `chapter_id?`), `summary_by_category`, `summary_by_chapter`, `summary_by_volume`. Unknown project/volume/chapter → `404`; non-integer `volume_id` → `422`. **No `error` severity is emitted** — `critical` is the highest value.
+
+**Deterministic rules:** failed / empty / untranslated-Japanese (critical); stale / suspiciously-short / glossary-mismatch / untranslated-segment / character-name-missing / repeated-identical-translation / fallback-heavy-chapter (warning); mixed-status-chapter (info).
+
+**UI** (`api/routers/ui_qa.py`, presentation-only Jinja2 + HTMX): report pages `/ui/projects/{name}/qa`, `…/volumes/{id}/qa`, `…/chapters/{id}/qa` with badge + counts, severity/category filter, and issue links to the affected chapter/segment. The project page and the workspace link to QA. **Badges appear only on QA pages and the pre-export panel — the project tree never runs a novel-wide QA scan** (Gate B1 decision; per-chapter tree badges are deferred).
+
+**Pre-export QA warning (advisory).** The project export form first GETs `/ui/projects/{name}/export/preflight?target=…`, which renders the novel QA summary (errors/warnings + failed-stale / untranslated-fallback / glossary / character advisories) with a **Review QA report** link and an **Export anyway** action. **Export is never blocked**: the action posts to the unchanged `POST /ui/projects/{name}/export`, and a failed/unavailable QA check is non-fatal. No DOCX, no export-behavior change.
 
 ## FastAPI consistency-data API (Sprint 5/6 — glossary · character DB · translation memory)
 

@@ -30,7 +30,6 @@ Tradeoffs: ADR renumbering means in-code/in-doc references to old numbers (`ADR 
 
 ## Related Files
 
-- `docs/archive/decisions/0001-0020*.md` (archived)
-- `docs/archive/strategy/*.md` (archived)
-- `docs/decisions/001-005*.md` (new active set)
+- Pre-reset ADRs `0001`–`0020` + strategy docs (archived during the reset; the `docs/archive/` tree was removed 2026-06-05 — originals in git history)
+- `docs/decisions/001-008*.md` (active set)
 - `CLAUDE.md`, `.gitignore`

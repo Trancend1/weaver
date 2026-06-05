@@ -41,7 +41,9 @@ pip install 'weaver[web]'      # or: uv sync --extra web
 uv run weaver serve            # FastAPI cockpit, http://127.0.0.1:8765, opens a browser
 uv run weaver serve-api        # same FastAPI app, headless (no browser), :8000
 ```
-Binds `127.0.0.1` only, no auth. `weaver serve` is the **FastAPI cockpit** (the only web cockpit). Discover/create projects, set provider/model, translate with live progress + stop, review glossary, export — no path typing. Details: [COCKPIT_WORKFLOW.md](COCKPIT_WORKFLOW.md).
+Binds `127.0.0.1` only, no auth. `weaver serve` is the **FastAPI cockpit** (the only web cockpit). Discover/create projects, set provider/model, translate with live progress + stop, review glossary, check **QA reports**, export — no path typing. Details: [COCKPIT_WORKFLOW.md](COCKPIT_WORKFLOW.md).
+
+**QA before export (read-only, advisory).** Each project links to a **QA report** (`/ui/projects/{name}/qa`, also per volume/chapter) listing deterministic issues — untranslated/failed/stale segments, empty/short/JP-leak translations, glossary + character-name mismatches, repeated translations, fallback-heavy/mixed-status chapters — with `info`/`warning`/`critical` severity (the UI labels `critical` as "Error"). QA never changes translations or calls a provider. On export, a pre-export panel summarizes the issues and offers **Review QA report** or **Export anyway** — **export is never blocked**.
 
 ## Real providers
 ```bash

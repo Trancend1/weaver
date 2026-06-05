@@ -4,10 +4,10 @@ How to keep the repo clean, validated, and reviewable. Coding rules: [ENGINEERIN
 
 ## Cleanup rules
 - Inventory before delete; classify (active / legacy / dead / generated) before touching.
-- **Archive, don't hard-delete** docs/decisions with reference value → `docs/archive/`. Rely on git history only for clearly redundant content.
+- **Prefer git history over a `docs/archive/`.** Once a completed point-in-time doc's conclusions are captured in `CLAUDE.md` / active docs, remove it from the tree — git history is the archive. (The former `docs/archive/` + completed sprint/phase reports were removed on 2026-06-05.)
 - Migrate important insight out of a doc/ADR before retiring it.
 - Generated/runtime dirs (`.weaver/`, `.tmp_*/`, `.ruff_cache/`, `.venv/`) stay gitignored, never committed.
-- Keep `CLAUDE.md` short and operational — no sprint-history dump (history → git + `docs/archive/`).
+- Keep `CLAUDE.md` short and operational — no sprint-history dump (history → git).
 
 ## Docs update rules
 - Docs are the spec; code follows docs. If code contradicts a doc, fix the doc or ask — don't silently diverge.
@@ -36,6 +36,8 @@ uv run ruff format --check .      # all files already formatted
 uv run weaver --help              # CLI smoke — 15 commands
 ```
 Web smoke (no port binding): construct `create_api_app()` + FastAPI `TestClient` and assert `/health`·`/version`·`/projects` → 200 and the UI `/`→307·`/ui`·`/ui/new`·`/ui/config` → 200.
+
+**Current baseline (Phase B6 — Translation QA, 2026-06-05):** `uv run pytest -q` → **703 passed / 4 skipped** (same expected skips), pyright 0, ruff check + format clean, CLI 15 commands. **QA smokes:** JSON `GET /projects/{name}/qa` (+ `…/volumes/{id}/qa`, `…/chapters/{id}/qa`) → 200 with `schema_version: 2`, `badge`, severity counts; UI `/ui/projects/{name}/qa` + `…/chapters/{id}/qa` → 200; export preflight `GET /ui/projects/{name}/export/preflight` → 200 (advisory, never blocks). QA is read-only/deterministic — a regression test asserts the QA path performs no DB write and calls no provider.
 
 **Expected skips (4 — none a regression):** `test_deepseek_live.py` (no `DEEPSEEK_API_KEY`), `test_gemini_live.py` (no `GEMINI_API_KEY`), `test_ollama_live.py` (no local Ollama), `test_secret_store.py::…` POSIX file-mode (Windows host). Live-provider tests are gated by `requires_cloud` / `requires_ollama` and need real keys / a running Ollama — they are **not** run in CI by design.
 

@@ -1,6 +1,6 @@
 # Architecture
 
-Compact map of the codebase and its boundaries. Deep pre-reset detail (full IR types, SQLite schema, provider interface prose) lives in [archive/SYSTEM_ARCHITECTURE.md](archive/SYSTEM_ARCHITECTURE.md); this doc is the current, maintained overview.
+Compact map of the codebase and its boundaries. Deep pre-reset detail (full IR types, SQLite schema, provider interface prose) lives in git history; this doc is the current, maintained overview.
 
 ## Layers (ADR 002)
 
@@ -25,9 +25,9 @@ src/weaver/
 
 ## Module inventory (current)
 
-**`services/`** — `project.py` (init/inspect), `translation.py` (resumable orchestrator), `workspace_translate.py` (chapter/selection translate + safe-retranslate), `batch_translate.py` (chapter/volume/novel batch planning + run), `translation_memory.py`, `characters.py`, `glossary.py`, `glossary_review.py`, `glossary_diff.py`, `glossary_terms.py`, `export.py` (markdown + epub), `manual_edit.py`, `preview.py`, `qa.py`, `doctor.py`, `epubcheck.py`, `wizard.py`, `config_writer.py` (atomic provider/model writer), `project_discovery.py` (cockpit project listing), `source_browser.py` (sandboxed source-file browsing + upload sanitize/store; consumed by the FastAPI create/browse endpoints), `provider_config.py` (redacted read + write of provider/model config + secret store orchestration; reuses `config_writer` + `core/secret_store`; never returns key values).
+**`services/`** — `project.py` (init/inspect), `translation.py` (resumable orchestrator), `workspace_translate.py` (chapter/selection translate + safe-retranslate), `batch_translate.py` (chapter/volume/novel batch planning + run), `translation_memory.py`, `characters.py`, `glossary.py`, `glossary_review.py`, `glossary_diff.py`, `glossary_terms.py`, `export.py` (markdown + epub), `manual_edit.py`, `preview.py`, `qa.py` (legacy `weaver validate`), `translation_qa.py` (read-only scope-aware QA reports — novel/volume/chapter, ADR 008), `doctor.py`, `epubcheck.py`, `wizard.py`, `config_writer.py` (atomic provider/model writer), `project_discovery.py` (cockpit project listing), `source_browser.py` (sandboxed source-file browsing + upload sanitize/store; consumed by the FastAPI create/browse endpoints), `provider_config.py` (redacted read + write of provider/model config + secret store orchestration; reuses `config_writer` + `core/secret_store`; never returns key values).
 
-**`api/`** (FastAPI cockpit) — `app.py` (`create_api_app` factory), `jobs.py` (`JobRegistry` + `TranslationJob`/`BatchJob`/`ExportJob`, single-process thread workers + SSE), `schemas.py` (Pydantic boundary DTOs), routers `routers/{system,projects,translate,batch,export,glossary,glossary_review,characters,translation_memory,config}.py` (thin adapters over `services/*`). `routers/projects.py` covers list/tree/import plus **create-novel + sandboxed source browser** (`POST /projects/create`, `GET /projects/browse`, Sprint 10B); `routers/config.py` is the **provider/model + secret config** surface (`GET/PATCH /config`, `POST/DELETE /config/secrets/{env_name}`, Sprint 10C — key values never returned); `routers/glossary.py` is direct term CRUD and `routers/glossary_review.py` is the **candidate-review flow** (`…/glossary/candidates[/{id}/{approve,edit,reject}]`, `…/glossary/conflicts`, `…/glossary/diff`, Sprint 10D — approve/edit write the same `glossary_terms` rows; no second store).
+**`api/`** (FastAPI cockpit) — `app.py` (`create_api_app` factory), `jobs.py` (`JobRegistry` + `TranslationJob`/`BatchJob`/`ExportJob`, single-process thread workers + SSE), `schemas.py` (Pydantic boundary DTOs), routers `routers/{system,projects,translate,batch,export,glossary,glossary_review,characters,translation_memory,config,qa}.py` (thin adapters over `services/*`) plus presentation-only UI routers `routers/{ui,ui_admin,ui_qa}.py` (Jinja2 + HTMX, ADR 007). `routers/qa.py` is the read-only QA report API (`GET …/qa`, `…/volumes/{id}/qa`, `…/chapters/{id}/qa`, Phase B); `routers/ui_qa.py` renders the QA report pages + the advisory pre-export preflight (`…/export/preflight`) — both over `services/translation_qa.py`, no QA logic in the web layer. `routers/projects.py` covers list/tree/import plus **create-novel + sandboxed source browser** (`POST /projects/create`, `GET /projects/browse`, Sprint 10B); `routers/config.py` is the **provider/model + secret config** surface (`GET/PATCH /config`, `POST/DELETE /config/secrets/{env_name}`, Sprint 10C — key values never returned); `routers/glossary.py` is direct term CRUD and `routers/glossary_review.py` is the **candidate-review flow** (`…/glossary/candidates[/{id}/{approve,edit,reject}]`, `…/glossary/conflicts`, `…/glossary/diff`, Sprint 10D — approve/edit write the same `glossary_terms` rows; no second store).
 
 **`storage/`** — `db.py`, `schema.sql`, `migrations.py`, `projects.py`, `volumes.py`, `segments.py` (incl. ordered chapter-id helpers for batch scope), `translations.py`, `glossary.py`, `characters.py`, `translation_memory.py`.
 
@@ -47,7 +47,8 @@ init:      EPUB → readers/epub → DocumentIR → scope_document_to_volume →
 translate: pending segments → services/translation (context + glossary injection) → provider → storage (one segment = one txn)
 review:    glossary candidates → services/glossary_review → approved terms (injected into prompts)
 export:    storage → services/export_book → renderers/{epub | epub_synthesis | txt | html} → output/<target>/<per-volume>.<ext>   (legacy: services/export → markdown/single-epub)
-qa:        storage → qa/checks → report (JSON, schema_version 1)
+qa (CLI):  storage → qa/checks → services/qa → report (JSON, schema_version 1; `weaver validate`)
+qa (web):  storage → qa/{checks,consistency_checks,scope_checks} → services/translation_qa → QAReport (novel/volume/chapter; read-only, schema_version 2) → api/routers/{qa,ui_qa}
 ```
 
 Per-project on-disk layout:

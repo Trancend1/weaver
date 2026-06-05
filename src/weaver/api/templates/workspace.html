@@ -8,7 +8,8 @@
     <span>{{ ws.volume_title }}</span> / <span>{{ ws.chapter_title or "Chapter" }}</span>
   </p>
   <h1>{{ ws.chapter_title or "Chapter" }}</h1>
-  <p class="meta">{{ ws.segment_count }} segments · {{ ws.translated_count }} translated</p>
+  <p class="meta">{{ ws.segment_count }} segments · {{ ws.translated_count }} translated ·
+    <a href="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/qa">QA report</a></p>
 
   <p class="hint"><strong>Translate</strong> fills in untranslated segments only.
     <strong>Retranslate</strong> re-runs existing segments under the chosen safety mode —

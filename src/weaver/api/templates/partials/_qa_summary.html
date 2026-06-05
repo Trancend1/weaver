@@ -1,0 +1,51 @@
+<div class="qa-summary">
+  <p>
+    <span class="badge {{ badge_class }}">{{ badge_label }}</span>
+    <span class="meta">{{ report.total_segments }} segments · {{ report.total_issues }} issue{{ "" if report.total_issues == 1 else "s" }}</span>
+  </p>
+  <ul class="qa-counts">
+    <li><span class="badge bad">Errors</span> {{ report.critical_count }}</li>
+    <li><span class="badge warn">Warnings</span> {{ report.warning_count }}</li>
+    <li><span class="badge">Info</span> {{ report.info_count }}</li>
+  </ul>
+  {% if report.badge != "clean" %}
+  <p class="hint">Review before export — segments with issues may export as source fallback.</p>
+  {% endif %}
+
+  {% if report.summary_by_volume %}
+  <h3>By volume</h3>
+  <table class="grid">
+    <thead><tr><th>Volume</th><th>Status</th><th class="num">Errors</th><th class="num">Warnings</th><th class="num">Info</th></tr></thead>
+    <tbody>
+      {% for s in report.summary_by_volume %}
+      <tr>
+        <td><a href="/ui/projects/{{ name }}/volumes/{{ s.id }}/qa">{{ s.title or s.id }}</a></td>
+        <td><span class="badge {{ {'clean':'ok','warnings':'warn','errors':'bad'}[s.badge] }}">{{ s.badge }}</span></td>
+        <td class="num">{{ s.critical_count }}</td>
+        <td class="num">{{ s.warning_count }}</td>
+        <td class="num">{{ s.info_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if report.summary_by_chapter %}
+  <h3>By chapter</h3>
+  <table class="grid">
+    <thead><tr><th>Chapter</th><th>Status</th><th class="num">Errors</th><th class="num">Warnings</th><th class="num">Info</th><th>Workspace</th></tr></thead>
+    <tbody>
+      {% for s in report.summary_by_chapter %}
+      <tr>
+        <td><a href="/ui/projects/{{ name }}/chapters/{{ s.id }}/qa">{{ s.title or s.id }}</a></td>
+        <td><span class="badge {{ {'clean':'ok','warnings':'warn','errors':'bad'}[s.badge] }}">{{ s.badge }}</span></td>
+        <td class="num">{{ s.critical_count }}</td>
+        <td class="num">{{ s.warning_count }}</td>
+        <td class="num">{{ s.info_count }}</td>
+        <td><a href="/ui/projects/{{ name }}/chapters/{{ s.id }}">open</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>

@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Active ADRs only. Active numbering was reset to `001` during the controlled reset (see [001](decisions/001-docs-cleanup-and-adr-reset.md)). Pre-reset ADRs `0001`–`0020` are preserved in [archive/decisions/](archive/decisions/) as historical reference — they are **not** active decisions.
+Active ADRs only. Active numbering was reset to `001` during the controlled reset (see [001](decisions/001-docs-cleanup-and-adr-reset.md)). Pre-reset ADRs `0001`–`0020` were archived during the reset and removed from the tree on 2026-06-05 — they live in **git history** and are **not** active decisions.
 
 ## Active
 
@@ -13,6 +13,7 @@ Active ADRs only. Active numbering was reset to `001` during the controlled rese
 | [005](decisions/005-cockpit-ui-ux-direction.md) | Cockpit UI/UX Direction | Calm, semantic-color, two-column workspace; HTMX-light, not SPA. |
 | [006](decisions/006-novel-volume-chapter-data-model.md) | Novel/Volume/Chapter Data Model | Project=Novel, import=Volume; schema v3 + v2→v3 migration; `init` preserved. |
 | [007](decisions/007-fastapi-ui-stack.md) | FastAPI Cockpit UI Stack | Server-rendered Jinja2 + HTMX, no Node/build, no SPA; no business logic in UI. Pins ADR `005`'s direction for Sprint 11. |
+| [008](decisions/008-translation-qa-architecture-and-severity.md) | Translation QA Architecture & Severity | Phase B QA reuses `weaver.qa.checks` (no parallel system); keeps severity `info\|warning\|critical` (no `error`); scope-aware read-only `services/translation_qa.py`. |
 
 ## ADR rules
 

@@ -6,7 +6,7 @@ Accepted (maintainer, 2026-06-03) · **Coexistence ended (Sprint 13B, 2026-06-04
 
 ## Context
 
-Sprint 10 closed all **functional/domain** parity between the Flask and FastAPI cockpits (ADR `004`); the parity re-audit ([SPRINT10_PARITY_AUDIT.md](../SPRINT10_PARITY_AUDIT.md) §9) found the **only** remaining difference is the rendered browser UI — Flask serves HTML templates, FastAPI is JSON-only. UI work was deliberately deferred under ADR `005`. Sprint 11 now builds a FastAPI-backed browser UI to reach **functional UI parity** so Flask can eventually be retired (Sprint 12 audit → Sprint 13 decommission, only if approved).
+Sprint 10 closed all **functional/domain** parity between the Flask and FastAPI cockpits (ADR `004`); the parity re-audit (in git history) found the **only** remaining difference is the rendered browser UI — Flask serves HTML templates, FastAPI is JSON-only. UI work was deliberately deferred under ADR `005`. Sprint 11 now builds a FastAPI-backed browser UI to reach **functional UI parity** so Flask can eventually be retired (Sprint 12 audit → Sprint 13 decommission, only if approved).
 
 The locked stack ([CLAUDE.md §3](../../CLAUDE.md)) **rejects React/Node build / SPA without an ADR**. ADR `005` already set the direction ("HTMX is allowed… the cockpit is **not** a complex SPA unless a future ADR explicitly chooses that path"). This ADR pins the concrete UI stack for the FastAPI cockpit.
 
@@ -33,5 +33,5 @@ Tradeoffs: HTMX patterns for the richer interactions (batch monitor, debounced a
 
 - `src/weaver/api/` — `templates/` + `static/` to be added in Sprint 11A; UI router(s) under `api/routers/`.
 - ADR [`004`](004-fastapi-cockpit-technical-direction.md) (FastAPI direction), ADR [`005`](005-cockpit-ui-ux-direction.md) (UI/UX direction).
-- [COCKPIT_WORKFLOW.md](../COCKPIT_WORKFLOW.md), [SPRINT10_PARITY_AUDIT.md](../SPRINT10_PARITY_AUDIT.md) §9.
+- [COCKPIT_WORKFLOW.md](../COCKPIT_WORKFLOW.md). (The Flask↔FastAPI parity audit that motivated this ADR is in git history.)
 - [CLAUDE.md §3](../../CLAUDE.md) (locked stack).

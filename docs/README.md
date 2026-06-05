@@ -7,9 +7,9 @@ Two surfaces drive the **same** core:
 - **CLI** (`weaver …`) — the original, complete surface. Scriptable, resumable.
 - **Web cockpit** (`weaver serve`) — a local single-user browser UI on **FastAPI** (Jinja2 + HTMX UI + typed JSON API; see [ADR 004](decisions/004-fastapi-cockpit-technical-direction.md)). The legacy Flask cockpit was removed in Sprint 13B; FastAPI is now the only web surface.
 
-**Current focus:** the **MVP Web Cockpit Foundation** — building the consistency-first translator workflow (project/novel/volume/chapter, workspace, glossary, character DB, translation memory, batch, export) before any UI polish. See [MVP_SCOPE.md](MVP_SCOPE.md).
+**Status:** the **MVP Web Cockpit Foundation** is shipped (`v0.7.0-rc.1`) — consistency-first translator workflow (project/novel/volume/chapter, workspace, glossary, character DB, translation memory, batch, export), plus **UI/UX polish** (Phase A) and **read-only translation QA** (Phase B, ADR `008`). Next: release hardening. See [MVP_SCOPE.md](MVP_SCOPE.md) and [CLAUDE.md](../CLAUDE.md) §2.
 
-> The project is mid **controlled reset**. Active ADRs restart at `001` ([DECISIONS.md](DECISIONS.md)); pre-reset specs and history live in [archive/](archive/). The reset operating plan is `claude.local.md` at the repo root.
+> Active ADRs start at `001` ([DECISIONS.md](DECISIONS.md)). Pre-reset specs, old ADRs, and completed sprint/phase reports were removed from the tree on 2026-06-05 and live in **git history**.
 
 ## Where to start
 
