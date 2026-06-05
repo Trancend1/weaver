@@ -71,6 +71,28 @@ def test_translate_job_progresses_to_done_with_result(jobs_client: TestClient) -
     assert "hx-trigger" not in panel
 
 
+def test_terminal_translate_job_signals_grid_refresh(jobs_client: TestClient) -> None:
+    # A finished translate job tells the workspace grid to refresh itself once,
+    # via a response header (not an hx-trigger in the still-quiet panel).
+    name = _name(jobs_client)
+    cid = _first_chapter(jobs_client, name)
+    jobs_client.post(f"/ui/projects/{name}/chapters/{cid}/translate")
+    job_id = next(iter(jobs_client.app.state.jobs._jobs))  # type: ignore[attr-defined]
+    assert _wait_terminal(jobs_client, f"/projects/{name}/jobs/{job_id}") == "done"
+
+    r = jobs_client.get(f"/ui/projects/{name}/jobs/{job_id}")
+    assert r.headers.get("HX-Trigger") == "refreshGrid"
+    assert "hx-trigger" not in r.text
+
+
+def test_workspace_grid_listens_for_refresh(jobs_client: TestClient) -> None:
+    name = _name(jobs_client)
+    cid = _first_chapter(jobs_client, name)
+    page = jobs_client.get(f"/ui/projects/{name}/chapters/{cid}").text
+    assert 'id="ws-grid"' in page
+    assert "refreshGrid from:body" in page
+
+
 def test_translate_unhealthy_provider_renders_error(tmp_path: Path) -> None:
     # project left on the default (deepseek) provider with no key → 502 → error panel
     from weaver.services.project import initialize_project

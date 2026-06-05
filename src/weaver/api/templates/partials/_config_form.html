@@ -1,6 +1,6 @@
 <div id="config-form">
-  {% if saved %}<p class="saved-note">Saved ✓</p>{% endif %}
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if saved %}<p class="saved-note" role="status">Saved ✓</p>{% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
 
   <p class="meta">
     Global defaults: provider <code>{{ view.default_provider or "—" }}</code> · model <code>{{ view.default_model or "—" }}</code>
@@ -21,7 +21,16 @@
         <option value="global">global</option>
       </select>
     </label>
-    <label>Provider type <input name="provider_type" placeholder="deepseek / gemini / ollama / fake / custom"></label>
+    <span class="hint meta"><strong>project</strong> saves to this project's <code>project.toml</code>;
+      <strong>global</strong> sets the default used by new projects.</span>
+    <label>Provider type
+      <select name="provider_type">
+        <option value="">(leave unchanged)</option>
+        {% for pt in provider_types %}
+        <option value="{{ pt }}"{% if view.provider_type == pt %} selected{% endif %}>{{ pt }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label>Model <input name="model" placeholder="model id"></label>
     <label>Base URL <input name="base_url" placeholder="(custom/ollama only)"></label>
     <label>API key env <input name="api_key_env" placeholder="env-var name only (no value)"></label>

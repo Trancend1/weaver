@@ -24,6 +24,7 @@ from weaver.errors import (
     TranslationMemoryNotFoundError,
     WeaverError,
 )
+from weaver.providers.registry import known_provider_types
 from weaver.services import characters as characters_service
 from weaver.services import glossary_terms as glossary_service
 from weaver.services import provider_config as config_service
@@ -39,6 +40,7 @@ from weaver.services.project_discovery import discover_projects, find_project
 router = APIRouter(tags=["ui"], include_in_schema=False)
 
 CANDIDATE_PAGE = 20
+MEMORY_PAGE = 50
 
 
 def _base_dir(request: Request) -> Path:
@@ -79,6 +81,7 @@ def _candidates_ctx(
     return {
         "name": name,
         "page": page,
+        "find": find or "",
         "prev_offset": max(offset - CANDIDATE_PAGE, 0) if offset > 0 else None,
         "next_offset": offset + CANDIDATE_PAGE
         if offset + CANDIDATE_PAGE < page.total_pending
@@ -93,9 +96,14 @@ def _terms_fragment(request: Request, name: str, *, error: str | None = None) ->
 
 
 def _candidates_fragment(
-    request: Request, name: str, *, offset: int = 0, error: str | None = None
+    request: Request,
+    name: str,
+    *,
+    offset: int = 0,
+    find: str | None = None,
+    error: str | None = None,
 ) -> HTMLResponse:
-    ctx = _candidates_ctx(request, name, offset=offset)
+    ctx = _candidates_ctx(request, name, offset=offset, find=find)
     ctx["error"] = error
     return templates.TemplateResponse(request, "partials/_glossary_candidates.html", ctx)
 
@@ -184,10 +192,10 @@ def glossary_delete(name: str, source: str, request: Request) -> HTMLResponse:
 
 @router.get("/ui/projects/{name}/glossary/candidates", response_class=HTMLResponse)
 def glossary_candidates_fragment(
-    name: str, request: Request, offset: int = Query(0, ge=0)
+    name: str, request: Request, offset: int = Query(0, ge=0), find: str | None = None
 ) -> HTMLResponse:
-    """Paged pending-candidate list (HTMX fragment)."""
-    return _candidates_fragment(request, name, offset=offset)
+    """Paged pending-candidate list, optionally filtered by ``find`` (HTMX fragment)."""
+    return _candidates_fragment(request, name, offset=offset, find=find)
 
 
 @router.post(
@@ -202,6 +210,7 @@ def glossary_candidate_action(
     target: str | None = Form(None),
     notes: str | None = Form(None),
     offset: int = Form(0),
+    find: str | None = Form(None),
 ) -> HTMLResponse:
     """Approve / edit / reject one candidate, then re-render the candidate list."""
     base = _base_dir(request)
@@ -217,8 +226,8 @@ def glossary_candidate_action(
     except GlossaryCandidateNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (ValueError, WeaverError) as exc:
-        return _candidates_fragment(request, name, offset=offset, error=str(exc))
-    return _candidates_fragment(request, name, offset=offset)
+        return _candidates_fragment(request, name, offset=offset, find=find, error=str(exc))
+    return _candidates_fragment(request, name, offset=offset, find=find)
 
 
 @router.get("/ui/projects/{name}/glossary/diff", response_class=HTMLResponse)
@@ -336,42 +345,83 @@ def characters_delete(name: str, jp_name: str, request: Request) -> HTMLResponse
 # --- translation memory -----------------------------------------------------
 
 
-def _memory_fragment(request: Request, name: str, *, error: str | None = None) -> HTMLResponse:
+def _memory_ctx(
+    request: Request, name: str, *, offset: int = 0, find: str | None = None
+) -> dict[str, object]:
+    """Build the TM context, paginating + filtering the entries in the UI layer.
+
+    The overview (and the JSON API) still returns every row; here we only render
+    a page of them so a large novel's TM doesn't paint thousands of rows at once.
+    """
     base = _base_dir(request)
-    return templates.TemplateResponse(
-        request,
-        "partials/_memory.html",
-        {
-            "name": name,
-            "overview": tm_service.get_memory_overview(_project_toml(request, name), cwd=base),
-            "error": error,
-        },
-    )
+    overview = tm_service.get_memory_overview(_project_toml(request, name), cwd=base)
+    needle = (find or "").strip().lower()
+    entries = list(overview.entries)
+    if needle:
+        entries = [
+            e
+            for e in entries
+            if needle in (e.source_text or "").lower() or needle in (e.target_text or "").lower()
+        ]
+    total_matching = len(entries)
+    return {
+        "name": name,
+        "overview": overview,
+        "entries": entries[offset : offset + MEMORY_PAGE],
+        "find": find or "",
+        "offset": offset,
+        "total_matching": total_matching,
+        "prev_offset": max(offset - MEMORY_PAGE, 0) if offset > 0 else None,
+        "next_offset": offset + MEMORY_PAGE if offset + MEMORY_PAGE < total_matching else None,
+    }
+
+
+def _memory_fragment(
+    request: Request,
+    name: str,
+    *,
+    offset: int = 0,
+    find: str | None = None,
+    error: str | None = None,
+) -> HTMLResponse:
+    ctx = _memory_ctx(request, name, offset=offset, find=find)
+    ctx["error"] = error
+    return templates.TemplateResponse(request, "partials/_memory.html", ctx)
 
 
 @router.get("/ui/projects/{name}/memory", response_class=HTMLResponse)
-def memory_page(name: str, request: Request) -> HTMLResponse:
+def memory_page(
+    name: str, request: Request, offset: int = Query(0, ge=0), find: str | None = None
+) -> HTMLResponse:
     """Translation-memory admin: read entries + reuse stats, delete one entry."""
-    base = _base_dir(request)
     return templates.TemplateResponse(
-        request,
-        "memory.html",
-        {
-            "name": name,
-            "overview": tm_service.get_memory_overview(_project_toml(request, name), cwd=base),
-        },
+        request, "memory.html", _memory_ctx(request, name, offset=offset, find=find)
     )
 
 
+@router.get("/ui/projects/{name}/memory/entries", response_class=HTMLResponse)
+def memory_entries_fragment(
+    name: str, request: Request, offset: int = Query(0, ge=0), find: str | None = None
+) -> HTMLResponse:
+    """Paged + filtered TM entries (HTMX fragment)."""
+    return _memory_fragment(request, name, offset=offset, find=find)
+
+
 @router.post("/ui/projects/{name}/memory/{source_hash}/delete", response_class=HTMLResponse)
-def memory_delete(name: str, source_hash: str, request: Request) -> HTMLResponse:
-    """Delete one TM entry (TM-row only), then re-render the entries table."""
+def memory_delete(
+    name: str,
+    source_hash: str,
+    request: Request,
+    offset: int = Form(0),
+    find: str | None = Form(None),
+) -> HTMLResponse:
+    """Delete one TM entry (TM-row only), then re-render the current page."""
     base = _base_dir(request)
     try:
         tm_service.delete_entry(_project_toml(request, name), source_hash=source_hash, cwd=base)
     except TranslationMemoryNotFoundError as exc:
-        return _memory_fragment(request, name, error=str(exc))
-    return _memory_fragment(request, name)
+        return _memory_fragment(request, name, offset=offset, find=find, error=str(exc))
+    return _memory_fragment(request, name, offset=offset, find=find)
 
 
 # --- provider / secret config -----------------------------------------------
@@ -384,6 +434,7 @@ def _config_ctx(request: Request, project: str | None) -> dict[str, object]:
         "view": view,
         "project": _opt(project),
         "projects": [dp.name for dp in discover_projects(base)],
+        "provider_types": known_provider_types(),
     }
 
 
@@ -443,6 +494,7 @@ def config_secret_set(
         error = str(exc)
     ctx = _config_ctx(request, project)
     ctx["secret_error"] = error
+    ctx["secret_saved"] = error is None
     return templates.TemplateResponse(request, "partials/_secrets.html", ctx)
 
 

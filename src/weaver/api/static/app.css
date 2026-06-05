@@ -1,6 +1,7 @@
-/* Weaver FastAPI cockpit — functional-parity UI (Sprint 11A).
-   Minimal layout + semantic status color only. Visual polish is deferred
-   (ADR 005). No framework, no build. */
+/* Weaver FastAPI cockpit stylesheet. No framework, no build.
+   Originated as the functional-parity UI (Sprint 11A); Phase A (A2-1) adds the
+   shared shell pass: heading scale, focus-visible, small-screen handling, and
+   reduced-motion. See docs/PHASE_A_UI_AUDIT.md. */
 
 :root {
   --fg: #1c1f24;
@@ -10,6 +11,7 @@
   --panel: #f6f8fa;
   --ok: #1a7f37;
   --bad: #b42318;
+  --warn: #9a6700;
   --link: #0b5cad;
 }
 
@@ -31,13 +33,19 @@ body {
 }
 .brand { font-weight: 700; text-decoration: none; color: var(--fg); }
 .topnav a { margin-right: 0.75rem; color: var(--link); text-decoration: none; }
+.topnav a.active { color: var(--fg); font-weight: 700; text-decoration: underline; }
 .api-hint { margin-left: auto; color: var(--muted); font-size: 0.85rem; }
 
 .content { padding: 1.25rem; max-width: 1100px; margin: 0 auto; }
 .footer { padding: 0.75rem 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.8rem; }
 
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 1rem 1.25rem; }
-h1 { font-size: 1.3rem; margin: 0.2rem 0 0.6rem; }
+.panel + .panel { margin-top: 1rem; }
+/* Explicit heading scale so section headings never out-size the page title
+   (UA defaults made h2/h3 larger than the styled h1). */
+h1 { font-size: 1.5rem; margin: 0.2rem 0 0.6rem; }
+h2 { font-size: 1.15rem; margin: 1.1rem 0 0.4rem; }
+h3 { font-size: 1rem; margin: 0.9rem 0 0.3rem; color: var(--muted); }
 .meta { color: var(--muted); font-size: 0.85rem; }
 .crumbs { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.5rem; }
 .crumbs a { color: var(--link); text-decoration: none; }
@@ -48,18 +56,41 @@ code { background: #eceff3; padding: 0.05rem 0.3rem; border-radius: 3px; }
 .grid th { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; }
 .grid td a { color: var(--link); text-decoration: none; }
 .num { text-align: right; }
+.grid tbody tr:nth-child(even) { background: rgba(0, 0, 0, 0.02); }
+.grid tbody tr:hover { background: #eef3f8; }
+.grid progress { width: 64px; height: 0.55rem; vertical-align: middle; }
+.progress-cell { display: flex; align-items: center; gap: 0.4rem; justify-content: flex-end; }
+.grid td.cell-clip { max-width: 340px; overflow-wrap: anywhere; }
 
 .badge { font-size: 0.75rem; padding: 0.1rem 0.45rem; border-radius: 10px; border: 1px solid var(--line); }
 .badge.ok { color: var(--ok); border-color: var(--ok); }
 .badge.bad { color: var(--bad); border-color: var(--bad); }
+.badge.warn { color: var(--warn); border-color: var(--warn); }
+
+/* Visible keyboard focus on every interactive element (was missing entirely). */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.link-btn:focus-visible,
+.use:focus-visible,
+.dir:focus-visible,
+.up:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
 
 .tree { list-style: none; padding-left: 0; }
 .vol { border: 1px solid var(--line); border-radius: 5px; margin-bottom: 0.6rem; background: var(--bg); }
 .vol-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--line); }
 .vol-title { font-weight: 600; }
 .chapters { list-style: none; margin: 0; padding: 0.3rem 0.75rem; }
-.chapter { display: flex; justify-content: space-between; padding: 0.2rem 0; border-bottom: 1px dashed var(--line); }
+.chapter { display: flex; justify-content: space-between; gap: 1rem; padding: 0.2rem 0; border-bottom: 1px dashed var(--line); }
 .chapter:last-child { border-bottom: none; }
+.ch-progress { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+.ch-progress progress { width: 60px; height: 0.5rem; vertical-align: middle; }
 
 .empty { padding: 1rem; color: var(--muted); }
 .empty .hint, .hint { font-size: 0.85rem; }
@@ -124,3 +155,28 @@ button:hover { border-color: var(--link); }
 /* HTMX loading state (used from 11B onward; styled now so the primitive exists). */
 .htmx-indicator { opacity: 0; transition: opacity 120ms ease-in; }
 .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+
+/* Mutation feedback (A2-2): any in-flight HTMX control shows a busy state, so
+   every add/edit/delete/save gives feedback without per-form indicators. */
+form.htmx-request button[type="submit"],
+button.htmx-request,
+.link-btn.htmx-request { opacity: 0.6; cursor: progress; }
+
+/* Wide tables (dashboard, admin) scroll horizontally instead of breaking layout. */
+.table-scroll { overflow-x: auto; }
+
+/* Small-screen handling (Phase A: usable at 390px). No layout was responsive before. */
+@media (max-width: 720px) {
+  .topbar { flex-wrap: wrap; gap: 0.5rem 1rem; }
+  .api-hint { margin-left: 0; flex-basis: 100%; }
+  .content { padding: 1rem 0.85rem; }
+  .ws-grid { grid-template-columns: 1fr; }
+  .seg-history { grid-column: 1; }
+  .diff-cols { grid-template-columns: 1fr; }
+  .job-controls { flex-direction: column; align-items: stretch; }
+}
+
+/* Respect a reduced-motion preference (the only transition we ship today). */
+@media (prefers-reduced-motion: reduce) {
+  .htmx-indicator { transition: none; }
+}

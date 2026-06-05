@@ -10,6 +10,10 @@
   <h1>{{ ws.chapter_title or "Chapter" }}</h1>
   <p class="meta">{{ ws.segment_count }} segments · {{ ws.translated_count }} translated</p>
 
+  <p class="hint"><strong>Translate</strong> fills in untranslated segments only.
+    <strong>Retranslate</strong> re-runs existing segments under the chosen safety mode —
+    manual edits stay protected unless you pick <em>force</em>.</p>
+
   <div class="job-controls">
     <form hx-post="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/translate"
           hx-target="#job-panel" hx-swap="outerHTML" class="inline-form">
@@ -32,7 +36,12 @@
   {% set name = ws.project_name %}
   {% set chapter_id = ws.chapter_id %}
   {% if ws.segments %}
-  <div class="ws-grid">
+  {# #ws-grid refreshes itself once a translate job finishes: the terminal job
+     response sends an `HX-Trigger: refreshGrid` header, this listens for it. #}
+  <div class="ws-grid" id="ws-grid"
+       hx-get="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}"
+       hx-trigger="refreshGrid from:body"
+       hx-select="#ws-grid" hx-swap="outerHTML">
     <div class="ws-head ws-src">Source (JP)</div>
     <div class="ws-head ws-tx">Translation (EN)</div>
     {% for seg in ws.segments %}
@@ -43,4 +52,33 @@
   <div class="empty"><p>This chapter has no segments.</p></div>
   {% endif %}
 </section>
+
+{# Progressive enhancement (no build, no framework): unsaved-edit guard (W3) +
+   textarea auto-grow (W5). Uses event delegation so it survives HTMX swaps. #}
+<script>
+(function () {
+  const dirty = new Set();
+  function grow(t) { t.style.height = "auto"; t.style.height = t.scrollHeight + "px"; }
+  function resizeIn(scope) {
+    if (scope && scope.querySelectorAll) scope.querySelectorAll(".seg-input").forEach(grow);
+  }
+  document.addEventListener("input", function (e) {
+    const t = e.target;
+    if (!t.classList || !t.classList.contains("seg-input")) return;
+    const seg = t.closest(".ws-seg");
+    if (seg) { (t.value !== t.defaultValue) ? dirty.add(seg.id) : dirty.delete(seg.id); }
+    grow(t);
+  });
+  document.body.addEventListener("htmx:afterSwap", function (e) {
+    const el = e.target;
+    if (el && el.id === "ws-grid") { dirty.clear(); resizeIn(el); return; }
+    if (el && el.id && el.id.indexOf("seg-") === 0) dirty.delete(el.id);
+    resizeIn(el);
+  });
+  window.addEventListener("beforeunload", function (e) {
+    if (dirty.size) { e.preventDefault(); e.returnValue = ""; }
+  });
+  resizeIn(document);
+})();
+</script>
 {% endblock %}

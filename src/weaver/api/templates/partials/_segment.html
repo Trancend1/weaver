@@ -9,9 +9,10 @@
       <textarea name="translated_text" rows="3" class="seg-input">{{ seg.translated_text or "" }}</textarea>
       <div class="seg-bar">
         <button type="submit">Save</button>
-        <span class="badge {{ 'ok' if seg.status in ('manual', 'translated') else '' }}">{{ seg.status }}</span>
-        {% if saved %}<span class="saved-note">Saved ✓</span>{% endif %}
-        {% if error %}<span class="error">{{ error }}</span>{% endif %}
+        {% set _badge = 'ok' if seg.status in ('manual', 'translated') else 'bad' if seg.status in ('failed', 'stale') else '' %}
+        <span class="badge {{ _badge }}">{{ seg.status }}</span>
+        {% if saved %}<span class="saved-note" role="status">Saved ✓</span>{% endif %}
+        {% if error %}<span class="error" role="alert">{{ error }}</span>{% endif %}
         <button type="button" class="link-btn"
                 hx-get="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/history"
                 hx-target="#seg-{{ seg.id }}-history" hx-swap="innerHTML">History</button>

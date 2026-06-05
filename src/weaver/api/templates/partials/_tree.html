@@ -5,14 +5,19 @@
     <li class="vol">
       <div class="vol-head">
         <span class="vol-title">{{ v.title }}</span>
-        <span class="meta">{{ v.source_format }} · {{ v.chapter_count }} ch · {{ v.segment_count }} seg</span>
+        <span class="meta">{{ v.source_format }} · {{ v.chapter_count }} ch ·
+          {{ v.chapters | sum(attribute="done_count") }}/{{ v.segment_count }} seg done</span>
       </div>
       {% if v.chapters %}
       <ul class="chapters">
         {% for c in v.chapters %}
         <li class="chapter">
           <a class="ch-title" href="/ui/projects/{{ tree.project_name }}/chapters/{{ c.id }}">{{ c.title }}</a>
-          <span class="meta num">{{ c.segment_count }} seg</span>
+          <span class="ch-progress meta">
+            <progress value="{{ c.done_count }}" max="{{ c.segment_count or 1 }}"
+              title="{{ c.done_count }} of {{ c.segment_count }} segments done"></progress>
+            {{ c.done_count }}/{{ c.segment_count }}
+          </span>
         </li>
         {% endfor %}
       </ul>

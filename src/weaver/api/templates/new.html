@@ -6,7 +6,7 @@
   <h1>Create a novel</h1>
   <p class="meta">Upload a source file <strong>or</strong> pick one from the books dir below. The project name comes from the source filename.</p>
 
-  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
 
   <form method="post" action="/ui/new" enctype="multipart/form-data" class="stack">
     <label>Upload source
@@ -15,7 +15,14 @@
     <div class="field">Browsed source: <span id="selected_source" class="meta">(none)</span>
       <input type="hidden" name="source_path" id="source_path">
     </div>
-    <label>Provider <input name="provider" placeholder="(default)"></label>
+    <label>Provider
+      <select name="provider">
+        <option value="">(default)</option>
+        {% for pt in provider_types or [] %}
+        <option value="{{ pt }}">{{ pt }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label>Template <input name="template" placeholder="(default)"></label>
     <button type="submit">Create novel</button>
   </form>
