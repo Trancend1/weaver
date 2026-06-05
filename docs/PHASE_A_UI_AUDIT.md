@@ -145,6 +145,34 @@ Contents (the P0 set):
 
 ---
 
+## 6b. Stage A2 — implementation status
+
+All five implementation slices landed on branch `feat/ui-polish-a2-1` (presentation/copy,
+with one additive `done_count` service field and a small workspace progressive-enhancement script):
+
+- **A2-1** P0 shell — C1 heading scale, C3 focus-visible, C2 responsive, C4 reduced-motion, C6 chrome copy, D1 stale copy, W4 badge colors, C9 delete confirms.
+- **A2-2** feedback/a11y — C5 active-nav, C7 aria-labels, C8 busy-state, C10 alert/status roles.
+- **A2-3** workspace — W1 grid auto-refresh (HX-Trigger header), W2 copy, W3 unsaved guard + W5 auto-grow (JS), W6 history toggle.
+- **A2-4** dashboard/project — D2 zebra/hover + progress, D4 visible error, P1 import-above-export, P2 copy, P4 per-chapter/volume done progress.
+- **A2-5** admin — G1 candidate search, G2 anchors, G3 diff copy, M1 TM search+paging, M2 cell clip, Cfg1/N1 provider selects, Cfg2 scope hint, Cfg3 secret saved note.
+
+**A2-6 live verification** (real browser via the preview tool against `weaver serve`; screenshots
+unavailable in this environment, so verified via computed styles + DOM + interaction — more precise
+for style checks):
+
+| Check | Result |
+|-------|--------|
+| C1 heading scale (project page) | h1 24px > h2 18.4px > h3 16px ✓ |
+| C3 focus-visible (config model input) | outline `2px solid rgb(11,92,173)` ✓ |
+| C5 active-nav | `aria-current="page"` on the current section ✓ |
+| C2 responsive @ 390px | no page h-overflow; wide table scrolls inside its wrapper; `#ws-grid` → single column; topbar wraps ✓ |
+| P1 order | first h2 on project page = "Import a volume" ✓ |
+| Cfg1 provider select | options `["", custom, deepseek, fake, gemini, ollama]` ✓ |
+| W1 auto-refresh | after Translate finished, grid badges flipped to `translated` (4× `.badge.ok`) with no manual reload ✓ |
+| W4 badge color | translated → `.badge.ok` (green) ✓ |
+| W5 auto-grow (⇒ W3 script live) | textarea grew 77px → 370px on input ✓ |
+| Console errors | none ✓ |
+
 ## 7. Notes / out of scope
 
 - A **live rendered pass** (screenshots, keyboard navigation, contrast measurement) belongs to A2-6;
