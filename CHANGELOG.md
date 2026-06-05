@@ -39,6 +39,11 @@ All notable changes to Weaver are recorded here. Format follows [Keep a Changelo
   `bundle_path`. The bundle is skipped on cancel or when nothing was exported. New
   module `services/export_bundle.py`. (A *merged-omnibus* single EPUB is not built —
   a ZIP of per-volume files is the chosen, safe form.)
+- **Opt-in QA tree badges** (Phase D) — the project tree can now show per-volume and
+  per-chapter QA badges without ever running QA on page render. A "Load QA badges"
+  button GETs `/ui/projects/{name}/qa/tree-badges`, which runs the novel QA **once**
+  and returns out-of-band (`hx-swap-oob`) badge spans HTMX injects into the tree
+  slots. The tree render stays cheap (Gate B1 preserved); badges are explicit.
 
 ### Changed
 

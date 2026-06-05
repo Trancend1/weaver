@@ -160,3 +160,48 @@ def test_tree_render_does_not_run_qa(ctx, monkeypatch) -> None:
     assert client.get("/ui/projects/issues").status_code == 200
 
     assert calls == []
+
+
+def test_project_tree_has_badge_slots_and_button(ctx) -> None:
+    client, chapter_id, volume_id = ctx
+    page = client.get("/ui/projects/issues").text
+    assert "Load QA badges" in page
+    assert "/ui/projects/issues/qa/tree-badges" in page
+    assert f'id="qa-badge-ch-{chapter_id}"' in page
+    assert f'id="qa-badge-vol-{volume_id}"' in page
+
+
+def test_tree_badges_lazy_loads_and_runs_qa_once(ctx, monkeypatch) -> None:
+    client, chapter_id, volume_id = ctx
+    calls = {"n": 0}
+    real = ui_qa.analyze_novel
+
+    def counting(*args, **kwargs):
+        calls["n"] += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(ui_qa, "analyze_novel", counting)
+
+    # Rendering the tree triggers no QA …
+    assert client.get("/ui/projects/issues").status_code == 200
+    assert calls["n"] == 0
+
+    # … but explicitly loading badges runs the novel QA exactly once and returns
+    # out-of-band spans targeting the tree slots.
+    badges = client.get("/ui/projects/issues/qa/tree-badges")
+    assert badges.status_code == 200
+    assert calls["n"] == 1
+    body = badges.text
+    assert 'hx-swap-oob="true"' in body
+    assert f'id="qa-badge-ch-{chapter_id}"' in body
+    assert f'id="qa-badge-vol-{volume_id}"' in body
+    assert ">Errors<" in body  # the "issues" project has a failed segment
+    assert "QA badges loaded" in body
+
+
+def test_tree_badges_missing_project_is_non_fatal(ctx) -> None:
+    client, _, _ = ctx
+    response = client.get("/ui/projects/ghost/qa/tree-badges")
+    assert response.status_code == 200
+    assert "No project named" in response.text
+    assert 'hx-swap-oob="true"' not in response.text

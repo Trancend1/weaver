@@ -287,9 +287,11 @@ Each stage stops at its gate (§2.2 of CLAUDE.md) for inspection. One PR = one c
   `GET /ui/projects/{name}/chapters/{id}/qa`. Templates `qa.html` + partials
   `_qa_summary.html`, `_qa_issues.html`; severity badge + category filter (HTMX query params).
 - **Badges (Gate B1 decision):** **explicit QA pages first.** Project-page header badge + chapter-page
-  badge come from the QA report rendered *on that page*. **Per-chapter tree badges are deferred** — do
-  **not** run a full novel-scope QA scan automatically on every project-tree render. A lightweight
-  summary badge may be added in a later slice only if it is proven performance-safe.
+  badge come from the QA report rendered *on that page*. The project tree still **never** runs a
+  novel-scope QA scan on render. **Phase D update:** per-volume/per-chapter **tree badges now exist but
+  are opt-in** — a "Load QA badges" button (`/ui/projects/{name}/qa/tree-badges`) runs the novel QA once
+  and HTMX-injects out-of-band badges into the tree slots. This is the "performance-safe later slice":
+  zero cost on tree render, one analyze per explicit click.
 - **Tests:** `tests/integration/test_ui_qa.py` — pages render, filter narrows, badges reflect counts.
 - **Gate B4:** usable UI; Jinja2 + HTMX only; no auto-fix. No export change yet.
 
