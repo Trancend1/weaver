@@ -4,7 +4,7 @@ Offline-capable, glossary-aware **JP→EN** light-novel translation workbench. T
 
 **Not:** SaaS, consumer product, hosted service, complex SPA.
 
-> **Status (2026-06-05):** MVP shipped as release candidate **`v0.7.0-rc.1`** (FastAPI is the sole web cockpit; Flask fully removed). **Phase A — UI/UX Polish** and **Phase B — Translation QA & Consistency Checks** (read-only, report-first; ADR `008`) are both complete. **Next: Phase C — Release hardening** (see §2.3). Detailed MVP/Phase-A history lives in git history.
+> **Status (2026-06-05):** **`v0.7.0` stable released** (FastAPI is the sole web cockpit; Flask fully removed). Phases A (UI/UX Polish), B (Translation QA, ADR `008`), and C (Release hardening) are all complete. **Next: Phase D — DOCX export** (see §2.3). Detailed MVP/Phase-A/B history lives in git history.
 
 ---
 
@@ -43,18 +43,21 @@ Forward-looking phase roadmap. MVP is shipped; the per-sprint MVP detail is arch
 
 ```txt
 Foundation (v0.6.0) ✅
-  → MVP Web Cockpit Foundation — Sprints 1–13 ✅  (release candidate v0.7.0-rc.1)
+  → MVP Web Cockpit Foundation — Sprints 1–13 ✅  (v0.7.0-rc.1)
   → Phase A — UI/UX Polish ✅
   → Phase B — Translation QA & Consistency Checks ✅
-  → Phase C — Release hardening / maintenance        ⬅ next
+  → Phase C — Release hardening ✅  (v0.7.0 stable)
+  → Phase D — DOCX export / QA config / combined ZIP   ⬅ next
 ```
 
 | Phase | Scope | Status |
 | ----- | ----- | ------ |
 | MVP (Sprints 1–13) | Core JP→EN cockpit: Novel/Volume/Chapter structure & import; two-column workspace; provider AI translate + safe retranslate; glossary + character DB (prompt injection); translation memory; batch; EPUB/TXT/HTML export. FastAPI made the sole web surface (Flask removed, Sprint 13B). | ✅ `v0.7.0-rc.1` |
 | Phase A — UI/UX Polish | Cockpit UI polish on Jinja2 + HTMX (ADR `007`): shared shell / a11y / responsive @390px, workspace UX, dashboard + admin clarity. Presentation/copy only; no backend/provider/stack change. | ✅ |
-| Phase B — Translation QA & Consistency Checks | Read-only, deterministic QA reports before export (report-first, no auto-fix): QA engine → JSON API → UI report/badges → advisory pre-export warning. No provider calls, no mutation, no semantic/vector. ADR `008`. Stages B1–B6 (§2.3). | ✅ |
-| **Phase C — Release hardening** | Promote `v0.7.0-rc.1` → stable; address deferred-roadmap items per [RC1_REPORT](docs/RC1_REPORT.md). | ⏳ next |
+| Phase B — Translation QA & Consistency Checks | Read-only, deterministic QA reports before export (report-first, no auto-fix): QA engine → JSON API → UI report/badges → advisory pre-export warning. No provider calls, no mutation, no semantic/vector. ADR `008`. Stages B1–B6. | ✅ |
+| **Phase C — Release hardening** | CHANGELOG `[Unreleased]` → `[0.7.0]` (Phase A + B entries); version consistency; soak 25/25; clean wheel install; annotated tag `v0.7.0`. | ✅ `v0.7.0` |
+| **Phase D — DOCX export** | DOCX export → QA thresholds config → combined EPUB/ZIP → QA tree badges → provider hardening. | ⏳ next |
+| **Phase E — Design System Implementation** | Implement DESIGN.md token system + DESIGN_GUIDE.md hybrid layout across the cockpit: CSS variable migration (6→19 tokens), sidebar layout (3-mode dispatch), component library extraction, typography scale, color semantics, responsive sidebar, workspace redesign per guide. No backend changes — pure CSS + Jinja2 template + HTMX refactor. Source: `docs/DESIGN.md`, `docs/DESIGN_GUIDE.md`. | ⬜ pending |
 
 Legend: ✅ complete · 🟡 in progress · ⏳ next · ⬜ pending · 🚫 blocked.
 
@@ -73,50 +76,34 @@ Before starting any phase or stage, run this gate:
 
 Required reminder before any phase transition: **"Check exit criteria first. No next phase until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Phase B: Translation QA & Consistency Checks ✅ COMPLETE
+### 2.3 Active Phase — Phase D: DOCX Export
 
-> **Phase B is shipped (B1–B6).** Next: **Phase C — Release hardening** (promote `v0.7.0-rc.1` → stable; not yet planned). Plan/spec: [docs/PHASE_B_QA_PLAN.md](docs/PHASE_B_QA_PLAN.md); architecture + severity contract: ADR [`008`](docs/decisions/008-translation-qa-architecture-and-severity.md).
+> **Phase C — Release hardening: complete.** `v0.7.0` tagged on 2026-06-05. **Phase D** is next; not yet planned in detail.
 
-**Goal (delivered):** help the user check translation quality and consistency **before export**, without auto-fix.
-
-**Core principle — _report first, fix later._** QA only **reads** data and produces a report. It does **not** mutate any translation, call a provider/LLM, or do semantic/vector analysis. Findings are surfaced; the user decides.
-
-**Stages (all complete):**
-
-| Stage | Outcome |
-| ----- | ------- |
-| B1 ✅ | QA rule design + audit → [docs/PHASE_B_QA_PLAN.md](docs/PHASE_B_QA_PLAN.md) + ADR `008` (reuse `weaver.qa.checks`, keep severity `critical`, no parallel system). |
-| B2 ✅ | Read-only scope-aware engine: `services/translation_qa.py` (`analyze_chapter/volume/novel` → `QAReport`) + pure rule modules `qa/{consistency_checks,scope_checks,report}.py`, reusing `qa/checks.py`. 23 tests; read-only proven. |
-| B3 ✅ | JSON API `api/routers/qa.py`: `GET …/qa`, `…/volumes/{id}/qa`, `…/chapters/{id}/qa`; severity `info\|warning\|critical` only (no `error` in schema); 404/422 mapping. |
-| B4 ✅ | UI report pages `api/routers/ui_qa.py` + templates (badge, counts, severity/category filter, chapter/segment links). Project + workspace link to QA. **No QA on tree render** (per-chapter tree badges deferred). |
-| B5 ✅ | Advisory pre-export warning (`…/export/preflight`): QA summary + "Review QA report" / "Export anyway". **Export never blocked**; export route + behavior unchanged. |
-| B6 ✅ | Docs (TRANSLATION_PIPELINE, COCKPIT_WORKFLOW, ARCHITECTURE, QUICKSTART, MAINTENANCE, this file) + full regression. |
-
-**Deterministic rules (11):** failed / empty / untranslated-Japanese (critical); stale / suspiciously-short / glossary-mismatch / untranslated-segment / character-name-missing / repeated-identical-translation / fallback-heavy-chapter (warning); mixed-status-chapter (info).
-
-**Severity model (ADR `008`):** `info` · `warning` · `critical` — **`error` was rejected in the data/wire layer**; the UI may *label* `critical` as "Error" only. Scopes: novel / volume / chapter. Data model: `QAReport`, `QAIssue`, `QAScopeSummary`, `QACategory`, `QASeverity` (= reused `Severity`).
-
-**As-built rules (held):** read-only · framework-agnostic engine (ADR `002`; Pydantic only at the API boundary) · deterministic (ADR `003`) · Jinja2 + HTMX UI (ADR `007`) · export behavior unchanged (advisory only) · per-segment logic single-sourced in `weaver.qa.checks` (no parallel QA system). **Legacy `weaver validate` CLI is untouched.**
+**Phase C delivered (2026-06-05):**
+- C1 — version consistency audit: `pyproject.toml` + `__init__.py` both at `0.7.0`; zero RC1/Flask remnants.
+- C2 — CHANGELOG: `[Unreleased]` → `[0.7.0] - 2026-06-05`; Phase A + Phase B entries added; dangling links in `[0.1.0]` fixed.
+- C3 — full validation: **703 tests / 4 skipped**, pyright 0, ruff clean, soak 25/25 (Flask fallback NOT used), clean wheel install `weaver 0.7.0`.
+- C4 — annotated tag `v0.7.0` on `main`.
+- C5 — this file updated; Phase D active.
 
 **Carry-over invariants (unchanged):**
 - **Web is FastAPI-only** (ADR `004`). `weaver serve` = FastAPI cockpit (UI + API), `weaver serve-api` = headless. Flask fully removed.
 - **Legacy CLI** `weaver translate` / `services/export.py` are **single-volume**; multi-volume is the cockpit's job.
-
-**Validation baseline (Phase B6, 2026-06-05):** **703 tests / 4 skipped** (+50 over RC1's 653) · pyright 0 · ruff + format clean · CLI 15 commands · QA JSON/UI/preflight smokes green · read-only (no DB write, no provider call on the QA path).
+- **Phase B QA** (ADR `008`): read-only, deterministic, report-first. 11 rules across novel/volume/chapter scope. Details in [docs/PHASE_B_QA_PLAN.md](docs/PHASE_B_QA_PLAN.md).
 
 ### 2.4 Exit Criteria
 
-> **MVP acceptance gate: met & LOCKED** (Sprint 9C, 2026-06-02), shipped as `v0.7.0-rc.1`; evidence in [docs/MVP_STABILIZATION_REPORT.md](docs/MVP_STABILIZATION_REPORT.md) and [docs/RC1_REPORT.md](docs/RC1_REPORT.md). The MVP checklist lives in [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md). **Phase A — UI/UX Polish: complete** (merged PR #18; detail in git history).
+> **MVP acceptance gate: met & LOCKED** (Sprint 9C, 2026-06-02), shipped as `v0.7.0-rc.1`; evidence in [docs/MVP_STABILIZATION_REPORT.md](docs/MVP_STABILIZATION_REPORT.md) and [docs/RC1_REPORT.md](docs/RC1_REPORT.md). The MVP checklist lives in [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md). **Phase A** complete (PR #18). **Phase B** complete (PR #19). **Phase C** complete — `v0.7.0` tagged 2026-06-05.
 
-**Phase B exits only when:**
+**Phase D exits only when:**
 
-- **B1** — `docs/PHASE_B_QA_PLAN.md` exists: QA rule list, severity model (`info`/`warning`/`error`), categories, report schema (chapter/volume/novel), and a stage breakdown; reconciliation with existing `weaver.qa.checks` + `weaver validate` documented. (Design only — no code.)
-- **B2** — `services/translation_qa.py` is framework-agnostic, **read-only**, deterministic; `analyze_chapter/volume/novel` produce `QAReport`/`QAIssue`. Tests prove detection of every initial check (untranslated, failed/stale, empty/short, repeated, glossary, character-name, fallback-heavy, mixed-status). No provider call, no mutation, no semantic/vector.
-- **B3** — JSON endpoints `GET /projects/{name}/qa`, `…/volumes/{id}/qa`, `…/chapters/{id}/qa` return a valid report (`scope`, counts, `issues[]`, `summary_by_category`, `summary_by_chapter|volume`); unknown project/volume/chapter handled cleanly; thin adapter over B2 only.
-- **B4** — QA report pages (`/ui/projects/{name}/qa`, `…/chapters/{id}/qa`) + severity badges, category filter, links where available; project/chapter/tree badge states (`clean`/`warnings`/`errors`); empty + "review before export" states. Jinja2 + HTMX, no auto-fix.
-- **B5** — pre-export QA warning shows the issue summary; **export still allowed by default** ("Export anyway" vs "Review QA first"); existing export behavior + source fallback unchanged.
-- **B6** — docs updated (TRANSLATION_PIPELINE, COCKPIT_WORKFLOW, ARCHITECTURE, QUICKSTART, CLAUDE.md); full regression green (`pytest`, `pyright`, `ruff`); FastAPI UI + QA API smoke; export flow still works; **no accidental translation mutation, no provider call during QA**.
-- **Quality gate (every stage):** CLI not broken; web not broken; docs match code; one PR = one concern; no premature visual polish.
+- DOCX export (`target="docx"`) produces a valid `.docx` file; `weaver[web]` extra is sufficient (no new top-level dep without ADR).
+- QA threshold constants (`FALLBACK_HEAVY_RATIO`, etc.) are configurable via `project.toml` `[qa]` table; engine defaults unchanged when section absent.
+- Combined EPUB/ZIP bundle export available for novel scope.
+- Full regression green: `pytest`, `pyright`, `ruff`; CLI not broken; export routes not broken.
+- Docs updated: TRANSLATION_PIPELINE, COCKPIT_WORKFLOW, CHANGELOG, CLAUDE.md.
+- **Quality gate:** one PR = one concern; no auto-fix, no provider call in new QA paths.
 
 ### 2.5 Phase Log
 
@@ -131,6 +118,7 @@ One row per phase/era; deep detail lives in the linked docs and git history.
 | MVP RC1 | Release-candidate verification: full validation green (653 tests / 4 skipped, pyright 0, ruff+format clean), CLI 15 commands, cockpit soak 25/25, clean-env wheel install. **GO for RC1**; tag `v0.7.0-rc.1`. Report: [docs/RC1_REPORT.md](docs/RC1_REPORT.md). |
 | Phase A — UI/UX Polish | Cockpit UI polish on Jinja2+HTMX: A1 UX audit → A2-1 shell/a11y/responsive · A2-2 feedback/a11y · A2-3 workspace UX · A2-4 dashboard/project clarity · A2-5 admin usability · A2-6 live verification. Presentation/copy only (+ one additive `done_count` field, a small progressive-enhancement script); no backend/provider/stack change. Merged PR #18 (audit detail in git history). |
 | Phase B — Translation QA | **Complete.** Read-only, deterministic, report-first QA before export (no auto-fix, no provider, no mutation, no semantic/vector). B1 plan + ADR `008` (reuse `weaver.qa.checks`, keep severity `info\|warning\|critical`) → B2 engine (`services/translation_qa.py` + `qa/{consistency_checks,scope_checks,report}.py`) → B3 JSON API (`api/routers/qa.py`) → B4 UI pages (`api/routers/ui_qa.py`) → B5 advisory pre-export warning (`…/export/preflight`, never blocks) → B6 docs + regression. Legacy `weaver validate` untouched. 703 tests / 4 skipped, pyright 0, ruff + format clean. |
+| Phase C — Release hardening | **Complete.** CHANGELOG promoted to `[0.7.0]` (Phase A + B entries); version consistency confirmed; soak 25/25; clean wheel install; annotated tag `v0.7.0` on `main` (2026-06-05). |
 
 ---
 
