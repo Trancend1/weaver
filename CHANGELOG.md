@@ -23,6 +23,14 @@ All notable changes to Weaver are recorded here. Format follows [Keep a Changelo
   - Formatting baseline: document title, `Heading1` chapter headings, normal
     paragraphs, built-in `Quote` style for blockquotes, and a page break before
     chapters 2..N. No images, footnotes, advanced styling, or merged-omnibus DOCX.
+- **Configurable QA thresholds** (Phase D) — the deterministic scope-level QA
+  checks now read optional overrides from the existing `[qa]` table in
+  `project.toml`: `fallback_heavy_ratio` (0.0–1.0), `min_segments` (≥1), and
+  `repeated_min_chars` (≥1). Absent keys keep the Phase B defaults (`0.5` / `5` /
+  `8`), so existing projects are unchanged. Values are validated (wrong type or
+  out-of-range → `ConfigError`); foreign `[qa]` keys (the per-segment flags) are
+  ignored. The same thresholds apply across the CLI/API/UI QA paths
+  (`services/translation_qa.py`). New module `qa/thresholds.py`.
 
 ### Changed
 

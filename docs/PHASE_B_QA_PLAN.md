@@ -162,10 +162,12 @@ are deterministic and read-only.
 | 10 | `fallback_heavy_chapter` | chapter | `warning` | **new** (`scope_checks`) | fraction of segments with `publishable_text is None` ≥ threshold (+ min segment count) |
 | 11 | `mixed_status_chapter` | chapter | `info` | **new** (`scope_checks`) | chapter mixes published and unpublished/failed/stale statuses (partial progress) |
 
-Thresholds — **module-level constants first; not `[qa]`-configurable yet** (Gate B1 decision; QA
-config can be added later if users need it). `minimum_length_ratio = 0.3` (existing `[qa]` flag,
-unchanged) · `fallback_heavy_ratio = 0.5` · `fallback_heavy_min_segments = 5` · `repeated_min_chars = 8`
-(the last three are new constants in `scope_checks.py`, no config surface in Phase B).
+Thresholds — module-level constants in Phase B (Gate B1 decision). `minimum_length_ratio = 0.3`
+(existing `[qa]` flag) · `fallback_heavy_ratio = 0.5` · `fallback_heavy_min_segments = 5` ·
+`repeated_min_chars = 8`. **Phase D update:** the last three are now overridable per project via the
+same `[qa]` table (keys `fallback_heavy_ratio`, `min_segments`, `repeated_min_chars`); defaults are
+unchanged when absent. The defaults + validation live in `qa/thresholds.py` (`load_qa_thresholds`),
+threaded through `services/translation_qa.py` so CLI/API/UI share one set.
 
 **Issue categories** (`QACategory`): `completeness` (1,2,7) · `staleness` (4) · `consistency` (6,8) ·
 `quality` (3,5,9) · `export_readiness` (10,11).

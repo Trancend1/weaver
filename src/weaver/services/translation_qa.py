@@ -43,6 +43,7 @@ from weaver.qa.scope_checks import (
     check_mixed_status,
     check_repeated_identical_translation,
 )
+from weaver.qa.thresholds import QAThresholds, load_qa_thresholds
 from weaver.services.project_paths import resolve_database_path
 from weaver.storage.characters import list_characters
 from weaver.storage.db import connect_readonly_database
@@ -71,7 +72,9 @@ class _ChapterResult:
 def analyze_chapter(project_toml: Path, chapter_id: str, *, cwd: Path | None = None) -> QAReport:
     """Build a QA report for one chapter."""
 
-    project_name = _project_name(project_toml)
+    config = load_project_config(project_toml)
+    project_name = str(config["project"]["name"])
+    thresholds = load_qa_thresholds(config)
     db_path = resolve_database_path(project_toml, cwd=cwd)
     with closing(connect_readonly_database(db_path)) as connection:
         project_id = _single_project_id(connection)
@@ -83,7 +86,9 @@ def analyze_chapter(project_toml: Path, chapter_id: str, *, cwd: Path | None = N
             )
         glossary = list_glossary_terms(connection, project_id=project_id)
         characters = _character_names(connection, project_id)
-        result = _chapter_result(connection, chapter_id, glossary=glossary, characters=characters)
+        result = _chapter_result(
+            connection, chapter_id, glossary=glossary, characters=characters, thresholds=thresholds
+        )
     return _build_report(
         project_name=project_name,
         scope="chapter",
@@ -98,7 +103,9 @@ def analyze_chapter(project_toml: Path, chapter_id: str, *, cwd: Path | None = N
 def analyze_volume(project_toml: Path, volume_id: int, *, cwd: Path | None = None) -> QAReport:
     """Build a QA report for one volume (per-chapter roll-up included)."""
 
-    project_name = _project_name(project_toml)
+    config = load_project_config(project_toml)
+    project_name = str(config["project"]["name"])
+    thresholds = load_qa_thresholds(config)
     db_path = resolve_database_path(project_toml, cwd=cwd)
     with closing(connect_readonly_database(db_path)) as connection:
         project_id = _single_project_id(connection)
@@ -112,7 +119,13 @@ def analyze_volume(project_toml: Path, volume_id: int, *, cwd: Path | None = Non
         glossary = list_glossary_terms(connection, project_id=project_id)
         characters = _character_names(connection, project_id)
         results = [
-            _chapter_result(connection, chapter_id, glossary=glossary, characters=characters)
+            _chapter_result(
+                connection,
+                chapter_id,
+                glossary=glossary,
+                characters=characters,
+                thresholds=thresholds,
+            )
             for chapter_id in list_chapter_ids_for_volume(connection, volume_id)
         ]
     return _build_report(
@@ -129,7 +142,9 @@ def analyze_volume(project_toml: Path, volume_id: int, *, cwd: Path | None = Non
 def analyze_novel(project_toml: Path, *, cwd: Path | None = None) -> QAReport:
     """Build a QA report for the whole novel (per-chapter and per-volume roll-ups)."""
 
-    project_name = _project_name(project_toml)
+    config = load_project_config(project_toml)
+    project_name = str(config["project"]["name"])
+    thresholds = load_qa_thresholds(config)
     db_path = resolve_database_path(project_toml, cwd=cwd)
     with closing(connect_readonly_database(db_path)) as connection:
         project_id = _single_project_id(connection)
@@ -137,7 +152,13 @@ def analyze_novel(project_toml: Path, *, cwd: Path | None = None) -> QAReport:
         characters = _character_names(connection, project_id)
         volume_titles = {volume.id: volume.title for volume in list_volumes(connection, project_id)}
         results = [
-            _chapter_result(connection, chapter_id, glossary=glossary, characters=characters)
+            _chapter_result(
+                connection,
+                chapter_id,
+                glossary=glossary,
+                characters=characters,
+                thresholds=thresholds,
+            )
             for chapter_id in list_chapter_ids_for_project(connection, project_id)
         ]
     return _build_report(
@@ -157,6 +178,7 @@ def _chapter_result(
     *,
     glossary: Sequence[GlossaryTerm],
     characters: Sequence[CharacterName],
+    thresholds: QAThresholds,
 ) -> _ChapterResult:
     chapter = get_chapter(connection, chapter_id)
     segments = _load_chapter_segment_inputs(connection, chapter_id)
@@ -170,14 +192,21 @@ def _chapter_result(
         for warning in check_character_name_missing(seg, characters):
             issues.append(_issue_from_segment(warning, chapter_id=chapter_id))
 
-    for warning in check_repeated_identical_translation(segments):
+    for warning in check_repeated_identical_translation(
+        segments, min_chars=thresholds.repeated_min_chars
+    ):
         issues.append(_issue_from_segment(warning, chapter_id=chapter_id))
     mixed = check_mixed_status(segments)
     if mixed is not None:
         issues.append(_issue_from_scope(mixed, chapter_id=chapter_id))
     states = list_export_segment_states(connection, chapter_ids=[chapter_id])
     fallback_segments = sum(1 for state in states if state.publishable_text is None)
-    fallback = check_fallback_heavy(total_segments=len(states), fallback_segments=fallback_segments)
+    fallback = check_fallback_heavy(
+        total_segments=len(states),
+        fallback_segments=fallback_segments,
+        heavy_ratio=thresholds.fallback_heavy_ratio,
+        min_segments=thresholds.fallback_heavy_min_segments,
+    )
     if fallback is not None:
         issues.append(_issue_from_scope(fallback, chapter_id=chapter_id))
 
@@ -350,11 +379,6 @@ def _character_names(connection: sqlite3.Connection, project_id: int) -> list[Ch
         CharacterName(jp_name=character.jp_name, en_name=character.en_name)
         for character in list_characters(connection, project_id=project_id)
     ]
-
-
-def _project_name(project_toml: Path) -> str:
-    data = load_project_config(project_toml)
-    return str(data["project"]["name"])
 
 
 def _single_project_id(connection: sqlite3.Connection) -> int:
