@@ -1,6 +1,14 @@
-# Phase B — Translation QA & Consistency Checks · Stage B1 Plan
+# Phase B — Translation QA & Consistency Checks · Plan & Status
 
-> **Status:** Stage B1 (audit & design only — **no code**). Gate B1 deliverable.
+> **Status (2026-06-05): Phase B COMPLETE (B1–B6).** B1 design (this doc) · B2 engine
+> (`services/translation_qa.py` + `qa/{consistency_checks,scope_checks,report}.py`) · B3 JSON API
+> (`api/routers/qa.py`) · B4 UI report pages (`api/routers/ui_qa.py` + templates) · B5 advisory
+> pre-export warning (`…/export/preflight`) · B6 docs + stabilization. All decisions below were
+> implemented as written; ADR [`008`](decisions/008-translation-qa-architecture-and-severity.md)
+> records the architecture + severity contract. Validation: **703 passed / 4 skipped**, pyright 0,
+> ruff + format clean. The sections below are the original Stage B1 design, preserved as the spec.
+
+> **Stage B1 origin:** audit & design only — no code. Gate B1 deliverable.
 > **Baseline:** `v0.7.0-rc.1` + Phase A UI polish (FastAPI is the sole web cockpit).
 > **Core principle — _report first, fix later._** Phase B only **reads** data and produces a QA
 > report. It must not mutate any translation, call a provider/LLM, or do semantic/vector analysis.

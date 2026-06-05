@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Active ADRs only. Active numbering was reset to `001` during the controlled reset (see [001](decisions/001-docs-cleanup-and-adr-reset.md)). Pre-reset ADRs `0001`–`0020` are preserved in [archive/decisions/](archive/decisions/) as historical reference — they are **not** active decisions.
+Active ADRs only. Active numbering was reset to `001` during the controlled reset (see [001](decisions/001-docs-cleanup-and-adr-reset.md)). Pre-reset ADRs `0001`–`0020` were archived during the reset and removed from the tree on 2026-06-05 — they live in **git history** and are **not** active decisions.
 
 ## Active
 
