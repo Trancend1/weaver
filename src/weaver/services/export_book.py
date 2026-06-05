@@ -39,6 +39,7 @@ from typing import Literal
 from weaver.core.ir import scope_document_to_volume
 from weaver.errors import ChapterNotFoundError, ExportError, VolumeNotFoundError
 from weaver.readers import read_epub
+from weaver.renderers.docx import render_docx
 from weaver.renderers.epub import render_translated_epub
 from weaver.renderers.epub_synthesis import synthesize_epub
 from weaver.renderers.html import render_html
@@ -56,9 +57,10 @@ from weaver.storage.segments import (
 from weaver.storage.translations import ExportSegmentState, list_export_segment_states
 from weaver.storage.volumes import VolumeRecord, list_volumes
 
-ExportTarget = Literal["epub", "txt", "html"]
-# EPUB (8A) + TXT/HTML (8C). DOCX is a designed target, added in a later stage.
-EXPORT_TARGETS = frozenset({"epub", "txt", "html"})
+ExportTarget = Literal["epub", "txt", "html", "docx"]
+# EPUB (8A) + TXT/HTML (8C) + DOCX (Phase D). DOCX is synthesized from resolved
+# chapters (no write-back), like TXT/HTML.
+EXPORT_TARGETS = frozenset({"epub", "txt", "html", "docx"})
 EXPORT_SCOPES = frozenset({"novel", "volume", "chapter"})
 
 _PUBLISHABLE_STATUSES = frozenset({"translated", "manual"})
@@ -471,6 +473,13 @@ def _render_volume(
         render_txt(
             output_path=plan.output_path,
             title=plan.volume_title,
+            chapters=_resolved_chapters(connection, plan, publishable=publishable),
+        )
+    elif target == "docx":
+        render_docx(
+            output_path=plan.output_path,
+            title=plan.volume_title,
+            language=project.target_lang,
             chapters=_resolved_chapters(connection, plan, publishable=publishable),
         )
     else:  # html

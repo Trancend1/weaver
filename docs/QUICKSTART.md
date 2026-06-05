@@ -33,7 +33,7 @@ uv run weaver export    .weaver/aozora_sample/project.toml --mode epub
 ```
 Output lands in `.weaver/aozora_sample/output/{markdown,epub}/`. Full flow + flags: [CLI_WORKFLOW.md](CLI_WORKFLOW.md).
 
-> The CLI `export` command is the **legacy single-project** exporter (Markdown / single-EPUB). **Volume-aware EPUB/TXT/HTML export** for the Novel→Volume→Chapter model is the **FastAPI cockpit** surface (`POST /projects/{name}/export/{novel|volumes/{id}|chapters/{id}}`); see [COCKPIT_WORKFLOW.md](COCKPIT_WORKFLOW.md). DOCX output is deferred (out of MVP).
+> The CLI `export` command is the **legacy single-project** exporter (Markdown / single-EPUB). **Volume-aware EPUB/TXT/HTML/DOCX export** for the Novel→Volume→Chapter model is the **FastAPI cockpit** surface (`POST /projects/{name}/export/{novel|volumes/{id}|chapters/{id}}` with optional `target` ∈ `{epub, txt, html, docx}`); see [COCKPIT_WORKFLOW.md](COCKPIT_WORKFLOW.md). DOCX is a custom minimal OOXML writer — no `python-docx`, no extra dependency. A combined single-EPUB / ZIP bundle is deferred.
 
 ## Web cockpit
 ```bash

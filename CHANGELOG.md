@@ -4,6 +4,31 @@ All notable changes to Weaver are recorded here. Format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- **DOCX export target** (Phase D) — the volume-aware cockpit exporter now supports
+  `target="docx"` alongside EPUB/TXT/HTML. One `.docx` per volume under
+  `output/docx/`, started/polled/cancelled through the same export job flow
+  (`POST /projects/{name}/export/{novel|volumes/{id}|chapters/{id}}`, SSE/status
+  unchanged) and selectable from the cockpit export dropdown.
+  - New pure renderer `renderers/docx.py` (`render_docx`) — a **custom minimal
+    OOXML (WordprocessingML) writer**. **No `python-docx`, no new dependency**
+    (`weaver[web]` is sufficient); DOCX is always **synthesized** from the
+    persisted chapter/segment content like TXT/HTML — there is **no write-back
+    path**, so the source file is never re-read.
+  - Same publishable rule as the other targets: latest `translated`/`manual`
+    translation when the attempt's `source_hash` matches, else source fallback;
+    manual edits preserved; translation history never exported; read-only (writes
+    no translations, calls no provider).
+  - Formatting baseline: document title, `Heading1` chapter headings, normal
+    paragraphs, built-in `Quote` style for blockquotes, and a page break before
+    chapters 2..N. No images, footnotes, advanced styling, or merged-omnibus DOCX.
+
+### Changed
+
+- EPUB/TXT/HTML export behavior is unchanged. The export `target` validation set
+  now includes `docx`; an unsupported `target` (e.g. `pdf`) still returns `422`.
+
 ## [0.7.0] - 2026-06-05
 
 This release promotes the `v0.7.0-rc.1` release candidate to stable. It consolidates the

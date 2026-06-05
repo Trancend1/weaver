@@ -33,7 +33,7 @@ weaver serve-api                      # same FastAPI app, headless (no browser),
 | Provider/model config | Write project `[provider]` or global default from a dropdown; API key writes to the secret store only. |
 | Translate | Start (first-N / retry-failed), live **SSE** progress, cooperative **stop** (committed segments stay). |
 | Glossary review | Paginated approve / edit / reject of pending candidates; approved-term conflicts + per-chapter coverage diff shown read-only. |
-| Export | Trigger **volume-aware** EPUB/TXT/HTML export (one artifact per volume) — see the FastAPI export surface below. (The CLI `export` command still drives the legacy single-project exporter, `services/export.py`.) |
+| Export | Trigger **volume-aware** EPUB/TXT/HTML/DOCX export (one artifact per volume) — see the FastAPI export surface below. (The CLI `export` command still drives the legacy single-project exporter, `services/export.py`.) |
 
 ## Request/UI flow
 ```
@@ -82,7 +82,7 @@ Reuses `services/chapter_workspace`, `services/workspace_edit.save_segment_trans
 **Sprint 11B-3 — translate/retranslate + jobs + export (shipped):** the workspace has a
 **Translate** button and a **Retranslate** mode select (`skip_existing` ·
 `retranslate_non_manual` · `force_selected`, the last only when explicitly chosen); the
-project page has an **Export** control (EPUB/TXT/HTML). Both start a background job via the
+project page has an **Export** control (EPUB/TXT/HTML/DOCX). Both start a background job via the
 same JSON-router start helpers (`translate._start_job`, `export._start_export`) over the
 shared `JobRegistry` + services — and render a **self-polling HTMX panel** (`hx-trigger="load
 delay:1s"`) that shows live progress, a **Cancel** button, and the terminal result (translate
@@ -116,7 +116,7 @@ lives at `/ui/config` (global + per-project scope); project pages link to glossa
 | POST | `/ui/projects/{name}/chapters/{chapter_id}/retranslate` | `partials/_job.html` | Start a retranslate job under `mode` (skip_existing / retranslate_non_manual / force_selected). |
 | GET | `/ui/projects/{name}/jobs/{job_id}` | `partials/_job.html` | Poll translate-job progress (self-refresh until terminal). |
 | POST | `/ui/projects/{name}/jobs/{job_id}/cancel` | `partials/_job.html` | Cooperative cancel; renders current state. |
-| POST | `/ui/projects/{name}/export` | `partials/_export_job.html` | Start a novel-scope export job for `target` ∈ {epub,txt,html}. |
+| POST | `/ui/projects/{name}/export` | `partials/_export_job.html` | Start a novel-scope export job for `target` ∈ {epub,txt,html,docx}. |
 | GET | `/ui/projects/{name}/export/jobs/{job_id}` | `partials/_export_job.html` | Poll export-job progress; terminal shows per-volume artifact paths. |
 | POST | `/ui/projects/{name}/export/jobs/{job_id}/cancel` | `partials/_export_job.html` | Cooperative cancel; renders current state. |
 | GET | `/ui/new` | `new.html` | Create form + source browser. |
@@ -251,13 +251,13 @@ Batch translation runs the per-chapter pipeline across many chapters as **one ba
 
 ## FastAPI export API (Sprint 8B — novel/volume/chapter EPUB jobs)
 
-Export renders translated content to a **per-volume artifact** (EPUB / TXT / HTML) as **one background job** with per-volume progress. Logic lives in `services/export_book.py` (`prepare_export` → `run_export`); the `api/jobs.py` `JobRegistry` owns a separate `ExportJob` lifecycle (`submit_export`/`get_export`). Translation, TM, and provider paths are **untouched**.
+Export renders translated content to a **per-volume artifact** (EPUB / TXT / HTML / DOCX) as **one background job** with per-volume progress. Logic lives in `services/export_book.py` (`prepare_export` → `run_export`); the `api/jobs.py` `JobRegistry` owns a separate `ExportJob` lifecycle (`submit_export`/`get_export`). Translation, TM, and provider paths are **untouched**.
 
-> **Surface split (web-first MVP).** This FastAPI export is the **volume-aware** exporter for the Novel→Volume→Chapter model (one artifact per volume, EPUB/TXT/HTML). The **CLI `export` command** drives the **legacy single-project exporter** (`services/export.py`, Markdown/single-EPUB) and is not back-ported to the volume model — exporting full novels is a cockpit workflow. This is an accepted MVP boundary, not a gap.
+> **Surface split (web-first MVP).** This FastAPI export is the **volume-aware** exporter for the Novel→Volume→Chapter model (one artifact per volume, EPUB/TXT/HTML/DOCX). The **CLI `export` command** drives the **legacy single-project exporter** (`services/export.py`, Markdown/single-EPUB) and is not back-ported to the volume model — exporting full novels is a cockpit workflow. This is an accepted MVP boundary, not a gap.
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/projects/{name}/export/novel` | Export every volume to its own artifact (no cross-EPUB merge). Body: optional `target` ∈ `{epub, txt, html}` (defaults `epub`). → `202` `{job_id, status, scope, scope_id, target}`. |
+| POST | `/projects/{name}/export/novel` | Export every volume to its own artifact (no cross-EPUB merge). Body: optional `target` ∈ `{epub, txt, html, docx}` (defaults `epub`). → `202` `{job_id, status, scope, scope_id, target}`. |
 | POST | `/projects/{name}/export/volumes/{volume_id}` | Export one volume. → `202`. |
 | POST | `/projects/{name}/export/chapters/{chapter_id}` | Export one chapter. → `202`. |
 | GET | `/projects/{name}/export/jobs/{job_id}` | Poll: `status`, per-volume `progress` (`volumes_total/done`, `current_volume_*`, `translated_segments`/`fallback_segments`), `result` (once done: per-volume `artifacts[]` with `output_path` + `fallback_by_status`), `error`. |
@@ -267,8 +267,8 @@ Export renders translated content to a **per-volume artifact** (EPUB / TXT / HTM
 - **Publishable rule** (from 8A): a segment exports its latest translation only when status is `translated`/`manual` and `source_hash` matches; otherwise **source fallback** (counted in `fallback_by_status`). Export never blocks/blanks/drops and writes no translations.
 - **Distinct id namespace.** Export jobs live under `/export/jobs/`; an export `job_id` is **not** resolvable via the chapter `/jobs/` or batch `/batch/jobs/` routes.
 - **No external queue.** Single-process thread worker, same as chapter/batch jobs.
-- Errors: unknown project / volume / chapter → `404`; unsupported `target` (e.g. `docx`) → `422`; unknown job → `404`.
-- **EPUB / TXT / HTML** output (Sprint 8A/8C; TXT/HTML build from the DB, one file per volume under `output/<target>/`). DOCX output, a combined single-EPUB, ZIP packaging, and the export UI are deferred.
+- Errors: unknown project / volume / chapter → `404`; unsupported `target` (e.g. `pdf`) → `422`; unknown job → `404`.
+- **EPUB / TXT / HTML / DOCX** output (Sprint 8A/8C + Phase D; TXT/HTML/DOCX build from the DB, one file per volume under `output/<target>/`). DOCX is a custom minimal OOXML writer (no `python-docx`, no new dependency) synthesized from the DB — no write-back. A combined single-EPUB / ZIP bundle is deferred.
 
 ## FastAPI translation QA API + UI (Phase B — read-only, report-first)
 
@@ -288,7 +288,7 @@ Response (`QAReportResponse`): `schema_version` (2), `scope`, `scope_id`, `total
 
 **UI** (`api/routers/ui_qa.py`, presentation-only Jinja2 + HTMX): report pages `/ui/projects/{name}/qa`, `…/volumes/{id}/qa`, `…/chapters/{id}/qa` with badge + counts, severity/category filter, and issue links to the affected chapter/segment. The project page and the workspace link to QA. **Badges appear only on QA pages and the pre-export panel — the project tree never runs a novel-wide QA scan** (Gate B1 decision; per-chapter tree badges are deferred).
 
-**Pre-export QA warning (advisory).** The project export form first GETs `/ui/projects/{name}/export/preflight?target=…`, which renders the novel QA summary (errors/warnings + failed-stale / untranslated-fallback / glossary / character advisories) with a **Review QA report** link and an **Export anyway** action. **Export is never blocked**: the action posts to the unchanged `POST /ui/projects/{name}/export`, and a failed/unavailable QA check is non-fatal. No DOCX, no export-behavior change.
+**Pre-export QA warning (advisory).** The project export form first GETs `/ui/projects/{name}/export/preflight?target=…`, which renders the novel QA summary (errors/warnings + failed-stale / untranslated-fallback / glossary / character advisories) with a **Review QA report** link and an **Export anyway** action. **Export is never blocked**: the action posts to the unchanged `POST /ui/projects/{name}/export`, and a failed/unavailable QA check is non-fatal. The preflight is advisory only and is format-agnostic (it forwards the chosen `target` verbatim, including `docx`).
 
 ## FastAPI consistency-data API (Sprint 5/6 — glossary · character DB · translation memory)
 
@@ -309,4 +309,4 @@ Project-scoped data that feeds the prompt and reuse layer. Each router is a thin
 - The FastAPI migration must preserve every behavior above and keep Pydantic at the boundary only.
 
 ## Not yet in the cockpit (MVP gaps → [MVP_SCOPE.md](MVP_SCOPE.md))
-Novel/Volume/Chapter navigation, TXT/HTML import, two-column workspace with auto-save/revisions, character DB UI, translation-memory UI, batch monitor **UI** (the batch API exists — Sprint 7), export **UI** (the EPUB/TXT/HTML export API exists — Sprint 8B/8C), DOCX export output.
+Novel/Volume/Chapter navigation, TXT/HTML import, two-column workspace with auto-save/revisions, character DB UI, translation-memory UI, batch monitor **UI** (the batch API exists — Sprint 7). A combined single-EPUB / ZIP bundle for novel scope is deferred (EPUB/TXT/HTML/DOCX per-volume export ships).

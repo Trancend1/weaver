@@ -158,7 +158,7 @@ def test_export_unknown_chapter_returns_404(client_with_projects: TestClient) ->
 
 def test_export_unsupported_target_returns_422(client_with_projects: TestClient) -> None:
     name = _name(client_with_projects)
-    resp = client_with_projects.post(f"/projects/{name}/export/novel", json={"target": "docx"})
+    resp = client_with_projects.post(f"/projects/{name}/export/novel", json={"target": "pdf"})
     assert resp.status_code == 422
 
 
@@ -210,3 +210,26 @@ def test_export_html_target_via_endpoint(client_with_projects: TestClient) -> No
     result = client_with_projects.get(f"/projects/{name}/export/jobs/{job_id}").json()["result"]
     assert result["target"] == "html"
     assert result["artifacts"][0]["output_path"].endswith(".html")
+
+
+# --------------------------------------------------------------------------- #
+# DOCX target (Phase D)
+# --------------------------------------------------------------------------- #
+
+
+def test_export_docx_target_via_endpoint(client_with_projects: TestClient) -> None:
+    name = _name(client_with_projects)
+    resp = client_with_projects.post(f"/projects/{name}/export/novel", json={"target": "docx"})
+    assert resp.status_code == 202
+    assert resp.json()["target"] == "docx"
+    job_id = resp.json()["job_id"]
+
+    _wait_export(client_with_projects, job_id)
+    status = client_with_projects.get(f"/projects/{name}/export/jobs/{job_id}").json()
+    assert status["status"] == "done"
+    assert status["error"] is None
+    result = status["result"]
+    assert result["target"] == "docx"
+    artifact = result["artifacts"][0]
+    assert artifact["output_path"].endswith(".docx")
+    assert Path(artifact["output_path"]).exists()

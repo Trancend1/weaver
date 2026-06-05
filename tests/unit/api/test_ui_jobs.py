@@ -178,11 +178,11 @@ def test_project_page_has_export_controls(jobs_client: TestClient) -> None:
     name = _name(jobs_client)
     page = jobs_client.get(f"/ui/projects/{name}").text
     assert "Export novel" in page
-    for target in ("epub", "txt", "html"):
+    for target in ("epub", "txt", "html", "docx"):
         assert f'value="{target}"' in page
 
 
-@pytest.mark.parametrize("target", ["epub", "txt", "html"])
+@pytest.mark.parametrize("target", ["epub", "txt", "html", "docx"])
 def test_export_starts_job_and_renders_artifacts(jobs_client: TestClient, target: str) -> None:
     name = _name(jobs_client)
     r = jobs_client.post(f"/ui/projects/{name}/export", data={"target": target})

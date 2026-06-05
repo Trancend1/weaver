@@ -629,8 +629,9 @@ class BatchJobStatusResponse(BaseModel):
 class ExportRequest(BaseModel):
     """Request to start a background export.
 
-    ``target`` defaults to ``epub`` (the only implemented target). The body is
-    optional; an empty POST uses the default."""
+    ``target`` defaults to ``epub``; supported targets are ``epub``, ``txt``,
+    ``html``, and ``docx`` (validated by the export service, not here). The body
+    is optional; an empty POST uses the default."""
 
     target: str = "epub"
 
