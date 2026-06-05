@@ -711,3 +711,56 @@ class ExportJobStatusResponse(BaseModel):
     progress: ExportJobProgressResponse
     result: ExportJobResultResponse | None
     error: str | None
+
+
+# ---------------------------------------------------------------------------
+# Translation QA (Stage B3 — read-only scope-aware QA reports; ADR 008)
+# ---------------------------------------------------------------------------
+
+# Severity stays info | warning | critical (ADR 008): no `error` at the API
+# boundary. The UI may label `critical` as "Error" for presentation only.
+QASeverityLiteral = Literal["info", "warning", "critical"]
+QABadgeLiteral = Literal["clean", "warnings", "errors"]
+
+
+class QAIssueResponse(BaseModel):
+    """One QA finding, normalized across per-segment and scope-level rules."""
+
+    rule: str
+    category: str
+    severity: QASeverityLiteral
+    message: str
+    segment_id: str | None
+    chapter_id: str | None
+
+
+class QAScopeSummaryResponse(BaseModel):
+    """Per-chapter or per-volume roll-up inside a wider report."""
+
+    scope: str
+    id: str
+    title: str | None
+    total_issues: int
+    info_count: int
+    warning_count: int
+    critical_count: int
+    badge: QABadgeLiteral
+
+
+class QAReportResponse(BaseModel):
+    """A QA report for a chapter, volume, or whole novel."""
+
+    schema_version: int
+    project: str
+    scope: str
+    scope_id: str
+    total_segments: int
+    total_issues: int
+    info_count: int
+    warning_count: int
+    critical_count: int
+    badge: QABadgeLiteral
+    issues: list[QAIssueResponse]
+    summary_by_category: dict[str, int]
+    summary_by_chapter: list[QAScopeSummaryResponse]
+    summary_by_volume: list[QAScopeSummaryResponse]

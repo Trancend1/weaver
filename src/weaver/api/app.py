@@ -20,6 +20,7 @@ from weaver.api.routers.export import router as export_router
 from weaver.api.routers.glossary import router as glossary_router
 from weaver.api.routers.glossary_review import router as glossary_review_router
 from weaver.api.routers.projects import router as projects_router
+from weaver.api.routers.qa import router as qa_router
 from weaver.api.routers.system import router as system_router
 from weaver.api.routers.translate import router as translate_router
 from weaver.api.routers.translation_memory import router as translation_memory_router
@@ -56,6 +57,7 @@ def create_api_app(base_dir: Path | None = None) -> FastAPI:
     app.include_router(characters_router)
     app.include_router(translation_memory_router)
     app.include_router(config_router)
+    app.include_router(qa_router)
 
     # Browser UI (ADR 007): server-rendered Jinja2 + HTMX under /ui, vendored
     # static assets at /static. JSON API above is unchanged. This UI is the
