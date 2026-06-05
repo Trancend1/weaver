@@ -28,8 +28,8 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 | [docs/RC1_REPORT.md](docs/RC1_REPORT.md) | **MVP RC1**: validation/soak/clean-install evidence, release notes, known issues, deferred roadmap, recommended version tag |
 | [docs/MVP_STABILIZATION_REPORT.md](docs/MVP_STABILIZATION_REPORT.md) | Sprint 9 baseline: validation matrix, acceptance audit, **consolidated deferred/known-gaps list** |
 | [docs/MAINTENANCE.md](docs/MAINTENANCE.md) | Cleanup, testing, regression, release, migration discipline |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | Active ADR index (`001`–`007`) |
-| [docs/decisions/](docs/decisions/) | Active ADRs `001`–`007` |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Active ADR index (`001`–`008`) |
+| [docs/decisions/](docs/decisions/) | Active ADRs `001`–`008` |
 | [ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md) · [PROMPT_DESIGN.md](docs/PROMPT_DESIGN.md) · [SECURITY_AND_PERFORMANCE.md](docs/SECURITY_AND_PERFORMANCE.md) · [AI_SLOP_PREVENTION.md](docs/AI_SLOP_PREVENTION.md) | Supplementary reference specs (still active) |
 | [docs/archive/MVP_PHASE_LOG.md](docs/archive/MVP_PHASE_LOG.md) | **Archived** detailed per-sprint MVP log (Sprints 1–13 + RC1) and the Phase A stage log |
 | Sprint reports (historical) | [SPRINT10_PARITY_AUDIT](docs/SPRINT10_PARITY_AUDIT.md) · [SPRINT12_UI_PARITY_AUDIT](docs/SPRINT12_UI_PARITY_AUDIT.md) · [SPRINT13A_DECOMMISSION_READINESS](docs/SPRINT13A_DECOMMISSION_READINESS.md) · [SPRINT13A5_SOAK_RESULT](docs/SPRINT13A5_SOAK_RESULT.md) · [SPRINT11A_UI_PLAN](docs/SPRINT11A_UI_PLAN.md) — Flask→FastAPI parity, decommission, soak |
