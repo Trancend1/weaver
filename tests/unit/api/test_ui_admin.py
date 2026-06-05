@@ -253,3 +253,42 @@ def test_project_page_links_admin_sections(admin_client: TestClient) -> None:
     assert f"/ui/projects/{name}/characters" in page
     assert f"/ui/projects/{name}/memory" in page
     assert "/ui/config" in admin_client.get("/ui").text
+
+
+# --- A2-5 admin usability ---------------------------------------------------
+
+
+def test_memory_search_filters_entries(admin_client: TestClient) -> None:
+    name = _name(admin_client)
+    _translate_to_seed_tm(admin_client, name)
+    overview = admin_client.get(f"/projects/{name}/memory").json()
+    if overview["total_entries"] == 0:
+        pytest.skip("no TM entries produced")
+
+    needle = overview["entries"][0]["source_text"][:2]
+    hit = admin_client.get(f"/ui/projects/{name}/memory/entries", params={"find": needle})
+    assert hit.status_code == 200
+    assert "matching" in hit.text  # the meta line shows a match count when filtering
+
+    miss = admin_client.get(
+        f"/ui/projects/{name}/memory/entries", params={"find": "ZZ_NO_SUCH_TEXT_QQ"}
+    )
+    assert miss.status_code == 200
+    assert "No entries match" in miss.text
+
+
+def test_candidate_search_param_is_echoed(admin_client: TestClient) -> None:
+    name = _name(admin_client)
+    r = admin_client.get(f"/ui/projects/{name}/glossary/candidates", params={"find": "zzz"})
+    assert r.status_code == 200
+    assert 'value="zzz"' in r.text  # the search box keeps the query
+
+
+def test_config_and_new_expose_provider_selects(admin_client: TestClient) -> None:
+    cfg = admin_client.get("/ui/config").text
+    assert '<select name="provider_type"' in cfg
+    assert ">fake<" in cfg  # a known provider type is offered as an option
+
+    new = admin_client.get("/ui/new").text
+    assert '<select name="provider"' in new
+    assert ">fake<" in new

@@ -1,21 +1,35 @@
 <div id="memory">
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-  <p class="meta">{{ overview.total_entries }} entries · reused from memory {{ overview.reused_from_memory }}</p>
-  {% if overview.entries %}
+  <p class="meta">{{ overview.total_entries }} entries · reused from memory {{ overview.reused_from_memory }}{% if find %} · {{ total_matching }} matching “{{ find }}”{% endif %}</p>
+
+  <form class="inline-form" hx-get="/ui/projects/{{ name }}/memory/entries"
+        hx-target="#memory" hx-swap="outerHTML">
+    <input name="find" value="{{ find }}" placeholder="search source / target"
+           aria-label="Search translation memory">
+    <button type="submit">Search</button>
+    {% if find %}
+    <button type="button" class="link-btn"
+            hx-get="/ui/projects/{{ name }}/memory/entries"
+            hx-target="#memory" hx-swap="outerHTML">clear</button>
+    {% endif %}
+  </form>
+
+  {% if entries %}
   <div class="table-scroll">
   <table class="grid">
     <thead><tr><th>Source (JP)</th><th>Target (EN)</th><th>Provider</th><th>Updated</th><th></th></tr></thead>
     <tbody>
-      {% for e in overview.entries %}
+      {% for e in entries %}
       <tr>
-        <td>{{ e.source_text }}</td>
-        <td>{{ e.target_text }}</td>
+        <td class="cell-clip">{{ e.source_text }}</td>
+        <td class="cell-clip">{{ e.target_text }}</td>
         <td class="meta">{{ e.provider or "—" }}{% if e.model %} / {{ e.model }}{% endif %}</td>
         <td class="meta">{{ e.updated_at }}</td>
         <td>
           <button type="button" class="link-btn"
                   hx-post="/ui/projects/{{ name }}/memory/{{ e.source_hash }}/delete"
                   hx-target="#memory" hx-swap="outerHTML"
+                  hx-vals='{"offset": "{{ offset }}", "find": {{ find|tojson }}}'
                   hx-confirm="Delete this translation-memory entry? (TM row only; chapter translations and history are kept.)">Delete</button>
         </td>
       </tr>
@@ -23,7 +37,19 @@
     </tbody>
   </table>
   </div>
+  <div class="pager">
+    {% if prev_offset is not none %}
+    <button type="button" class="link-btn"
+            hx-get="/ui/projects/{{ name }}/memory/entries?offset={{ prev_offset }}&find={{ find|urlencode }}"
+            hx-target="#memory" hx-swap="outerHTML">← prev</button>
+    {% endif %}
+    {% if next_offset is not none %}
+    <button type="button" class="link-btn"
+            hx-get="/ui/projects/{{ name }}/memory/entries?offset={{ next_offset }}&find={{ find|urlencode }}"
+            hx-target="#memory" hx-swap="outerHTML">next →</button>
+    {% endif %}
+  </div>
   {% else %}
-  <p class="empty hint">No translation-memory entries yet.</p>
+  <p class="empty hint">{% if find %}No entries match “{{ find }}”.{% else %}No translation-memory entries yet.{% endif %}</p>
   {% endif %}
 </div>

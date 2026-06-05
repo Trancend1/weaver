@@ -4,18 +4,24 @@
 <section class="panel">
   <p class="crumbs"><a href="/ui">Dashboard</a> / <a href="/ui/projects/{{ name }}">{{ name }}</a> / <span>glossary</span></p>
   <h1>Glossary — {{ name }}</h1>
+  <nav class="subnav">
+    <a href="#terms">Approved terms</a>
+    <a href="#candidates">Candidate review</a>
+    <a href="#conflicts">Conflicts</a>
+    <a href="#diff">Coverage diff</a>
+  </nav>
 
-  <h2>Approved terms</h2>
+  <h2 id="terms">Approved terms</h2>
   {% include "partials/_glossary_terms.html" %}
 </section>
 
 <section class="panel">
-  <h2>Candidate review</h2>
+  <h2 id="candidates">Candidate review</h2>
   {% include "partials/_glossary_candidates.html" %}
 </section>
 
 <section class="panel">
-  <h2>Conflicts</h2>
+  <h2 id="conflicts">Conflicts</h2>
   {% if conflicts %}
   <ul>
     {% for source, targets in conflicts %}
@@ -28,7 +34,9 @@
 </section>
 
 <section class="panel">
-  <h2>Coverage diff</h2>
+  <h2 id="diff">Coverage diff</h2>
+  <p class="meta">Compare which approved glossary terms appear in two chapters, by reading-order
+    number (1 = first chapter).</p>
   <form class="inline-form" hx-get="/ui/projects/{{ name }}/glossary/diff"
         hx-target="#glossary-diff-result" hx-swap="outerHTML">
     <label>Chapter A <input type="number" name="a" min="1" value="1"></label>

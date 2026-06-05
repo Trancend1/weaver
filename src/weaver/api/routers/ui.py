@@ -25,6 +25,7 @@ from weaver.api.schemas import ExportRequest
 from weaver.api.templating import templates
 from weaver.core.global_config import load_global_config, resolve_config_value
 from weaver.errors import ChapterNotFoundError, SegmentNotFoundError, WeaverError
+from weaver.providers.registry import known_provider_types
 from weaver.services.chapter_workspace import chapter_workspace
 from weaver.services.import_source import import_volume
 from weaver.services.project import initialize_project, project_exists
@@ -137,7 +138,9 @@ def browse_fragment(request: Request, rel_dir: str = Query("", alias="dir")) -> 
 @router.get("/ui/new", response_class=HTMLResponse)
 def new_project_page(request: Request) -> HTMLResponse:
     """New-project page: create form + sandboxed source browser."""
-    return templates.TemplateResponse(request, "new.html", {})
+    return templates.TemplateResponse(
+        request, "new.html", {"provider_types": known_provider_types()}
+    )
 
 
 @router.post("/ui/new", response_model=None)
@@ -164,7 +167,12 @@ async def create_project_submit(
             source, cwd=base, template=template or None, provider=provider or None
         )
     except WeaverError as exc:
-        return templates.TemplateResponse(request, "new.html", {"error": str(exc)}, status_code=400)
+        return templates.TemplateResponse(
+            request,
+            "new.html",
+            {"error": str(exc), "provider_types": known_provider_types()},
+            status_code=400,
+        )
     return RedirectResponse(url=f"/ui/projects/{result.project_name}", status_code=303)
 
 

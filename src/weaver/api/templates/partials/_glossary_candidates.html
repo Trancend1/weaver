@@ -4,6 +4,19 @@
     pending {{ page.counts.pending }} · approved {{ page.counts.approved }} · rejected {{ page.counts.rejected }}
     ({{ page.total_pending }} matching)
   </p>
+
+  <form class="inline-form" hx-get="/ui/projects/{{ name }}/glossary/candidates"
+        hx-target="#glossary-candidates" hx-swap="outerHTML">
+    <input name="find" value="{{ find }}" placeholder="search source"
+           aria-label="Search glossary candidates">
+    <button type="submit">Search</button>
+    {% if find %}
+    <button type="button" class="link-btn"
+            hx-get="/ui/projects/{{ name }}/glossary/candidates"
+            hx-target="#glossary-candidates" hx-swap="outerHTML">clear</button>
+    {% endif %}
+  </form>
+
   {% if page.items %}
   <div class="table-scroll">
   <table class="grid">
@@ -17,6 +30,7 @@
           <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/edit"
                 hx-target="#glossary-candidates" hx-swap="outerHTML">
             <input type="hidden" name="offset" value="{{ page.offset }}">
+            <input type="hidden" name="find" value="{{ find }}">
             <input name="target" value="{{ c.target or '' }}" placeholder="target (EN)" aria-label="Approve '{{ c.source }}' as (English)">
             <button type="submit">Edit + approve</button>
           </form>
@@ -25,11 +39,13 @@
           <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/approve"
                 hx-target="#glossary-candidates" hx-swap="outerHTML" style="display:inline">
             <input type="hidden" name="offset" value="{{ page.offset }}">
+            <input type="hidden" name="find" value="{{ find }}">
             <button type="submit">Approve</button>
           </form>
           <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/reject"
                 hx-target="#glossary-candidates" hx-swap="outerHTML" style="display:inline">
             <input type="hidden" name="offset" value="{{ page.offset }}">
+            <input type="hidden" name="find" value="{{ find }}">
             <button type="submit">Reject</button>
           </form>
         </td>
@@ -41,16 +57,16 @@
   <div class="pager">
     {% if prev_offset is not none %}
     <button type="button" class="link-btn"
-            hx-get="/ui/projects/{{ name }}/glossary/candidates?offset={{ prev_offset }}"
+            hx-get="/ui/projects/{{ name }}/glossary/candidates?offset={{ prev_offset }}&find={{ find|urlencode }}"
             hx-target="#glossary-candidates" hx-swap="outerHTML">← prev</button>
     {% endif %}
     {% if next_offset is not none %}
     <button type="button" class="link-btn"
-            hx-get="/ui/projects/{{ name }}/glossary/candidates?offset={{ next_offset }}"
+            hx-get="/ui/projects/{{ name }}/glossary/candidates?offset={{ next_offset }}&find={{ find|urlencode }}"
             hx-target="#glossary-candidates" hx-swap="outerHTML">next →</button>
     {% endif %}
   </div>
   {% else %}
-  <p class="empty hint">No pending candidates.</p>
+  <p class="empty hint">{% if find %}No candidates match “{{ find }}”.{% else %}No pending candidates.{% endif %}</p>
   {% endif %}
 </div>

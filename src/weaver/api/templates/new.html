@@ -15,7 +15,14 @@
     <div class="field">Browsed source: <span id="selected_source" class="meta">(none)</span>
       <input type="hidden" name="source_path" id="source_path">
     </div>
-    <label>Provider <input name="provider" placeholder="(default)"></label>
+    <label>Provider
+      <select name="provider">
+        <option value="">(default)</option>
+        {% for pt in provider_types or [] %}
+        <option value="{{ pt }}">{{ pt }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label>Template <input name="template" placeholder="(default)"></label>
     <button type="submit">Create novel</button>
   </form>

@@ -60,6 +60,7 @@ code { background: #eceff3; padding: 0.05rem 0.3rem; border-radius: 3px; }
 .grid tbody tr:hover { background: #eef3f8; }
 .grid progress { width: 64px; height: 0.55rem; vertical-align: middle; }
 .progress-cell { display: flex; align-items: center; gap: 0.4rem; justify-content: flex-end; }
+.grid td.cell-clip { max-width: 340px; overflow-wrap: anywhere; }
 
 .badge { font-size: 0.75rem; padding: 0.1rem 0.45rem; border-radius: 10px; border: 1px solid var(--line); }
 .badge.ok { color: var(--ok); border-color: var(--ok); }
