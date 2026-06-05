@@ -150,6 +150,57 @@ def _render(
     )
 
 
+@router.get("/ui/projects/{name}/export/preflight", response_class=HTMLResponse)
+def export_preflight(name: str, request: Request, target: str = Query("epub")) -> HTMLResponse:
+    """Advisory pre-export QA summary (Stage B5).
+
+    Export is **never** blocked: the panel always offers an "Export anyway" action
+    regardless of QA state, and a failed QA check is non-fatal (the user can still
+    export). Read-only — reuses the novel QA report.
+    """
+    base = _base_dir(request)
+    report: QAReport | None = None
+    qa_error: str | None = None
+    dp = find_project(base, name)
+    if dp is None:
+        qa_error = f"No project named {name!r}."
+    elif dp.error:
+        qa_error = dp.error
+    else:
+        try:
+            report = analyze_novel(dp.project_toml, cwd=base)
+        except WeaverError as exc:
+            qa_error = str(exc)
+    return templates.TemplateResponse(
+        request,
+        "partials/_export_preflight.html",
+        {
+            "name": name,
+            "target": target,
+            "report": report,
+            "qa_error": qa_error,
+            "advisories": _advisories(report) if report is not None else None,
+            "badge_class": _BADGE_CLASS[report.badge] if report is not None else "",
+            "badge_label": _BADGE_LABEL[report.badge] if report is not None else "",
+        },
+    )
+
+
+def _advisories(report: QAReport) -> dict[str, int]:
+    by_rule: dict[str, int] = {}
+    for issue in report.issues:
+        by_rule[issue.rule] = by_rule.get(issue.rule, 0) + 1
+    return {
+        "critical": report.critical_count,
+        "failed_stale": by_rule.get("failed_segment", 0) + by_rule.get("stale_segment", 0),
+        "untranslated_fallback": (
+            by_rule.get("untranslated_segment", 0) + by_rule.get("fallback_heavy_chapter", 0)
+        ),
+        "glossary": by_rule.get("glossary_mismatch", 0),
+        "character": by_rule.get("character_name_missing", 0),
+    }
+
+
 def _not_found(request: Request, message: str) -> HTMLResponse:
     return templates.TemplateResponse(
         request, "not_found.html", {"message": message}, status_code=404
