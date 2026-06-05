@@ -48,7 +48,7 @@ Foundation (v0.6.0) ✅
   → Phase A — UI/UX Polish ✅
   → Phase B — Translation QA & Consistency Checks ✅
   → Phase C — Release hardening ✅  (v0.7.0 stable)
-  → Phase D — DOCX export 🟡 (DOCX target ✅) / QA config / combined ZIP   ⬅ in progress
+  → Phase D 🟡 — DOCX export ✅ → QA config ⏳ → combined ZIP → QA tree badges → provider hardening
 ```
 
 | Phase | Scope | Status |
@@ -57,7 +57,7 @@ Foundation (v0.6.0) ✅
 | Phase A — UI/UX Polish | Cockpit UI polish on Jinja2 + HTMX (ADR `007`): shared shell / a11y / responsive @390px, workspace UX, dashboard + admin clarity. Presentation/copy only; no backend/provider/stack change. | ✅ |
 | Phase B — Translation QA & Consistency Checks | Read-only, deterministic QA reports before export (report-first, no auto-fix): QA engine → JSON API → UI report/badges → advisory pre-export warning. No provider calls, no mutation, no semantic/vector. ADR `008`. Stages B1–B6. | ✅ |
 | **Phase C — Release hardening** | CHANGELOG `[Unreleased]` → `[0.7.0]` (Phase A + B entries); version consistency; soak 25/25; clean wheel install; annotated tag `v0.7.0`. | ✅ `v0.7.0` |
-| **Phase D — DOCX export** | DOCX export **✅** (`renderers/docx.py`, custom OOXML, no `python-docx`) → QA thresholds config → combined EPUB/ZIP → QA tree badges → provider hardening. | 🟡 in progress |
+| **Phase D — multi-item** | DOCX export **✅** (`renderers/docx.py`, custom OOXML, no `python-docx`) → QA thresholds config **⏳** → combined EPUB/ZIP → QA tree badges → provider hardening. | 🟡 in progress |
 | **Phase E — Design System Implementation** | Implement DESIGN.md token system + DESIGN_GUIDE.md hybrid layout across the cockpit: CSS variable migration (6→19 tokens), sidebar layout (3-mode dispatch), component library extraction, typography scale, color semantics, responsive sidebar, workspace redesign per guide. No backend changes — pure CSS + Jinja2 template + HTMX refactor. Source: `docs/DESIGN.md`, `docs/DESIGN_GUIDE.md`. | ⬜ pending |
 
 Legend: ✅ complete · 🟡 in progress · ⏳ next · ⬜ pending · 🚫 blocked.
@@ -77,25 +77,20 @@ Before starting any phase or stage, run this gate:
 
 Required reminder before any phase transition: **"Check exit criteria first. No next phase until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Phase D: DOCX Export
+### 2.3 Active Phase — Phase D (DOCX shipped → next: QA thresholds config)
 
-> **Phase C — Release hardening: complete.** `v0.7.0` tagged on 2026-06-05. **Phase D is in progress** — the DOCX export sub-feature is delivered; the remaining Phase D items are not yet started.
+> **Phase D bundles five sequential items.** **DOCX export is shipped (D1–D4).** Next is **QA thresholds config**; the rest follow in roadmap order. Run the §2.2 gate before starting each item — one PR = one item.
 
-**Phase D — DOCX export delivered (D1–D4):**
+**DOCX export — SHIPPED (D1–D4):**
 - D1 — audit + plan: [docs/PHASE_D_DOCX_EXPORT_PLAN.md](docs/PHASE_D_DOCX_EXPORT_PLAN.md). Decision locked: **custom minimal OOXML writer, no `python-docx`, no new dependency, no ADR.**
 - D2 — renderer + target: `renderers/docx.py` (`render_docx`, pure, no DB/no fallback); `"docx"` added to `ExportTarget`/`EXPORT_TARGETS`; `_render_volume` DOCX branch. DOCX is **synthesized** from the DB like TXT/HTML — **no write-back**, source never re-read.
 - D3 — API/UI: export job flow already generic over `target` (no schema/route change beyond the `ExportRequest` docstring); cockpit export dropdown gains a **DOCX** option; preflight forwards `target` verbatim.
-- D4 — docs + regression: TRANSLATION_PIPELINE, COCKPIT_WORKFLOW, ARCHITECTURE, QUICKSTART, MAINTENANCE, CHANGELOG `[Unreleased]`, this file. Full Gate-D validation green.
+- D4 — docs + regression: TRANSLATION_PIPELINE, COCKPIT_WORKFLOW, ARCHITECTURE, QUICKSTART, MAINTENANCE, CHANGELOG `[Unreleased]`, this file. Gate-D green: **716 tests / 4 skipped**, pyright 0, ruff + format clean; DOCX + cockpit-export smokes pass.
 - **Formatting baseline:** title + `Heading1` headings + normal paragraphs + built-in `Quote` blockquotes + page break before chapters 2..N. No images/footnotes/advanced styling/merged-omnibus DOCX.
 
-**Remaining Phase D items (not started):** QA thresholds config (`[qa]` table) → combined EPUB/ZIP bundle → QA tree badges → provider hardening.
+**Next stage — QA thresholds config (⏳ not yet planned):** make QA threshold constants (`FALLBACK_HEAVY_RATIO`, etc.) configurable via a `project.toml` `[qa]` table; engine defaults unchanged when the section is absent. Phase B QA stays **read-only / deterministic** (ADR `008`). Write the stage plan and pass the §2.2 gate before any code.
 
-**Phase C delivered (2026-06-05):**
-- C1 — version consistency audit: `pyproject.toml` + `__init__.py` both at `0.7.0`; zero RC1/Flask remnants.
-- C2 — CHANGELOG: `[Unreleased]` → `[0.7.0] - 2026-06-05`; Phase A + Phase B entries added; dangling links in `[0.1.0]` fixed.
-- C3 — full validation: **703 tests / 4 skipped**, pyright 0, ruff clean, soak 25/25 (Flask fallback NOT used), clean wheel install `weaver 0.7.0`.
-- C4 — annotated tag `v0.7.0` on `main`.
-- C5 — this file updated; Phase D active.
+**Then, in roadmap order:** combined EPUB/ZIP bundle (novel scope) → QA tree badges (lightweight) → provider hardening (retry / rate-limit / cost).
 
 **Carry-over invariants (unchanged):**
 - **Web is FastAPI-only** (ADR `004`). `weaver serve` = FastAPI cockpit (UI + API), `weaver serve-api` = headless. Flask fully removed.
@@ -106,14 +101,14 @@ Required reminder before any phase transition: **"Check exit criteria first. No 
 
 > **MVP acceptance gate: met & LOCKED** (Sprint 9C, 2026-06-02), shipped as `v0.7.0-rc.1`; evidence in [docs/MVP_STABILIZATION_REPORT.md](docs/MVP_STABILIZATION_REPORT.md) and [docs/RC1_REPORT.md](docs/RC1_REPORT.md). The MVP checklist lives in [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md). **Phase A** complete (PR #18). **Phase B** complete (PR #19). **Phase C** complete — `v0.7.0` tagged 2026-06-05.
 
-**Phase D exits only when:**
+**Phase D exits only when every item lands (DOCX is the first):**
 
-- DOCX export (`target="docx"`) produces a valid `.docx` file; `weaver[web]` extra is sufficient (no new top-level dep without ADR).
-- QA threshold constants (`FALLBACK_HEAVY_RATIO`, etc.) are configurable via `project.toml` `[qa]` table; engine defaults unchanged when section absent.
-- Combined EPUB/ZIP bundle export available for novel scope.
-- Full regression green: `pytest`, `pyright`, `ruff`; CLI not broken; export routes not broken.
-- Docs updated: TRANSLATION_PIPELINE, COCKPIT_WORKFLOW, CHANGELOG, CLAUDE.md.
-- **Quality gate:** one PR = one concern; no auto-fix, no provider call in new QA paths.
+- [x] **DOCX export** (`target="docx"`) produces a valid `.docx`; `weaver[web]` extra is sufficient (custom OOXML writer — no new top-level dep, no ADR). ✅ shipped
+- [ ] QA threshold constants (`FALLBACK_HEAVY_RATIO`, etc.) configurable via `project.toml` `[qa]` table; engine defaults unchanged when section absent.
+- [ ] Combined EPUB/ZIP bundle export available for novel scope.
+- [ ] Per item: full regression green (`pytest`, `pyright`, `ruff`); CLI not broken; export routes not broken.
+- [ ] Per item: docs updated (TRANSLATION_PIPELINE, COCKPIT_WORKFLOW, CHANGELOG, CLAUDE.md).
+- [ ] **Quality gate:** one PR = one concern; no auto-fix, no provider call in new QA paths.
 
 ### 2.5 Phase Log
 
