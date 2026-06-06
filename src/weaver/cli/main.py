@@ -41,7 +41,12 @@ from weaver.services.glossary_review import (
 from weaver.services.import_source import import_volume
 from weaver.services.manual_edit import SegmentSelector, edit_segment, resolve_segment_id
 from weaver.services.preview import PreviewBlock, preview_project
-from weaver.services.project import initialize_project, inspect_project, project_exists
+from weaver.services.project import (
+    delete_project,
+    initialize_project,
+    inspect_project,
+    project_exists,
+)
 from weaver.services.qa import (
     ValidationReport,
     format_report_json,
@@ -274,6 +279,36 @@ def inspect_project_command(
     if summary.provider_status is not None:
         table.add_row("Healthcheck", _format_healthcheck(summary.provider_status))
     console.print(table)
+
+
+@app.command(
+    "delete",
+    epilog=(
+        "Examples:\n"
+        "  weaver delete .weaver/novel/project.toml\n"
+        "  weaver delete .weaver/novel/project.toml --yes"
+    ),
+)
+def delete_project_command(
+    project_toml: Path,
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        help="Skip the confirmation prompt.",
+    ),
+) -> None:
+    """Permanently delete a project's .weaver/<name> directory (source file untouched)."""
+
+    if not yes:
+        typer.confirm(
+            f"Delete the project at {project_toml.parent}? This cannot be undone.",
+            abort=True,
+        )
+    try:
+        delete_project(project_toml)
+    except WeaverError as exc:
+        _exit_with_error(exc)
+    console.print(f"Deleted project at {project_toml.parent}.")
 
 
 def _count_with_percent(count: int, total: int, *, denominator_label: str | None = None) -> str:
@@ -1169,11 +1204,13 @@ def _run_fastapi_cockpit(
 
     url = f"http://127.0.0.1:{port}"
     console.print(f"Weaver cockpit (FastAPI UI) on {url} (Ctrl+C to stop)")
+    console.print(f"If no window opens, paste {url} into your browser.")
     if open_browser:
         import threading
-        import webbrowser
 
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+        from weaver.cli.open_browser import open_in_external_browser
+
+        threading.Timer(1.0, lambda: open_in_external_browser(url)).start()
     uvicorn.run(
         "weaver.api.app:create_api_app",
         host="127.0.0.1",

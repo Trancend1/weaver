@@ -1,30 +1,30 @@
-<div class="job-panel" id="export-panel">
+<div class="job-panel progress-panel" id="export-panel">
   <div class="job-head">
-    <strong>Pre-export QA</strong>
-    {% if report is not none %}<span class="badge {{ badge_class }}">{{ badge_label }}</span>{% endif %}
+    <strong>Pre-export quality check</strong>
+    {% if report is not none %}<span class="badge c-badge {{ badge_class }}">{{ badge_label }}</span>{% endif %}
     <span class="meta">target: {{ target }}{% if bundle %} · bundle ZIP{% endif %}</span>
   </div>
 
   {% if report is none %}
-  <p class="meta">QA check unavailable: {{ qa_error }}. You can still export.</p>
+  <p class="meta">Quality check unavailable: {{ qa_error }}. You can still export.</p>
   {% elif report.total_issues == 0 %}
-  <p>No QA issues found — ready to export.</p>
+  <p>No quality issues found — ready to export.</p>
   {% else %}
   <p class="hint">Advisory only — export is allowed. Segments without a usable translation
     are written as source fallback.</p>
-  <ul class="qa-advisories">
-    {% if advisories.critical %}<li><span class="badge bad">Errors</span> {{ advisories.critical }} critical issue(s)</li>{% endif %}
+  <ul class="qa-advisories plain-list">
+    {% if advisories.critical %}<li><span class="badge c-badge bad">Errors</span> {{ advisories.critical }} critical issue(s)</li>{% endif %}
     {% if advisories.failed_stale %}<li>{{ advisories.failed_stale }} failed / stale segment(s)</li>{% endif %}
     {% if advisories.untranslated_fallback %}<li>{{ advisories.untranslated_fallback }} untranslated / fallback-heavy finding(s)</li>{% endif %}
     {% if advisories.glossary %}<li>{{ advisories.glossary }} glossary violation(s)</li>{% endif %}
     {% if advisories.character %}<li>{{ advisories.character }} character-name issue(s)</li>{% endif %}
   </ul>
   <p class="meta">{{ report.critical_count }} errors · {{ report.warning_count }} warnings · {{ report.info_count }} info</p>
-  <p><a href="/ui/projects/{{ name }}/qa">Review QA report</a></p>
+  <p><a href="/ui/projects/{{ name }}/qa">Review the quality report</a></p>
   {% endif %}
 
   <form hx-post="/ui/projects/{{ name }}/export"
-        hx-target="#export-panel" hx-swap="outerHTML" class="inline-form">
+        hx-target="#export-panel" hx-swap="outerHTML" class="inline-form form-row">
     <input type="hidden" name="target" value="{{ target }}">
     <input type="hidden" name="bundle" value="{{ 'true' if bundle else 'false' }}">
     <button type="submit">{% if report is not none and report.total_issues == 0 %}Export{% else %}Export anyway{% endif %}</button>

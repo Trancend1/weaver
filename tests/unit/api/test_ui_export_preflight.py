@@ -83,7 +83,7 @@ def test_preflight_clean_state(client: TestClient) -> None:
     response = client.get("/ui/projects/clean/export/preflight?target=epub")
     assert response.status_code == 200
     body = response.text
-    assert "No QA issues found" in body
+    assert "No quality issues found" in body
     assert ">Clean<" in body
     assert 'id="export-panel"' in body
     # the action still posts to the real export route
@@ -98,7 +98,7 @@ def test_preflight_warning_state(client: TestClient) -> None:
     assert ">Errors<" in body  # badge
     assert "critical issue" in body
     assert "failed / stale" in body
-    assert "Review QA report" in body
+    assert "Review the quality report" in body
     assert "/ui/projects/issues/qa" in body
     assert "Export anyway" in body
     assert 'hx-post="/ui/projects/issues/export"' in body
@@ -137,5 +137,5 @@ def test_preflight_missing_project_is_non_fatal(client: TestClient) -> None:
     # Even when QA can't run, the panel renders and still offers an export action.
     response = client.get("/ui/projects/ghost/export/preflight")
     assert response.status_code == 200
-    assert "QA check unavailable" in response.text
+    assert "Quality check unavailable" in response.text
     assert 'hx-post="/ui/projects/ghost/export"' in response.text

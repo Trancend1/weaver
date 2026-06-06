@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Config · Weaver{% endblock %}
 {% block content %}
-<section class="panel">
-  <p class="crumbs"><a href="/ui">Dashboard</a> / <span>config</span></p>
-  <h1>Provider &amp; secret config</h1>
+<section class="panel c-panel">
+  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label":"config"}] %}
+  {% set page_title = "Provider & secret config" %}
+  {% set page_meta = "Global defaults and optional project provider overrides." %}
+  {% include "partials/_page_header.html" %}
 
-  <form class="inline-form" method="get" action="/ui/config">
+  <form class="inline-form form-row" method="get" action="/ui/config">
     <label>Project
       <select name="project">
         <option value="">(global only)</option>
@@ -21,7 +23,7 @@
   {% include "partials/_config_form.html" %}
 </section>
 
-<section class="panel">
+<section class="panel c-panel">
   <h2>Secrets</h2>
   <p class="meta">API-key values are stored in <code>~/.weaver/secrets.toml</code> and never returned by the API or rendered here.</p>
   {% include "partials/_secrets.html" %}

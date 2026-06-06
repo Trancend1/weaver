@@ -1,57 +1,46 @@
 {% extends "base.html" %}
 {% block title %}Dashboard · Weaver{% endblock %}
 {% block content %}
-<section class="panel">
-  <h1>Projects <a class="action" href="/ui/new">+ New novel</a></h1>
-  <p class="meta">
-    Books dir: <code>{{ books_dir }}</code>
-    · Default provider: <code>{{ default_provider }}</code>
-    · Default model: <code>{{ default_model }}</code>
-  </p>
+<section class="dashboard">
+  {% set page_actions %}<a class="btn btn--primary" href="/ui/new">+ New novel</a>{% endset %}
+  {% set page_meta %}{{ projects|length }} project{{ "" if projects|length == 1 else "s" }} in <code>{{ books_dir }}</code> · defaults <code>{{ default_provider }}</code> / <code>{{ default_model }}</code>{% endset %}
+  {% set page_title = "Projects" %}
+  {% include "partials/_page_header.html" %}
 
   {% if projects %}
-  <div class="table-scroll">
-  <table class="grid">
-    <thead>
-      <tr>
-        <th>Project</th><th>Provider</th><th>Model</th>
-        <th class="num">Volumes</th><th class="num">Chapters</th><th class="num">Segments</th>
-        <th class="num">Translated</th><th class="num">Pending</th><th>Status</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for p in projects %}
-      <tr>
-        <td><a href="/ui/projects/{{ p.name }}">{{ p.name }}</a></td>
-        <td>{{ p.provider or "—" }}</td>
-        <td>{{ p.model or "—" }}</td>
-        <td class="num">{{ p.volume_count }}</td>
-        <td class="num">{{ p.chapter_count }}</td>
-        <td class="num">{{ p.segment_count }}</td>
-        <td class="num">
-          <span class="progress-cell">
-            {{ p.translated_count }}
-            <progress value="{{ p.translated_count }}" max="{{ p.segment_count or 1 }}"
-              title="{{ p.translated_count }} of {{ p.segment_count }} translated"></progress>
-          </span>
-        </td>
-        <td class="num">{{ p.pending_count }}</td>
-        <td>
-          {% if p.error %}
-          <span class="badge bad">error</span>
-          <div class="meta error">{{ p.error }}</div>
-          {% else %}<span class="badge ok">ready</span>{% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="project-grid">
+    {% for p in projects %}
+    {% set pct = (100 * p.translated_count / (p.segment_count or 1)) | round | int %}
+    <a class="project-card" href="/ui/projects/{{ p.name }}">
+      <div class="project-card__head">
+        <span class="project-card__name">{{ p.name }}</span>
+        {% if p.error %}<span class="badge bad">error</span>{% else %}<span class="badge ok">ready</span>{% endif %}
+      </div>
+      <p class="project-card__sub">{{ p.provider or "no provider set" }}{% if p.model %} · {{ p.model }}{% endif %}</p>
+      {% if p.error %}
+      <p class="project-card__error error">{{ p.error }}</p>
+      {% else %}
+      <div class="project-card__progress">
+        <progress value="{{ p.translated_count }}" max="{{ p.segment_count or 1 }}"
+          title="{{ p.translated_count }} of {{ p.segment_count }} segments translated"></progress>
+        <div class="project-card__pct">
+          <span>{{ p.translated_count }}/{{ p.segment_count }} translated</span>
+          <span>{{ pct }}%</span>
+        </div>
+      </div>
+      <ul class="project-card__stats">
+        <li><b>{{ p.volume_count }}</b><span>volumes</span></li>
+        <li><b>{{ p.chapter_count }}</b><span>chapters</span></li>
+        <li><b>{{ p.pending_count }}</b><span>pending</span></li>
+      </ul>
+      {% endif %}
+    </a>
+    {% endfor %}
   </div>
   {% else %}
-  <div class="empty">
-    <p>No projects found under <code>{{ books_dir }}</code>.</p>
-    <p class="hint">Use <a href="/ui/new">+ New novel</a> above to import a source (TXT/EPUB/HTML), or create one from the CLI with <code>weaver init &lt;source&gt;</code>.</p>
-  </div>
+  {% set empty_title = "No projects found" %}
+  {% set empty_hint = 'Import a source (TXT, EPUB, or HTML) with <a href="/ui/new">+ New novel</a> above, or run <code>weaver init &lt;source&gt;</code> from the CLI.' %}
+  {% include "partials/_empty_state.html" %}
   {% endif %}
 </section>
 {% endblock %}

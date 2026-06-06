@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sqlite3
 import tempfile
 from contextlib import closing
@@ -13,7 +14,7 @@ from typing import Any
 from weaver.core.config import load_project_config
 from weaver.core.ir import scope_document_to_volume
 from weaver.core.templates import get_template
-from weaver.errors import ConfigError, ProviderError, WeaverError
+from weaver.errors import ConfigError, ProjectNotFoundError, ProviderError, WeaverError
 from weaver.providers import ProviderStatus, build_provider
 from weaver.readers import detect_format, read_source
 from weaver.services.glossary import extract_and_store_project_glossary
@@ -77,6 +78,38 @@ def project_exists(source_epub: Path, *, cwd: Path | None = None) -> bool:
     project_name = source_epub.resolve().stem
     project_toml = base_dir / ".weaver" / project_name / "project.toml"
     return project_toml.exists()
+
+
+def delete_project(project_toml: Path) -> None:
+    """Permanently delete a Weaver project's ``.weaver/<name>`` directory.
+
+    Removes the cockpit-managed state for one project: ``project.toml``, the
+    SQLite database, glossary TSVs, and the ``output`` directory. The original
+    imported source file is **not** touched — it lives outside ``.weaver``.
+
+    Args:
+        project_toml: Path to the project's ``project.toml``.
+
+    Raises:
+        ProjectNotFoundError: The ``project.toml`` does not exist.
+        WeaverError: The path is not a ``.weaver/<name>/project.toml`` layout —
+            a safety guard against removing an unexpected directory.
+    """
+
+    project_dir = project_toml.parent
+    if project_toml.name != "project.toml" or project_dir.parent.name != ".weaver":
+        raise WeaverError(
+            f"Refusing to delete {project_dir}: not a .weaver project directory. "
+            "Likely cause: an unexpected project path. "
+            "Next command: verify the project name and try again."
+        )
+    if not project_toml.is_file():
+        raise ProjectNotFoundError(
+            f"No project found at {project_toml}. "
+            "Likely cause: it was already deleted or never created. "
+            "Next command: run `weaver inspect` to list known projects."
+        )
+    shutil.rmtree(project_dir)
 
 
 DEFAULT_PROVIDER = "deepseek"

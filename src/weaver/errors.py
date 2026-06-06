@@ -87,3 +87,7 @@ class VolumeNotFoundError(WeaverError):
 
 class DatabaseError(WeaverError):
     """SQLite operation failed in an unrecoverable way."""
+
+
+class ProjectNotFoundError(WeaverError):
+    """Requested project directory does not exist under the books dir."""

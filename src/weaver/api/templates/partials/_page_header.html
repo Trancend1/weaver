@@ -1,0 +1,16 @@
+<header class="page-header {{ page_header_class|default('') }}">
+  {% if page_crumbs %}
+  <p class="crumbs page-header__crumbs">
+    {% for crumb in page_crumbs %}
+      {% if crumb.href %}<a href="{{ crumb.href }}">{{ crumb.label }}</a>{% else %}<span>{{ crumb.label }}</span>{% endif %}{% if not loop.last %} / {% endif %}
+    {% endfor %}
+  </p>
+  {% endif %}
+  <div class="page-header__row">
+    <div class="page-header__copy">
+      <h1>{{ page_title }}</h1>
+      {% if page_meta %}<p class="meta page-header__meta">{{ page_meta|safe }}</p>{% endif %}
+    </div>
+    {% if page_actions %}<div class="page-header__actions">{{ page_actions|safe }}</div>{% endif %}
+  </div>
+</header>

@@ -4,24 +4,32 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Weaver Cockpit{% endblock %}</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23111111' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z'/><path d='M16 8 2 22'/><path d='M17.5 15H9'/></svg>">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js" defer></script>
 </head>
-<body>
+{% from "partials/_icons.html" import icon %}
+{% set _path = request.url.path if request else "" %}
+{% set _mode = layout_mode|default("global") %}
+<body class="layout layout--{{ _mode }}">
   <header class="topbar">
-    <a class="brand" href="/ui">Weaver</a>
-    {% set _path = request.url.path if request else "" %}
-    <nav class="topnav">
-      <a href="/ui"{% if _path == "/ui" %} class="active" aria-current="page"{% endif %}>Dashboard</a>
-      <a href="/ui/new"{% if _path.startswith("/ui/new") %} class="active" aria-current="page"{% endif %}>New novel</a>
-      <a href="/ui/config"{% if _path.startswith("/ui/config") %} class="active" aria-current="page"{% endif %}>Config</a>
+    <a class="brand" href="/ui" aria-label="Weaver home">
+      <span class="brand__mark" aria-hidden="true">{{ icon("brand") }}</span>
+      <span class="brand__name">Weaver</span>
+    </a>
+    <nav class="topnav" aria-label="Primary">
+      <a href="/ui"{% if active_nav|default('') == "dashboard" or _path == "/ui" %} class="active" aria-current="page"{% endif %}>Dashboard</a>
+      <a href="/ui/new"{% if active_nav|default('') == "new" or _path.startswith("/ui/new") %} class="active" aria-current="page"{% endif %}>New novel</a>
+      <a href="/ui/config"{% if active_nav|default('') == "config" or _path.startswith("/ui/config") %} class="active" aria-current="page"{% endif %}>Config</a>
     </nav>
-    <span class="api-hint">JP→EN translation workbench</span>
   </header>
 
-  <main class="content" id="content">
-    {% block content %}{% endblock %}
-  </main>
+  <div class="app-shell app-shell--{{ _mode }}">
+    {% include "partials/_sidebar.html" %}
+    <main class="content" id="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
 
   <footer class="footer">
     <span>Weaver · runs locally on your machine</span>

@@ -1,15 +1,28 @@
 <div class="qa-summary">
-  <p>
+  <div class="stat-row" role="group" aria-label="Quality totals">
+    <div class="stat stat--bad{% if report.critical_count %} is-active{% endif %}">
+      <span class="stat__value">{{ report.critical_count }}</span>
+      <span class="stat__label">Errors</span>
+    </div>
+    <div class="stat stat--warn{% if report.warning_count %} is-active{% endif %}">
+      <span class="stat__value">{{ report.warning_count }}</span>
+      <span class="stat__label">Warnings</span>
+    </div>
+    <div class="stat stat--info{% if report.info_count %} is-active{% endif %}">
+      <span class="stat__value">{{ report.info_count }}</span>
+      <span class="stat__label">Info</span>
+    </div>
+    <div class="stat stat--muted">
+      <span class="stat__value">{{ report.total_segments }}</span>
+      <span class="stat__label">Segments scanned</span>
+    </div>
+  </div>
+  <p class="qa-summary__status">
     <span class="badge {{ badge_class }}">{{ badge_label }}</span>
-    <span class="meta">{{ report.total_segments }} segments · {{ report.total_issues }} issue{{ "" if report.total_issues == 1 else "s" }}</span>
+    <span class="meta">{{ report.total_issues }} issue{{ "" if report.total_issues == 1 else "s" }} found across {{ report.total_segments }} segment{{ "" if report.total_segments == 1 else "s" }}.</span>
   </p>
-  <ul class="qa-counts">
-    <li><span class="badge bad">Errors</span> {{ report.critical_count }}</li>
-    <li><span class="badge warn">Warnings</span> {{ report.warning_count }}</li>
-    <li><span class="badge">Info</span> {{ report.info_count }}</li>
-  </ul>
   {% if report.badge != "clean" %}
-  <p class="hint">Review before export — segments with issues may export as source fallback.</p>
+  <p class="hint">Advisory only — export is never blocked. Segments with issues fall back to their source text.</p>
   {% endif %}
 
   {% if report.summary_by_volume %}

@@ -1,0 +1,5 @@
+{% from "partials/_icons.html" import icon %}
+<a class="sidebar-item{% if active_nav == item_key %} active{% endif %}" href="{{ item_href }}"{% if active_nav == item_key %} aria-current="page"{% endif %} title="{{ item_label }}">
+  <span class="sidebar-item__icon">{{ icon(item_key) }}</span>
+  <span class="sidebar-item__label">{{ item_label }}</span>
+</a>

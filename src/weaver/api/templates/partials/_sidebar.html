@@ -1,0 +1,56 @@
+{% if layout_mode != "global" %}
+{% from "partials/_icons.html" import icon %}
+<aside class="sidebar sidebar--{{ layout_mode }}" aria-label="Project navigation">
+  <div class="sidebar__head">
+    <a class="sidebar__project" href="/ui/projects/{{ project_name }}" title="{{ project_name }}">
+      <span class="sidebar__mark" aria-hidden="true">{{ icon("brand") }}</span>
+      <span class="sidebar__project-name">{{ project_name }}</span>
+    </a>
+  </div>
+
+  <nav class="sidebar__nav" aria-label="Project sections">
+    {% set item_href = '/ui/projects/' ~ project_name %}
+    {% set item_label = 'Project' %}
+    {% set item_key = 'project' %}
+    {% include "partials/_sidebar_item.html" %}
+    {% set item_href = '/ui/projects/' ~ project_name ~ '/qa' %}
+    {% set item_label = 'Quality' %}
+    {% set item_key = 'qa' %}
+    {% include "partials/_sidebar_item.html" %}
+    {% set item_href = '/ui/projects/' ~ project_name ~ '/glossary' %}
+    {% set item_label = 'Glossary' %}
+    {% set item_key = 'glossary' %}
+    {% include "partials/_sidebar_item.html" %}
+    {% set item_href = '/ui/projects/' ~ project_name ~ '/characters' %}
+    {% set item_label = 'Characters' %}
+    {% set item_key = 'characters' %}
+    {% include "partials/_sidebar_item.html" %}
+    {% set item_href = '/ui/projects/' ~ project_name ~ '/memory' %}
+    {% set item_label = 'Memory' %}
+    {% set item_key = 'memory' %}
+    {% include "partials/_sidebar_item.html" %}
+  </nav>
+
+  {% if sidebar_tree and layout_mode == "project" %}
+  <div class="sidebar-tree" aria-label="Project chapters">
+    {% for v in sidebar_tree.volumes %}
+    <section class="sidebar-tree__volume">
+      <div class="sidebar-tree__volume-title">{{ v.title }}</div>
+      {% for c in v.chapters %}
+      <a class="sidebar-chapter{% if active_chapter_id is defined and active_chapter_id == c.id %} active{% endif %}"
+         href="/ui/projects/{{ sidebar_tree.project_name }}/chapters/{{ c.id }}">
+        <span class="sidebar-chapter__title">{{ c.title }}</span>
+        <span class="sidebar-chapter__progress">
+          <progress value="{{ c.done_count }}" max="{{ c.segment_count or 1 }}" title="{{ c.done_count }} of {{ c.segment_count }} segments done"></progress>
+          <span>{{ c.done_count }}/{{ c.segment_count }}</span>
+        </span>
+      </a>
+      {% endfor %}
+    </section>
+    {% endfor %}
+  </div>
+  {% elif sidebar_error %}
+  <p class="sidebar__error">{{ sidebar_error }}</p>
+  {% endif %}
+</aside>
+{% endif %}
