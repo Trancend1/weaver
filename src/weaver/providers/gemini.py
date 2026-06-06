@@ -184,6 +184,12 @@ def _translate_gemini_error(exc: BaseException) -> Exception:
             f"Likely cause: invalid or revoked ${ENV_API_KEY}. "
             f"Next command: regenerate the Gemini API key and update ${ENV_API_KEY}."
         )
+    if name in {"NotFound", "NotFoundError", "InvalidArgument"}:
+        return ProviderResponseError(
+            f"Gemini model not found or invalid request: {message}. "
+            "Likely cause: `[provider] model` is misspelled or unavailable. "
+            "Next command: check `[provider] model` in project.toml (e.g. gemini-1.5-flash)."
+        )
     if name in {"ResourceExhausted", "TooManyRequests"}:
         return ProviderTimeout(
             f"Gemini rate limit hit: {message}. "

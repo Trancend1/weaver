@@ -66,6 +66,7 @@ def _start_export(
             scope=scope,
             target_id=target_id,
             target=options.target,
+            bundle=options.bundle,
             cwd=base,
         )
     except (ChapterNotFoundError, VolumeNotFoundError) as exc:
@@ -195,6 +196,7 @@ def _export_status(job: ExportJob) -> ExportJobStatusResponse:
             fallback_segments=r.fallback_segments,
             generated_at=r.generated_at,
             cancelled=r.cancelled,
+            bundle_path=str(r.bundle_path) if r.bundle_path is not None else None,
             artifacts=[
                 ExportArtifactResponse(
                     volume_id=a.volume_id,

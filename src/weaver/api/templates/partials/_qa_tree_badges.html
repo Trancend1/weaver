@@ -1,0 +1,18 @@
+{# Out-of-band QA badges for the project tree (Phase D, explicit/lazy load).
+   The first span is the hx-target content (status line); each badge span is
+   swapped out-of-band into its matching tree slot. #}
+<span class="meta">
+  {%- if message -%}{{ message }}
+  {%- elif report -%}QA badges loaded — overall: {{ badge_label[report.badge] }}
+  {%- endif -%}
+</span>
+{% for s in volumes %}
+<span id="qa-badge-vol-{{ s.id }}" hx-swap-oob="true"
+  class="badge {{ badge_class[s.badge] }}"
+  title="{{ s.critical_count }} error(s) · {{ s.warning_count }} warning(s) · {{ s.info_count }} info">{{ badge_label[s.badge] }}</span>
+{% endfor %}
+{% for s in chapters %}
+<span id="qa-badge-ch-{{ s.id }}" hx-swap-oob="true"
+  class="badge {{ badge_class[s.badge] }}"
+  title="{{ s.critical_count }} error(s) · {{ s.warning_count }} warning(s) · {{ s.info_count }} info">{{ badge_label[s.badge] }}</span>
+{% endfor %}

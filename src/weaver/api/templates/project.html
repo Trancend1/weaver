@@ -11,6 +11,12 @@
     <a href="/ui/projects/{{ tree.project_name }}/memory">Translation memory</a>
   </nav>
 
+  <p class="actions">
+    <button type="button" hx-get="/ui/projects/{{ tree.project_name }}/qa/tree-badges"
+            hx-target="#qa-badge-status" hx-swap="innerHTML">Load QA badges</button>
+    <span id="qa-badge-status" class="meta">Badges load on demand — the tree never runs QA on its own.</span>
+  </p>
+
   {% include "partials/_tree.html" %}
 </section>
 
@@ -51,8 +57,10 @@
         <option value="epub">EPUB</option>
         <option value="txt">TXT</option>
         <option value="html">HTML</option>
+        <option value="docx">DOCX</option>
       </select>
     </label>
+    <label><input type="checkbox" name="bundle" value="true"> Bundle all volumes into one ZIP</label>
     <button type="submit">Check &amp; export</button>
   </form>
   <div id="export-panel"></div>

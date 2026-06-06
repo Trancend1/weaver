@@ -162,10 +162,12 @@ are deterministic and read-only.
 | 10 | `fallback_heavy_chapter` | chapter | `warning` | **new** (`scope_checks`) | fraction of segments with `publishable_text is None` ≥ threshold (+ min segment count) |
 | 11 | `mixed_status_chapter` | chapter | `info` | **new** (`scope_checks`) | chapter mixes published and unpublished/failed/stale statuses (partial progress) |
 
-Thresholds — **module-level constants first; not `[qa]`-configurable yet** (Gate B1 decision; QA
-config can be added later if users need it). `minimum_length_ratio = 0.3` (existing `[qa]` flag,
-unchanged) · `fallback_heavy_ratio = 0.5` · `fallback_heavy_min_segments = 5` · `repeated_min_chars = 8`
-(the last three are new constants in `scope_checks.py`, no config surface in Phase B).
+Thresholds — module-level constants in Phase B (Gate B1 decision). `minimum_length_ratio = 0.3`
+(existing `[qa]` flag) · `fallback_heavy_ratio = 0.5` · `fallback_heavy_min_segments = 5` ·
+`repeated_min_chars = 8`. **Phase D update:** the last three are now overridable per project via the
+same `[qa]` table (keys `fallback_heavy_ratio`, `min_segments`, `repeated_min_chars`); defaults are
+unchanged when absent. The defaults + validation live in `qa/thresholds.py` (`load_qa_thresholds`),
+threaded through `services/translation_qa.py` so CLI/API/UI share one set.
 
 **Issue categories** (`QACategory`): `completeness` (1,2,7) · `staleness` (4) · `consistency` (6,8) ·
 `quality` (3,5,9) · `export_readiness` (10,11).
@@ -285,9 +287,11 @@ Each stage stops at its gate (§2.2 of CLAUDE.md) for inspection. One PR = one c
   `GET /ui/projects/{name}/chapters/{id}/qa`. Templates `qa.html` + partials
   `_qa_summary.html`, `_qa_issues.html`; severity badge + category filter (HTMX query params).
 - **Badges (Gate B1 decision):** **explicit QA pages first.** Project-page header badge + chapter-page
-  badge come from the QA report rendered *on that page*. **Per-chapter tree badges are deferred** — do
-  **not** run a full novel-scope QA scan automatically on every project-tree render. A lightweight
-  summary badge may be added in a later slice only if it is proven performance-safe.
+  badge come from the QA report rendered *on that page*. The project tree still **never** runs a
+  novel-scope QA scan on render. **Phase D update:** per-volume/per-chapter **tree badges now exist but
+  are opt-in** — a "Load QA badges" button (`/ui/projects/{name}/qa/tree-badges`) runs the novel QA once
+  and HTMX-injects out-of-band badges into the tree slots. This is the "performance-safe later slice":
+  zero cost on tree render, one analyze per explicit click.
 - **Tests:** `tests/integration/test_ui_qa.py` — pages render, filter narrows, badges reflect counts.
 - **Gate B4:** usable UI; Jinja2 + HTMX only; no auto-fix. No export change yet.
 

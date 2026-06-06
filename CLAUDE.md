@@ -4,7 +4,7 @@ Offline-capable, glossary-aware **JP→EN** light-novel translation workbench. T
 
 **Not:** SaaS, consumer product, hosted service, complex SPA.
 
-> **Status (2026-06-05):** **`v0.7.0` stable released** (FastAPI is the sole web cockpit; Flask fully removed). Phases A (UI/UX Polish), B (Translation QA, ADR `008`), and C (Release hardening) are all complete. **Next: Phase D — DOCX export** (see §2.3). Detailed MVP/Phase-A/B history lives in git history.
+> **Status (2026-06-06):** **`v0.7.0` stable released** (FastAPI is the sole web cockpit; Flask fully removed). Phases A (UI/UX Polish), B (Translation QA, ADR `008`), and C (Release hardening) are complete. **Phase D — multi-item: COMPLETE** (all five items shipped on `feat/docx-export`, PR #21): DOCX export (`renderers/docx.py`, custom OOXML, no `python-docx`/no new dep) · configurable QA thresholds (`[qa]` table, `qa/thresholds.py`) · combined ZIP bundle (`services/export_bundle.py`) · opt-in QA tree badges · provider config hardening (`providers/config_values.py`). Full gate green: **780 tests / 4 skipped**, pyright 0, ruff + format clean. **Next: Phase E — Design System** (see §2.3). Detailed MVP/Phase-A/B history lives in git history.
 
 ---
 
@@ -24,6 +24,7 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 | [docs/TRANSLATION_PIPELINE.md](docs/TRANSLATION_PIPELINE.md) | Import → segment → translate → QA → export |
 | [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md) | MVP features, gap analysis, sprint mapping, acceptance |
 | [docs/PHASE_B_QA_PLAN.md](docs/PHASE_B_QA_PLAN.md) | Phase B (complete) — Translation QA & consistency checks: rules, severity model, report schema, stage breakdown. Architecture/severity decision in ADR `008`. |
+| [docs/PHASE_D_DOCX_EXPORT_PLAN.md](docs/PHASE_D_DOCX_EXPORT_PLAN.md) | Phase D — DOCX export: architecture audit, dependency decision (custom OOXML writer, no `python-docx`), renderer design, API/UI impact, validation matrix, staged plan (D1–D4). |
 | [docs/RC1_REPORT.md](docs/RC1_REPORT.md) | **MVP RC1**: validation/soak/clean-install evidence, release notes, known issues, deferred roadmap, recommended version tag |
 | [docs/MVP_STABILIZATION_REPORT.md](docs/MVP_STABILIZATION_REPORT.md) | Sprint 9 baseline: validation matrix, acceptance audit, **consolidated deferred/known-gaps list** |
 | [docs/MAINTENANCE.md](docs/MAINTENANCE.md) | Cleanup, testing, regression, release, migration discipline |
@@ -47,7 +48,8 @@ Foundation (v0.6.0) ✅
   → Phase A — UI/UX Polish ✅
   → Phase B — Translation QA & Consistency Checks ✅
   → Phase C — Release hardening ✅  (v0.7.0 stable)
-  → Phase D — DOCX export / QA config / combined ZIP   ⬅ next
+  → Phase D ✅ — DOCX export ✅ · QA config ✅ · combined ZIP ✅ · QA tree badges ✅ · provider hardening ✅
+  → Phase E — Design System Implementation   ⬅ next
 ```
 
 | Phase | Scope | Status |
@@ -56,9 +58,9 @@ Foundation (v0.6.0) ✅
 | Phase A — UI/UX Polish | Cockpit UI polish on Jinja2 + HTMX (ADR `007`): shared shell / a11y / responsive @390px, workspace UX, dashboard + admin clarity. Presentation/copy only; no backend/provider/stack change. | ✅ |
 | Phase B — Translation QA & Consistency Checks | Read-only, deterministic QA reports before export (report-first, no auto-fix): QA engine → JSON API → UI report/badges → advisory pre-export warning. No provider calls, no mutation, no semantic/vector. ADR `008`. Stages B1–B6. | ✅ |
 | **Phase C — Release hardening** | CHANGELOG `[Unreleased]` → `[0.7.0]` (Phase A + B entries); version consistency; soak 25/25; clean wheel install; annotated tag `v0.7.0`. | ✅ `v0.7.0` |
-| **Phase D — DOCX export** | DOCX export → QA thresholds config → combined EPUB/ZIP → QA tree badges → provider hardening. | ⏳ next |
+| **Phase D — multi-item** | DOCX export **✅** (`renderers/docx.py`, custom OOXML, no `python-docx`) · QA thresholds config **✅** (`[qa]` table) · combined ZIP bundle **✅** (`services/export_bundle.py`) · QA tree badges **✅** (opt-in) · provider config hardening **✅** (`providers/config_values.py`). | ✅ (PR #21) |
 | **Phase E — Design System Implementation** | Implement DESIGN.md token system + DESIGN_GUIDE.md hybrid layout across the cockpit: CSS variable migration (6→19 tokens), sidebar layout (3-mode dispatch), component library extraction, typography scale, color semantics, responsive sidebar, workspace redesign per guide. No backend changes — pure CSS + Jinja2 template + HTMX refactor. Source: `docs/DESIGN.md`, `docs/DESIGN_GUIDE.md`. | ⬜ pending |
-
+| **Phase F — Distribution & Installer** | Build installable local distribution flow: @weaver/cli → npm install -g @weaver/cli → weaver. The wrapper checks Python/uv availability, installs or bootstraps the Python package, runs the local FastAPI cockpit, and opens the browser to localhost. Sub-phases: F1 packaging audit; F2 pipx/uv install hardening; F3 npm launcher wrapper; F4 optional desktop/local launcher; F5 release signing, checksum, and security.| ⬜ pending |
 Legend: ✅ complete · 🟡 in progress · ⏳ next · ⬜ pending · 🚫 blocked.
 
 > MVP per-sprint detail (Sprints 1–13 + RC1) and the Phase A stage log live in **git history**. MVP gap analysis: [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md). Phase/sprint ordering is dependency-driven, not calendar.
@@ -76,34 +78,35 @@ Before starting any phase or stage, run this gate:
 
 Required reminder before any phase transition: **"Check exit criteria first. No next phase until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Phase D: DOCX Export
+### 2.3 Active Phase — Phase D COMPLETE → next: Phase E (Design System)
 
-> **Phase C — Release hardening: complete.** `v0.7.0` tagged on 2026-06-05. **Phase D** is next; not yet planned in detail.
+> **Phase D bundled five items — all shipped** on `feat/docx-export` (PR #21), one focused commit each. Full gate green: **780 tests / 4 skipped**, pyright 0, ruff + format clean, `weaver --help` OK, clean wheel build (all four new modules packaged). **Next: Phase E — Design System Implementation** (run the §2.2 gate before starting).
 
-**Phase C delivered (2026-06-05):**
-- C1 — version consistency audit: `pyproject.toml` + `__init__.py` both at `0.7.0`; zero RC1/Flask remnants.
-- C2 — CHANGELOG: `[Unreleased]` → `[0.7.0] - 2026-06-05`; Phase A + Phase B entries added; dangling links in `[0.1.0]` fixed.
-- C3 — full validation: **703 tests / 4 skipped**, pyright 0, ruff clean, soak 25/25 (Flask fallback NOT used), clean wheel install `weaver 0.7.0`.
-- C4 — annotated tag `v0.7.0` on `main`.
-- C5 — this file updated; Phase D active.
+**Phase D — shipped items:**
+- **DOCX export** — `renderers/docx.py` (`render_docx`, pure, custom minimal OOXML; no `python-docx`, no new dep). `"docx"` in `ExportTarget`/`EXPORT_TARGETS` + `_render_volume` branch; synthesized from the DB like TXT/HTML (no write-back). Baseline: title + `Heading1` + paragraphs + `Quote` + page break before chapters 2..N. Plan: [docs/PHASE_D_DOCX_EXPORT_PLAN.md](docs/PHASE_D_DOCX_EXPORT_PLAN.md).
+- **QA thresholds config** — `qa/thresholds.py` (`load_qa_thresholds`): `fallback_heavy_ratio` / `min_segments` / `repeated_min_chars` overridable via the existing `[qa]` table; defaults unchanged when absent; values validated (`ConfigError`); foreign per-segment `[qa]` keys ignored. Threaded through `services/translation_qa.py` so CLI/API/UI share one set. Phase B QA stays **read-only / deterministic** (ADR `008`).
+- **Combined ZIP bundle** — `services/export_bundle.py`: optional `bundle` flag zips a novel's per-volume artifacts into `output/<target>/bundle-<target>.zip` (any target). `ExportRequest.bundle` + cockpit checkbox; `ExportResult.bundle_path`. Merged-omnibus EPUB still deferred (ZIP is the safe form).
+- **QA tree badges (opt-in)** — `/ui/projects/{name}/qa/tree-badges` runs the novel QA **once per click** and HTMX-injects out-of-band badges into tree slots. The project tree still runs **zero** QA on render (Gate B1 preserved).
+- **Provider config hardening** — `providers/config_values.py` (`read_float`/`read_int`): numeric `[provider]` settings validated with clear `ConfigError` (not raw `ValueError`); invalid-model mapping for DeepSeek/custom + Gemini; **no API-key leak** into errors/logs/status (regression-tested).
 
 **Carry-over invariants (unchanged):**
 - **Web is FastAPI-only** (ADR `004`). `weaver serve` = FastAPI cockpit (UI + API), `weaver serve-api` = headless. Flask fully removed.
 - **Legacy CLI** `weaver translate` / `services/export.py` are **single-volume**; multi-volume is the cockpit's job.
-- **Phase B QA** (ADR `008`): read-only, deterministic, report-first. 11 rules across novel/volume/chapter scope. Details in [docs/PHASE_B_QA_PLAN.md](docs/PHASE_B_QA_PLAN.md).
+- **Phase B QA** (ADR `008`): read-only, deterministic, report-first. No auto-fix, no provider/LLM calls in QA paths — preserved by the Phase D QA-config and tree-badge work.
 
 ### 2.4 Exit Criteria
 
 > **MVP acceptance gate: met & LOCKED** (Sprint 9C, 2026-06-02), shipped as `v0.7.0-rc.1`; evidence in [docs/MVP_STABILIZATION_REPORT.md](docs/MVP_STABILIZATION_REPORT.md) and [docs/RC1_REPORT.md](docs/RC1_REPORT.md). The MVP checklist lives in [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md). **Phase A** complete (PR #18). **Phase B** complete (PR #19). **Phase C** complete — `v0.7.0` tagged 2026-06-05.
 
-**Phase D exits only when:**
+**Phase D — all items landed (met & complete):**
 
-- DOCX export (`target="docx"`) produces a valid `.docx` file; `weaver[web]` extra is sufficient (no new top-level dep without ADR).
-- QA threshold constants (`FALLBACK_HEAVY_RATIO`, etc.) are configurable via `project.toml` `[qa]` table; engine defaults unchanged when section absent.
-- Combined EPUB/ZIP bundle export available for novel scope.
-- Full regression green: `pytest`, `pyright`, `ruff`; CLI not broken; export routes not broken.
-- Docs updated: TRANSLATION_PIPELINE, COCKPIT_WORKFLOW, CHANGELOG, CLAUDE.md.
-- **Quality gate:** one PR = one concern; no auto-fix, no provider call in new QA paths.
+- [x] **DOCX export** (`target="docx"`) produces a valid `.docx`; `weaver[web]` extra is sufficient (custom OOXML writer — no new top-level dep, no ADR).
+- [x] QA threshold constants configurable via `project.toml` `[qa]` table; engine defaults unchanged when section absent; foreign keys ignored; bad values → `ConfigError`.
+- [x] Combined ZIP bundle export available for novel scope (`bundle` flag → `output/<target>/bundle-<target>.zip`).
+- [x] Opt-in QA tree badges; project tree runs no QA on render (Gate B1).
+- [x] Provider config hardening: numeric `[provider]` validation + invalid-model mapping; no API-key leak.
+- [x] Full regression green (`pytest` 780/4 skip, `pyright` 0, `ruff` + format); CLI + export/QA routes not broken; docs updated.
+- [x] **Quality gate:** one commit = one item; no auto-fix, no provider call in new QA paths.
 
 ### 2.5 Phase Log
 
@@ -119,6 +122,7 @@ One row per phase/era; deep detail lives in the linked docs and git history.
 | Phase A — UI/UX Polish | Cockpit UI polish on Jinja2+HTMX: A1 UX audit → A2-1 shell/a11y/responsive · A2-2 feedback/a11y · A2-3 workspace UX · A2-4 dashboard/project clarity · A2-5 admin usability · A2-6 live verification. Presentation/copy only (+ one additive `done_count` field, a small progressive-enhancement script); no backend/provider/stack change. Merged PR #18 (audit detail in git history). |
 | Phase B — Translation QA | **Complete.** Read-only, deterministic, report-first QA before export (no auto-fix, no provider, no mutation, no semantic/vector). B1 plan + ADR `008` (reuse `weaver.qa.checks`, keep severity `info\|warning\|critical`) → B2 engine (`services/translation_qa.py` + `qa/{consistency_checks,scope_checks,report}.py`) → B3 JSON API (`api/routers/qa.py`) → B4 UI pages (`api/routers/ui_qa.py`) → B5 advisory pre-export warning (`…/export/preflight`, never blocks) → B6 docs + regression. Legacy `weaver validate` untouched. 703 tests / 4 skipped, pyright 0, ruff + format clean. |
 | Phase C — Release hardening | **Complete.** CHANGELOG promoted to `[0.7.0]` (Phase A + B entries); version consistency confirmed; soak 25/25; clean wheel install; annotated tag `v0.7.0` on `main` (2026-06-05). |
+| Phase D — multi-item | **Complete (PR #21, `feat/docx-export`).** Five focused commits: (1) DOCX export target — custom minimal OOXML `renderers/docx.py`, no `python-docx`/no new dep, synthesized from the DB (no write-back); (2) configurable QA thresholds via `[qa]` (`qa/thresholds.py`), defaults unchanged when absent, validated, foreign keys ignored; (3) combined ZIP bundle (`services/export_bundle.py`, `bundle` flag, `bundle_path`); (4) opt-in QA tree badges (out-of-band HTMX, zero QA on tree render — Gate B1 preserved); (5) provider config hardening (`providers/config_values.py`, numeric validation + invalid-model mapping, no key leak). Gate: 780 tests / 4 skipped, pyright 0, ruff + format clean, clean wheel build. Merged-omnibus EPUB intentionally deferred. |
 
 ---
 

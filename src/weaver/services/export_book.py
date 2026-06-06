@@ -39,11 +39,13 @@ from typing import Literal
 from weaver.core.ir import scope_document_to_volume
 from weaver.errors import ChapterNotFoundError, ExportError, VolumeNotFoundError
 from weaver.readers import read_epub
+from weaver.renderers.docx import render_docx
 from weaver.renderers.epub import render_translated_epub
 from weaver.renderers.epub_synthesis import synthesize_epub
 from weaver.renderers.html import render_html
 from weaver.renderers.rendered_document import RenderChapter
 from weaver.renderers.txt import render_txt
+from weaver.services.export_bundle import bundle_filename, write_export_bundle
 from weaver.services.project_paths import resolve_database_path, resolve_output_dir
 from weaver.services.workspace_translate import load_single_project
 from weaver.storage.db import connect_readonly_database
@@ -56,9 +58,10 @@ from weaver.storage.segments import (
 from weaver.storage.translations import ExportSegmentState, list_export_segment_states
 from weaver.storage.volumes import VolumeRecord, list_volumes
 
-ExportTarget = Literal["epub", "txt", "html"]
-# EPUB (8A) + TXT/HTML (8C). DOCX is a designed target, added in a later stage.
-EXPORT_TARGETS = frozenset({"epub", "txt", "html"})
+ExportTarget = Literal["epub", "txt", "html", "docx"]
+# EPUB (8A) + TXT/HTML (8C) + DOCX (Phase D). DOCX is synthesized from resolved
+# chapters (no write-back), like TXT/HTML.
+EXPORT_TARGETS = frozenset({"epub", "txt", "html", "docx"})
 EXPORT_SCOPES = frozenset({"novel", "volume", "chapter"})
 
 _PUBLISHABLE_STATUSES = frozenset({"translated", "manual"})
@@ -110,6 +113,7 @@ class ExportResult:
     fallback_segments: int
     generated_at: str
     cancelled: bool = False
+    bundle_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -155,6 +159,7 @@ class ExportPlan:
     volume_plans: tuple[ExportVolumePlan, ...]
     volumes_total: int
     chapters_total: int
+    bundle: bool = False
 
 
 def prepare_export(
@@ -163,6 +168,7 @@ def prepare_export(
     scope: str,
     target_id: str | None = None,
     target: str = "epub",
+    bundle: bool = False,
     cwd: Path | None = None,
 ) -> ExportPlan:
     """Validate and plan an export for a novel, volume, or chapter.
@@ -172,7 +178,9 @@ def prepare_export(
         scope: ``"novel"``, ``"volume"``, or ``"chapter"``.
         target_id: Volume id (``volume`` scope) or chapter id (``chapter`` scope).
             Ignored for ``novel``.
-        target: Output format. Only ``"epub"`` is implemented in this stage.
+        target: Output format (``epub`` | ``txt`` | ``html`` | ``docx``).
+        bundle: When True, after rendering, package the per-volume artifacts into a
+            single ``output/<target>/bundle-<target>.zip``.
         cwd: Working directory used to resolve project-relative paths.
 
     Returns:
@@ -243,6 +251,7 @@ def prepare_export(
         volume_plans=volume_plans,
         volumes_total=len(volume_plans),
         chapters_total=chapters_total,
+        bundle=bundle,
     )
 
 
@@ -300,6 +309,15 @@ def run_export(
                     )
                 )
 
+    # Optional ZIP bundle of the per-volume artifacts. Skipped on cancel (partial
+    # set) and when nothing was written.
+    bundle_path: Path | None = None
+    if plan.bundle and artifacts and not cancelled:
+        bundle_path = write_export_bundle(
+            output_path=plan.output_dir / plan.target / bundle_filename(plan.target),
+            artifact_paths=[artifact.output_path for artifact in artifacts],
+        )
+
     return ExportResult(
         target=plan.target,
         scope=plan.scope,
@@ -313,15 +331,26 @@ def run_export(
         fallback_segments=fallback_segments,
         generated_at=datetime.now(UTC).isoformat(),
         cancelled=cancelled,
+        bundle_path=bundle_path,
     )
 
 
 def export_novel(
-    project_toml: Path, *, target: str = "epub", cwd: Path | None = None
+    project_toml: Path,
+    *,
+    target: str = "epub",
+    bundle: bool = False,
+    cwd: Path | None = None,
 ) -> ExportResult:
-    """Export every volume of the novel to its own EPUB (one artifact per volume)."""
+    """Export every volume of the novel to its own artifact (one per volume).
 
-    return run_export(prepare_export(project_toml, scope="novel", target=target, cwd=cwd))
+    When ``bundle`` is True, the per-volume artifacts are also packaged into a
+    single ``output/<target>/bundle-<target>.zip``.
+    """
+
+    return run_export(
+        prepare_export(project_toml, scope="novel", target=target, bundle=bundle, cwd=cwd)
+    )
 
 
 def export_volume(
@@ -471,6 +500,13 @@ def _render_volume(
         render_txt(
             output_path=plan.output_path,
             title=plan.volume_title,
+            chapters=_resolved_chapters(connection, plan, publishable=publishable),
+        )
+    elif target == "docx":
+        render_docx(
+            output_path=plan.output_path,
+            title=plan.volume_title,
+            language=project.target_lang,
             chapters=_resolved_chapters(connection, plan, publishable=publishable),
         )
     else:  # html

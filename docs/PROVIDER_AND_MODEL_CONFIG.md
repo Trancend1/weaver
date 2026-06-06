@@ -41,6 +41,14 @@ editor           = "code -w"
 
 **Precedence (highest → lowest):** CLI flag › env var (`WEAVER_DEFAULT_PROVIDER` / `WEAVER_DEFAULT_MODEL` / `WEAVER_OUTPUT_DIR`) › `project.toml` › `~/.weaver/config.toml` › built-in default.
 
+## Config validation & error reporting
+
+Numeric `[provider]` settings are validated when the provider is built (`providers/config_values.py`), so a typo gives a clear `ConfigError` (*what failed / likely cause / next command*) instead of a raw `ValueError`:
+
+- `temperature` — number ≥ 0; `timeout_seconds` — number > 0; `top_p` (ollama) — number 0.0–1.0; `fail_rate` (fake) — number 0.0–1.0; `seed` (fake) — integer.
+
+Runtime failures map to the `ProviderError` hierarchy with actionable messages: **missing API key** → set `$ENV` or `weaver secrets set`; **invalid model** (`[provider] model` misspelled/unavailable) → checked against the provider's models; **auth failure / unreachable / rate limit / timeout** → distinct messages. `healthcheck()` never raises — it returns `ProviderStatus(healthy=False, message=…)`. **API key values never appear in any error, log, or status message** (only env-var *names* are shown).
+
 ## API keys & the secret store
 
 Keys come from **environment variables** or the dedicated **local secret store** `~/.weaver/secrets.toml` (mode `0o600`, outside any repo). A shell env var always wins over the stored value. Keys are **never** written to `project.toml` / `~/.weaver/config.toml`, never logged, never rendered.

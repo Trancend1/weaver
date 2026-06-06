@@ -12,6 +12,7 @@ from typing import Any
 
 from weaver.errors import ConfigError
 from weaver.providers.base import LLMProvider
+from weaver.providers.config_values import read_float, read_int
 from weaver.providers.deepseek import DeepSeekConfig, DeepSeekProvider
 from weaver.providers.fake import FakeProvider
 from weaver.providers.gemini import GeminiConfig, GeminiProvider
@@ -71,8 +72,8 @@ def build_provider(config: Mapping[str, Any]) -> LLMProvider:
 def _build_fake(config: Mapping[str, Any]) -> LLMProvider:
     model = str(config.get("model", "fake-1"))
     pattern = str(config.get("pattern", "[FAKE] {source}"))
-    fail_rate = float(config.get("fail_rate", 0.0))
-    seed = int(config.get("seed", 0))
+    fail_rate = read_float(config, "fail_rate", 0.0, minimum=0.0, maximum=1.0)
+    seed = read_int(config, "seed", 0)
     return FakeProvider(pattern=pattern, fail_rate=fail_rate, seed=seed, model=model)
 
 
@@ -81,8 +82,10 @@ def _build_deepseek(config: Mapping[str, Any]) -> LLMProvider:
         config=DeepSeekConfig(
             model=str(config.get("model", DeepSeekConfig.model)),
             base_url=str(config.get("base_url", DeepSeekConfig.base_url)),
-            temperature=float(config.get("temperature", DeepSeekConfig.temperature)),
-            timeout_seconds=float(config.get("timeout_seconds", DeepSeekConfig.timeout_seconds)),
+            temperature=read_float(config, "temperature", DeepSeekConfig.temperature, minimum=0.0),
+            timeout_seconds=read_float(
+                config, "timeout_seconds", DeepSeekConfig.timeout_seconds, exclusive_minimum=0.0
+            ),
         )
     )
 
@@ -91,8 +94,10 @@ def _build_gemini(config: Mapping[str, Any]) -> LLMProvider:
     return GeminiProvider(
         config=GeminiConfig(
             model=str(config.get("model", GeminiConfig.model)),
-            temperature=float(config.get("temperature", GeminiConfig.temperature)),
-            timeout_seconds=float(config.get("timeout_seconds", GeminiConfig.timeout_seconds)),
+            temperature=read_float(config, "temperature", GeminiConfig.temperature, minimum=0.0),
+            timeout_seconds=read_float(
+                config, "timeout_seconds", GeminiConfig.timeout_seconds, exclusive_minimum=0.0
+            ),
         )
     )
 
@@ -102,9 +107,11 @@ def _build_ollama(config: Mapping[str, Any]) -> LLMProvider:
         config=OllamaConfig(
             model=str(config.get("model", OllamaConfig.model)),
             base_url=str(config.get("base_url", OllamaConfig.base_url)),
-            temperature=float(config.get("temperature", OllamaConfig.temperature)),
-            top_p=float(config.get("top_p", OllamaConfig.top_p)),
-            timeout_seconds=float(config.get("timeout_seconds", OllamaConfig.timeout_seconds)),
+            temperature=read_float(config, "temperature", OllamaConfig.temperature, minimum=0.0),
+            top_p=read_float(config, "top_p", OllamaConfig.top_p, minimum=0.0, maximum=1.0),
+            timeout_seconds=read_float(
+                config, "timeout_seconds", OllamaConfig.timeout_seconds, exclusive_minimum=0.0
+            ),
         )
     )
 
@@ -142,8 +149,10 @@ def _build_custom(config: Mapping[str, Any]) -> LLMProvider:
         config=DeepSeekConfig(
             model=model,
             base_url=base_url,
-            temperature=float(config.get("temperature", DeepSeekConfig.temperature)),
-            timeout_seconds=float(config.get("timeout_seconds", DeepSeekConfig.timeout_seconds)),
+            temperature=read_float(config, "temperature", DeepSeekConfig.temperature, minimum=0.0),
+            timeout_seconds=read_float(
+                config, "timeout_seconds", DeepSeekConfig.timeout_seconds, exclusive_minimum=0.0
+            ),
             api_key_env=api_key_env,
             name="custom",
         )

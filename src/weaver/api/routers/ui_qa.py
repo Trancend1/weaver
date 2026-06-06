@@ -151,7 +151,9 @@ def _render(
 
 
 @router.get("/ui/projects/{name}/export/preflight", response_class=HTMLResponse)
-def export_preflight(name: str, request: Request, target: str = Query("epub")) -> HTMLResponse:
+def export_preflight(
+    name: str, request: Request, target: str = Query("epub"), bundle: bool = Query(False)
+) -> HTMLResponse:
     """Advisory pre-export QA summary (Stage B5).
 
     Export is **never** blocked: the panel always offers an "Export anyway" action
@@ -177,6 +179,7 @@ def export_preflight(name: str, request: Request, target: str = Query("epub")) -
         {
             "name": name,
             "target": target,
+            "bundle": bundle,
             "report": report,
             "qa_error": qa_error,
             "advisories": _advisories(report) if report is not None else None,
@@ -184,6 +187,40 @@ def export_preflight(name: str, request: Request, target: str = Query("epub")) -
             "badge_label": _BADGE_LABEL[report.badge] if report is not None else "",
         },
     )
+
+
+@router.get("/ui/projects/{name}/qa/tree-badges", response_class=HTMLResponse)
+def qa_tree_badges(name: str, request: Request) -> HTMLResponse:
+    """Lazy, explicit QA badges for the project tree (Phase D).
+
+    Runs the novel QA report **once per click** and returns out-of-band badge
+    spans that HTMX injects into the per-volume/per-chapter slots rendered by
+    ``_tree.html``. The project tree itself never runs QA on render (Gate B1), so
+    the page stays cheap; badges are opt-in via the "Load QA badges" button.
+    """
+    base = _base_dir(request)
+    context: dict[str, object] = {
+        "report": None,
+        "volumes": (),
+        "chapters": (),
+        "message": None,
+        "badge_class": _BADGE_CLASS,
+        "badge_label": _BADGE_LABEL,
+    }
+    dp = find_project(base, name)
+    if dp is None:
+        context["message"] = f"No project named {name!r}."
+    elif dp.error:
+        context["message"] = dp.error
+    else:
+        try:
+            report = analyze_novel(dp.project_toml, cwd=base)
+            context["report"] = report
+            context["volumes"] = report.summary_by_volume
+            context["chapters"] = report.summary_by_chapter
+        except WeaverError as exc:
+            context["message"] = f"QA unavailable: {exc}"
+    return templates.TemplateResponse(request, "partials/_qa_tree_badges.html", context)
 
 
 def _advisories(report: QAReport) -> dict[str, int]:

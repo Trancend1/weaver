@@ -629,10 +629,14 @@ class BatchJobStatusResponse(BaseModel):
 class ExportRequest(BaseModel):
     """Request to start a background export.
 
-    ``target`` defaults to ``epub`` (the only implemented target). The body is
-    optional; an empty POST uses the default."""
+    ``target`` defaults to ``epub``; supported targets are ``epub``, ``txt``,
+    ``html``, and ``docx`` (validated by the export service, not here). When
+    ``bundle`` is True, the per-volume artifacts are also packaged into a single
+    ``output/<target>/bundle-<target>.zip``. The body is optional; an empty POST
+    uses the defaults."""
 
     target: str = "epub"
+    bundle: bool = False
 
 
 class ExportJobResponse(BaseModel):
@@ -697,6 +701,7 @@ class ExportJobResultResponse(BaseModel):
     fallback_segments: int
     generated_at: str
     cancelled: bool
+    bundle_path: str | None = None
     artifacts: list[ExportArtifactResponse]
 
 

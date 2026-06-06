@@ -112,6 +112,17 @@ def test_gemini_translate_maps_unknown_error_to_response_error() -> None:
         provider.translate(_request())
 
 
+def test_gemini_maps_model_not_found_to_clear_error() -> None:
+    class NotFound(Exception):
+        pass
+
+    model = _StubModel([NotFound("models/wrong is not found")])
+    provider = GeminiProvider(client=model)
+
+    with pytest.raises(ProviderResponseError, match="model not found"):
+        provider.translate(_request())
+
+
 def test_gemini_healthcheck_returns_healthy_status() -> None:
     model = _StubModel([_gemini_response('{"translation": "ok"}')])
     provider = GeminiProvider(client=model)

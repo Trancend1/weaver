@@ -27,5 +27,8 @@
   {% else %}
   <p class="empty hint">No artifacts (nothing to export).</p>
   {% endif %}
+  {% if job.result.bundle_path %}
+  <p class="meta">Bundle: <code>{{ job.result.bundle_path }}</code></p>
+  {% endif %}
   {% endif %}
 </div>

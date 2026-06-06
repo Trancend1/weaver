@@ -220,6 +220,12 @@ def _translate_openai_error(exc: BaseException) -> Exception:
             f"Likely cause: invalid or revoked ${ENV_API_KEY}. "
             f"Next command: regenerate the DeepSeek API key and update ${ENV_API_KEY}."
         )
+    if name in {"NotFoundError", "NotFound"}:
+        return ProviderResponseError(
+            f"DeepSeek model not found: {message}. "
+            "Likely cause: `[provider] model` is misspelled or unavailable to this key/endpoint. "
+            "Next command: check `[provider] model` in project.toml against the provider's models."
+        )
     if name in {"APIConnectionError", "ConnectionError"}:
         return ProviderUnavailable(
             f"DeepSeek unreachable: {message}. "

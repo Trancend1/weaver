@@ -401,11 +401,17 @@ def _render_export_job(request: Request, name: str, job_id: str) -> HTMLResponse
 
 
 @router.post("/ui/projects/{name}/export", response_class=HTMLResponse)
-def ui_export(name: str, request: Request, target: str = Form("epub")) -> HTMLResponse:
+def ui_export(
+    name: str, request: Request, target: str = Form("epub"), bundle: bool = Form(False)
+) -> HTMLResponse:
     """Start a novel-scope export job for the chosen target (HTMX panel)."""
     try:
         started = _start_export(
-            request, name, scope="novel", target_id=None, body=ExportRequest(target=target)
+            request,
+            name,
+            scope="novel",
+            target_id=None,
+            body=ExportRequest(target=target, bundle=bundle),
         )
     except HTTPException as exc:
         return _job_error(request, str(exc.detail), panel_id="export-panel")

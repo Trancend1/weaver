@@ -9,6 +9,7 @@ collision-safe filenames.
 
 from __future__ import annotations
 
+import zipfile
 from contextlib import closing
 from pathlib import Path
 
@@ -525,7 +526,7 @@ def test_prepare_unknown_scope_raises(tmp_path: Path) -> None:
 def test_prepare_unsupported_target_raises(tmp_path: Path) -> None:
     project_toml = _seed_minimal(tmp_path)
     with pytest.raises(ValueError):
-        prepare_export(project_toml, scope="novel", target="docx")
+        prepare_export(project_toml, scope="novel", target="pdf")
 
 
 def test_prepare_missing_target_id_raises(tmp_path: Path) -> None:
@@ -649,3 +650,213 @@ def test_export_txt_does_not_reread_epub_source(tmp_path: Path, monkeypatch) -> 
     result = export_novel(project_toml, target="txt")
     assert result.artifacts[0].output_path.suffix == ".txt"
     assert result.artifacts[0].output_path.exists()
+
+
+# --------------------------------------------------------------------------- #
+# DOCX output target (Phase D)
+# --------------------------------------------------------------------------- #
+
+
+def _docx_document_xml(path: Path) -> str:
+    with zipfile.ZipFile(path) as archive:
+        return archive.read("word/document.xml").decode("utf-8")
+
+
+def test_export_docx_target_novel(tmp_path: Path) -> None:
+    project_toml, db_path = _init(tmp_path)
+    with closing(initialize_database(db_path)) as conn, transaction(conn):
+        project_id = create_project(
+            conn, name="demo", source_path="x", source_lang="ja", target_lang="en"
+        )
+        _add_synth_volume(
+            conn,
+            project_id=project_id,
+            title="My Volume",
+            source_format="txt",
+            source_path="x.txt",
+            chapters=[
+                (
+                    "c1",
+                    0,
+                    [
+                        ("h", "heading", "章タイトル", "manual", "MANUAL HEADING"),
+                        ("p1", "paragraph", "本文1", "translated", "EN BODY"),
+                        ("p2", "paragraph", "本文2", "pending", None),
+                    ],
+                )
+            ],
+        )
+
+    result = export_novel(project_toml, target="docx")
+    assert result.target == "docx"
+    artifact = result.artifacts[0]
+    assert artifact.output_path.suffix == ".docx"
+    assert artifact.output_path.exists()
+    assert zipfile.is_zipfile(artifact.output_path)
+    assert artifact.translated_segments == 2  # manual + translated
+    assert artifact.fallback_segments == 1  # pending → source fallback
+
+    document = _docx_document_xml(artifact.output_path)
+    assert "My Volume" in document  # document title
+    assert "MANUAL HEADING" in document  # manual edit preserved
+    assert "EN BODY" in document  # latest translation
+    assert "本文2" in document  # untranslated → source fallback
+    assert '<w:pStyle w:val="Heading1"/>' in document  # heading block → Heading1
+
+
+def test_export_docx_one_artifact_per_volume(tmp_path: Path) -> None:
+    project_toml, db_path = _init(tmp_path)
+    with closing(initialize_database(db_path)) as conn, transaction(conn):
+        project_id = create_project(
+            conn, name="demo", source_path="x", source_lang="ja", target_lang="en"
+        )
+        for vol in ("A", "B"):
+            _add_synth_volume(
+                conn,
+                project_id=project_id,
+                title=f"Vol {vol}",
+                source_format="txt",
+                source_path=f"{vol}.txt",
+                chapters=[(f"c{vol}", 0, [("p1", "paragraph", "本文", "translated", "EN")])],
+            )
+
+    result = export_novel(project_toml, target="docx")
+    assert result.volumes_exported == 2
+    assert len(result.artifacts) == 2
+    suffixes = {a.output_path.suffix for a in result.artifacts}
+    assert suffixes == {".docx"}
+    assert all(a.output_path.exists() for a in result.artifacts)
+
+
+def test_export_docx_volume_and_chapter_scope(tmp_path: Path) -> None:
+    project_toml = _seed_minimal(tmp_path)  # txt volume id=1, chapters c1/c2
+
+    vol_result = export_volume(project_toml, 1, target="docx")
+    assert vol_result.target == "docx"
+    vol_artifact = vol_result.artifacts[0]
+    assert vol_artifact.output_path.name.startswith("volume-")
+    assert vol_artifact.output_path.suffix == ".docx"
+    assert vol_artifact.output_path.exists()
+
+    ch_result = export_chapter(project_toml, "c2", target="docx")
+    assert ch_result.target == "docx"
+    assert ch_result.chapters_exported == 1
+    ch_artifact = ch_result.artifacts[0]
+    assert ch_artifact.output_path.name.startswith("chapter-")
+    assert ch_artifact.output_path.suffix == ".docx"
+    assert ch_artifact.output_path.exists()
+
+
+def test_export_docx_writes_no_translation_rows(tmp_path: Path) -> None:
+    project_toml, db_path = _init(tmp_path)
+    with closing(initialize_database(db_path)) as conn, transaction(conn):
+        project_id = create_project(
+            conn, name="demo", source_path="x", source_lang="ja", target_lang="en"
+        )
+        _add_synth_volume(
+            conn,
+            project_id=project_id,
+            title="TXT",
+            source_format="txt",
+            source_path="x.txt",
+            chapters=[
+                (
+                    "c1",
+                    0,
+                    [
+                        ("p1", "paragraph", "本文1", "translated", "EN1"),
+                        ("p2", "paragraph", "本文2", "pending", None),
+                    ],
+                )
+            ],
+        )
+
+    before = _count_translations(db_path)
+    export_novel(project_toml, target="docx")
+    assert _count_translations(db_path) == before
+
+
+def test_export_docx_does_not_reread_epub_source(tmp_path: Path, monkeypatch) -> None:
+    # An EPUB-source volume exported to DOCX must build from the DB, never re-read
+    # the source EPUB (DOCX has no write-back path).
+    project_toml, db_path = _init(tmp_path)
+    with closing(initialize_database(db_path)) as conn, transaction(conn):
+        project_id = create_project(
+            conn, name="demo", source_path=str(FIXTURE_EPUB), source_lang="ja", target_lang="en"
+        )
+        _add_epub_volume(conn, project_id=project_id, translate_first_n=1)
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("source EPUB was re-read during a DOCX export")
+
+    monkeypatch.setattr("weaver.services.export_book.read_epub", _boom)
+    result = export_novel(project_toml, target="docx")
+    assert result.artifacts[0].output_path.suffix == ".docx"
+    assert result.artifacts[0].output_path.exists()
+
+
+# --------------------------------------------------------------------------- #
+# Combined ZIP bundle (Phase D)
+# --------------------------------------------------------------------------- #
+
+
+def _seed_two_volume_novel(tmp_path: Path) -> Path:
+    project_toml, db_path = _init(tmp_path)
+    with closing(initialize_database(db_path)) as conn, transaction(conn):
+        project_id = create_project(
+            conn, name="demo", source_path="x", source_lang="ja", target_lang="en"
+        )
+        for vol in ("A", "B"):
+            _add_synth_volume(
+                conn,
+                project_id=project_id,
+                title=f"Vol {vol}",
+                source_format="txt",
+                source_path=f"{vol}.txt",
+                chapters=[(f"c{vol}", 0, [("p1", "paragraph", "本文", "translated", "EN")])],
+            )
+    return project_toml
+
+
+def test_export_novel_bundle_zips_per_volume_artifacts(tmp_path: Path) -> None:
+    project_toml = _seed_two_volume_novel(tmp_path)
+
+    result = export_novel(project_toml, target="docx", bundle=True)
+
+    assert result.bundle_path is not None
+    assert result.bundle_path.exists()
+    assert result.bundle_path.name == "bundle-docx.zip"
+    # the per-volume artifacts still exist individually
+    assert len(result.artifacts) == 2
+    assert all(a.output_path.exists() for a in result.artifacts)
+    # the ZIP contains exactly the per-volume artifacts, stored by basename
+    with zipfile.ZipFile(result.bundle_path) as archive:
+        names = sorted(archive.namelist())
+    assert names == sorted(a.output_path.name for a in result.artifacts)
+    assert all(name.endswith(".docx") for name in names)
+
+
+def test_export_bundle_works_for_txt_target(tmp_path: Path) -> None:
+    project_toml = _seed_two_volume_novel(tmp_path)
+    result = export_novel(project_toml, target="txt", bundle=True)
+    assert result.bundle_path is not None
+    assert result.bundle_path.name == "bundle-txt.zip"
+    with zipfile.ZipFile(result.bundle_path) as archive:
+        assert all(name.endswith(".txt") for name in archive.namelist())
+
+
+def test_export_without_bundle_has_no_bundle_path(tmp_path: Path) -> None:
+    project_toml = _seed_two_volume_novel(tmp_path)
+    result = export_novel(project_toml, target="txt")
+    assert result.bundle_path is None
+
+
+def test_bundle_skipped_when_no_artifacts(tmp_path: Path) -> None:
+    project_toml, db_path = _init(tmp_path)
+    with closing(initialize_database(db_path)) as conn, transaction(conn):
+        create_project(conn, name="demo", source_path="x", source_lang="ja", target_lang="en")
+
+    result = export_novel(project_toml, target="txt", bundle=True)
+
+    assert result.artifacts == ()
+    assert result.bundle_path is None

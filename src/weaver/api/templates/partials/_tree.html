@@ -5,6 +5,7 @@
     <li class="vol">
       <div class="vol-head">
         <span class="vol-title">{{ v.title }}</span>
+        <span class="qa-badge-slot" id="qa-badge-vol-{{ v.id }}"></span>
         <span class="meta">{{ v.source_format }} · {{ v.chapter_count }} ch ·
           {{ v.chapters | sum(attribute="done_count") }}/{{ v.segment_count }} seg done</span>
       </div>
@@ -13,6 +14,7 @@
         {% for c in v.chapters %}
         <li class="chapter">
           <a class="ch-title" href="/ui/projects/{{ tree.project_name }}/chapters/{{ c.id }}">{{ c.title }}</a>
+          <span class="qa-badge-slot" id="qa-badge-ch-{{ c.id }}"></span>
           <span class="ch-progress meta">
             <progress value="{{ c.done_count }}" max="{{ c.segment_count or 1 }}"
               title="{{ c.done_count }} of {{ c.segment_count }} segments done"></progress>

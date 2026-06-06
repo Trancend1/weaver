@@ -12,12 +12,18 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from weaver.qa.checks import PUBLISHED_STATUSES, QAWarning, SegmentInput, Severity
+from weaver.qa.thresholds import (
+    DEFAULT_FALLBACK_HEAVY_MIN_SEGMENTS,
+    DEFAULT_FALLBACK_HEAVY_RATIO,
+    DEFAULT_REPEATED_MIN_CHARS,
+)
 
-# Thresholds are module-level constants (ADR 008): not `[qa]`-configurable in
-# Phase B. A config surface can be added later if users need it.
-FALLBACK_HEAVY_RATIO = 0.5
-FALLBACK_HEAVY_MIN_SEGMENTS = 5
-REPEATED_MIN_CHARS = 8
+# Default thresholds (reproduce Phase B behavior). Per-project overrides arrive
+# via the `[qa]` table (Phase D); see :mod:`weaver.qa.thresholds`. These aliases
+# are the function-parameter defaults and stay importable for existing callers.
+FALLBACK_HEAVY_RATIO = DEFAULT_FALLBACK_HEAVY_RATIO
+FALLBACK_HEAVY_MIN_SEGMENTS = DEFAULT_FALLBACK_HEAVY_MIN_SEGMENTS
+REPEATED_MIN_CHARS = DEFAULT_REPEATED_MIN_CHARS
 
 
 @dataclass(frozen=True)
@@ -29,13 +35,15 @@ class ScopeWarning:
     message: str
 
 
-def check_repeated_identical_translation(segments: Sequence[SegmentInput]) -> list[QAWarning]:
+def check_repeated_identical_translation(
+    segments: Sequence[SegmentInput], *, min_chars: int = REPEATED_MIN_CHARS
+) -> list[QAWarning]:
     """Flag segments that share an identical published translation while their
     sources differ.
 
     Short interjections (e.g. "Yes.") legitimately repeat, so translations
-    shorter than :data:`REPEATED_MIN_CHARS` are ignored. A group is flagged only
-    when it contains at least two *distinct* source texts.
+    shorter than ``min_chars`` are ignored. A group is flagged only when it
+    contains at least two *distinct* source texts.
     """
 
     groups: dict[str, list[SegmentInput]] = {}
@@ -46,7 +54,7 @@ def check_repeated_identical_translation(segments: Sequence[SegmentInput]) -> li
         if text is None:
             continue
         stripped = text.strip()
-        if len(stripped) < REPEATED_MIN_CHARS:
+        if len(stripped) < min_chars:
             continue
         groups.setdefault(stripped, []).append(seg)
 
@@ -71,17 +79,25 @@ def check_repeated_identical_translation(segments: Sequence[SegmentInput]) -> li
     return findings
 
 
-def check_fallback_heavy(*, total_segments: int, fallback_segments: int) -> ScopeWarning | None:
+def check_fallback_heavy(
+    *,
+    total_segments: int,
+    fallback_segments: int,
+    heavy_ratio: float = FALLBACK_HEAVY_RATIO,
+    min_segments: int = FALLBACK_HEAVY_MIN_SEGMENTS,
+) -> ScopeWarning | None:
     """Flag a chapter where most segments would export as source fallback.
 
     ``fallback_segments`` is the count of segments with no publishable
     translation (export's own rule, via ``list_export_segment_states``).
+    ``heavy_ratio`` / ``min_segments`` default to the Phase B constants and are
+    overridden per project via the ``[qa]`` config.
     """
 
-    if total_segments < FALLBACK_HEAVY_MIN_SEGMENTS:
+    if total_segments < min_segments:
         return None
     ratio = fallback_segments / total_segments
-    if ratio < FALLBACK_HEAVY_RATIO:
+    if ratio < heavy_ratio:
         return None
     return ScopeWarning(
         check_name="fallback_heavy_chapter",

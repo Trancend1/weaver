@@ -86,6 +86,24 @@ def test_fallback_heavy_below_min_segments_is_clean() -> None:
     assert check_fallback_heavy(total_segments=n, fallback_segments=n) is None
 
 
+def test_repeated_honors_custom_min_chars() -> None:
+    # "Yes." is 4 chars — ignored at the default 8, flagged when min_chars drops.
+    segments = [
+        _seg("a", source="ア", translation="Yes."),
+        _seg("b", source="イ", translation="Yes."),
+    ]
+    assert check_repeated_identical_translation(segments, min_chars=3) != []
+    assert check_repeated_identical_translation(segments, min_chars=8) == []
+
+
+def test_fallback_heavy_honors_custom_thresholds() -> None:
+    # 3/3 = 100% fallback: clean at the default min_segments=5, flagged at min_segments=1.
+    assert check_fallback_heavy(total_segments=3, fallback_segments=3, min_segments=1) is not None
+    assert check_fallback_heavy(total_segments=3, fallback_segments=3) is None
+    # A stricter ratio suppresses a borderline chapter.
+    assert check_fallback_heavy(total_segments=10, fallback_segments=6, heavy_ratio=0.7) is None
+
+
 def test_mixed_status_flags_partial_chapter() -> None:
     warning = check_mixed_status([_seg("a", status="translated"), _seg("b", status="pending")])
     assert warning is not None

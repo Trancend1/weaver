@@ -4,6 +4,60 @@ All notable changes to Weaver are recorded here. Format follows [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+
+- **DOCX export target** (Phase D) — the volume-aware cockpit exporter now supports
+  `target="docx"` alongside EPUB/TXT/HTML. One `.docx` per volume under
+  `output/docx/`, started/polled/cancelled through the same export job flow
+  (`POST /projects/{name}/export/{novel|volumes/{id}|chapters/{id}}`, SSE/status
+  unchanged) and selectable from the cockpit export dropdown.
+  - New pure renderer `renderers/docx.py` (`render_docx`) — a **custom minimal
+    OOXML (WordprocessingML) writer**. **No `python-docx`, no new dependency**
+    (`weaver[web]` is sufficient); DOCX is always **synthesized** from the
+    persisted chapter/segment content like TXT/HTML — there is **no write-back
+    path**, so the source file is never re-read.
+  - Same publishable rule as the other targets: latest `translated`/`manual`
+    translation when the attempt's `source_hash` matches, else source fallback;
+    manual edits preserved; translation history never exported; read-only (writes
+    no translations, calls no provider).
+  - Formatting baseline: document title, `Heading1` chapter headings, normal
+    paragraphs, built-in `Quote` style for blockquotes, and a page break before
+    chapters 2..N. No images, footnotes, advanced styling, or merged-omnibus DOCX.
+- **Configurable QA thresholds** (Phase D) — the deterministic scope-level QA
+  checks now read optional overrides from the existing `[qa]` table in
+  `project.toml`: `fallback_heavy_ratio` (0.0–1.0), `min_segments` (≥1), and
+  `repeated_min_chars` (≥1). Absent keys keep the Phase B defaults (`0.5` / `5` /
+  `8`), so existing projects are unchanged. Values are validated (wrong type or
+  out-of-range → `ConfigError`); foreign `[qa]` keys (the per-segment flags) are
+  ignored. The same thresholds apply across the CLI/API/UI QA paths
+  (`services/translation_qa.py`). New module `qa/thresholds.py`.
+- **Combined ZIP bundle export** (Phase D) — an optional `bundle` flag packages a
+  novel export's per-volume artifacts into one `output/<target>/bundle-<target>.zip`
+  (any target, incl. DOCX). Off by default; the per-volume files are still written.
+  Exposed as `ExportRequest.bundle` (API) and a "Bundle all volumes into one ZIP"
+  checkbox in the cockpit export form; `ExportResult`/the job result now carry
+  `bundle_path`. The bundle is skipped on cancel or when nothing was exported. New
+  module `services/export_bundle.py`. (A *merged-omnibus* single EPUB is not built —
+  a ZIP of per-volume files is the chosen, safe form.)
+- **Opt-in QA tree badges** (Phase D) — the project tree can now show per-volume and
+  per-chapter QA badges without ever running QA on page render. A "Load QA badges"
+  button GETs `/ui/projects/{name}/qa/tree-badges`, which runs the novel QA **once**
+  and returns out-of-band (`hx-swap-oob`) badge spans HTMX injects into the tree
+  slots. The tree render stays cheap (Gate B1 preserved); badges are explicit.
+- **Provider config hardening** (Phase D) — numeric `[provider]` settings are now
+  validated when the provider is built (new `providers/config_values.py`): a bad
+  `temperature` / `timeout_seconds` / `top_p` / `fail_rate` / `seed` (wrong type or
+  out of range) raises a clear `ConfigError` instead of a raw `ValueError`. Runtime
+  errors gained an **invalid-model** case for DeepSeek/custom and Gemini (misspelled
+  or unavailable `[provider] model` → actionable message). No provider behavior
+  change beyond validation/error mapping; **API key values never leak** into errors,
+  logs, or status messages (a regression test guards this).
+
+### Changed
+
+- EPUB/TXT/HTML export behavior is unchanged. The export `target` validation set
+  now includes `docx`; an unsupported `target` (e.g. `pdf`) still returns `422`.
+
 ## [0.7.0] - 2026-06-05
 
 This release promotes the `v0.7.0-rc.1` release candidate to stable. It consolidates the

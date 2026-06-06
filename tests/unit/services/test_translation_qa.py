@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from weaver.errors import ChapterNotFoundError, VolumeNotFoundError
+from weaver.errors import ChapterNotFoundError, ConfigError, VolumeNotFoundError
 from weaver.services.project import initialize_project
 from weaver.services.translation_qa import analyze_chapter, analyze_novel, analyze_volume
 from weaver.storage.characters import upsert_character
@@ -177,6 +177,36 @@ def test_unknown_chapter_and_volume_raise(tmp_path) -> None:
         analyze_chapter(seeded.project_toml, "no-such-chapter", cwd=tmp_path)
     with pytest.raises(VolumeNotFoundError):
         analyze_volume(seeded.project_toml, 999_999, cwd=tmp_path)
+
+
+def _set_qa_key(project_toml: Path, line: str) -> None:
+    # The generated project.toml already has a `[qa]` table (per-segment flags);
+    # insert the new key under that header rather than declaring `[qa]` twice.
+    text = project_toml.read_text(encoding="utf-8")
+    marker = "[qa]\n"
+    index = text.index(marker) + len(marker)
+    project_toml.write_text(text[:index] + line + "\n" + text[index:], encoding="utf-8")
+
+
+def test_qa_config_threshold_changes_report(tmp_path) -> None:
+    # The seeded chapter is fallback-heavy by default (>=50% of its segments have
+    # no publishable translation), so `fallback_heavy_chapter` fires.
+    seeded = _seed_project(tmp_path)
+    default = analyze_novel(seeded.project_toml, cwd=tmp_path)
+    assert "fallback_heavy_chapter" in {issue.rule for issue in default.issues}
+
+    # Raising the ratio past the chapter's fallback share suppresses that finding,
+    # proving the `[qa]` config threads through analyze_novel.
+    _set_qa_key(seeded.project_toml, "fallback_heavy_ratio = 0.95")
+    tuned = analyze_novel(seeded.project_toml, cwd=tmp_path)
+    assert "fallback_heavy_chapter" not in {issue.rule for issue in tuned.issues}
+
+
+def test_qa_invalid_config_raises_through_analyze(tmp_path) -> None:
+    seeded = _seed_project(tmp_path)
+    _set_qa_key(seeded.project_toml, "fallback_heavy_ratio = 2.0")
+    with pytest.raises(ConfigError, match="between 0.0 and 1.0"):
+        analyze_novel(seeded.project_toml, cwd=tmp_path)
 
 
 def test_qa_is_read_only(tmp_path) -> None:
