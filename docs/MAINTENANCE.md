@@ -27,7 +27,7 @@ uv run pyright
 - Acceptance gate: `uv run python bench/run_acceptance_gate.py` (AC-1..AC-9).
 
 ## MVP stabilization validation (Sprint 9 baseline)
-The exact gate run to lock the MVP baseline — see [MVP_STABILIZATION_REPORT.md](MVP_STABILIZATION_REPORT.md) for the full matrix.
+The exact gate run to lock the MVP baseline — the full matrix lives in git history.
 ```bash
 uv run pytest -q                  # 561 passed, 4 skipped (expected — see below)
 uv run pyright                    # 0 errors, 0 warnings

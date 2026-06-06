@@ -52,11 +52,40 @@ All notable changes to Weaver are recorded here. Format follows [Keep a Changelo
   or unavailable `[provider] model` → actionable message). No provider behavior
   change beyond validation/error mapping; **API key values never leak** into errors,
   logs, or status messages (a regression test guards this).
+- **Delete a project** (Phase E) — the project page has a "Delete project" action and
+  the CLI gains `weaver delete <project.toml> [--yes]`. Both call the new
+  `services/project.delete_project`, which removes the project's `.weaver/<name>`
+  directory (translations, history, glossary, exports) behind a path-safety guard;
+  the **original imported source file is never touched**. The web route returns an
+  `HX-Redirect` to the dashboard; the CLI confirms unless `--yes`.
 
 ### Changed
 
 - EPUB/TXT/HTML export behavior is unchanged. The export `target` validation set
   now includes `docx`; an unsupported `target` (e.g. `pdf`) still returns `422`.
+- **Cockpit design system & UI overhaul** (Phase E) — presentation-only refactor of
+  the server-rendered UI: a full CSS custom-property token layer in `app.css`
+  (`:root`), three URL-dispatched layout modes (`api/ui_context.py`: global /
+  project / workspace), a left-aligned topbar with brand mark + favicon (replacing
+  the floating right nav), a widened 264px sidebar with inline line icons
+  (`partials/_icons.html`), dashboard **project cards** and per-volume progress
+  cards (replacing the dense table), QA **stat tiles**, a segmented sub-nav, and a
+  standardized `_page_header` breadcrumb on every page including 404 / error. No
+  backend, schema, or HTMX-contract change; all DOM hooks preserved.
+- **Terminology** (Phase E) — user-facing "QA" wording is now "Quality" across the
+  cockpit (nav, report page, badges button, pre-export check, advisories). The `/qa`
+  routes and `qa-*` element IDs are unchanged.
+- **Docs** — the Cal.com design study (`DESIGN.md`) and hybrid-layout guide
+  (`DESIGN_GUIDE.md`) are distilled into a single concise `docs/DESIGN_NOTES.md`;
+  completed-phase plans (B, D) and point-in-time reports (RC1, MVP stabilization)
+  were retired to git history.
+
+### Fixed
+
+- **External browser launch** (Phase E) — `weaver serve` now opens the URL in the
+  OS-default browser instead of an editor's embedded "Simple Browser". The launcher
+  (`cli/open_browser.py`) temporarily clears an editor-injected `$BROWSER` so the
+  real default browser is used; the server still binds `127.0.0.1` only.
 
 ## [0.7.0] - 2026-06-05
 
