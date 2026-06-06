@@ -180,3 +180,30 @@ def test_deepseek_constructor_without_client_or_env_raises(monkeypatch) -> None:
 
     with pytest.raises(ProviderUnavailable):
         DeepSeekProvider(config=DeepSeekConfig())
+
+
+def test_deepseek_maps_model_not_found_to_clear_error() -> None:
+    class NotFoundError(Exception):
+        pass
+
+    completions = _StubChatCompletions([NotFoundError("model 'wrong-model' does not exist")])
+    provider = DeepSeekProvider(client=_StubClient(completions))
+
+    with pytest.raises(ProviderResponseError, match="model not found"):
+        provider.translate(_request())
+
+
+def test_deepseek_error_never_leaks_api_key() -> None:
+    class AuthenticationError(Exception):
+        pass
+
+    secret = "sk-SUPER-SECRET-DO-NOT-LEAK"
+    completions = _StubChatCompletions([AuthenticationError("invalid api key")])
+    provider = DeepSeekProvider(
+        config=DeepSeekConfig(), api_key=secret, client=_StubClient(completions)
+    )
+
+    status = provider.healthcheck()
+
+    assert status.healthy is False
+    assert secret not in (status.message or "")

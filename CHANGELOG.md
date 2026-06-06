@@ -44,6 +44,14 @@ All notable changes to Weaver are recorded here. Format follows [Keep a Changelo
   button GETs `/ui/projects/{name}/qa/tree-badges`, which runs the novel QA **once**
   and returns out-of-band (`hx-swap-oob`) badge spans HTMX injects into the tree
   slots. The tree render stays cheap (Gate B1 preserved); badges are explicit.
+- **Provider config hardening** (Phase D) — numeric `[provider]` settings are now
+  validated when the provider is built (new `providers/config_values.py`): a bad
+  `temperature` / `timeout_seconds` / `top_p` / `fail_rate` / `seed` (wrong type or
+  out of range) raises a clear `ConfigError` instead of a raw `ValueError`. Runtime
+  errors gained an **invalid-model** case for DeepSeek/custom and Gemini (misspelled
+  or unavailable `[provider] model` → actionable message). No provider behavior
+  change beyond validation/error mapping; **API key values never leak** into errors,
+  logs, or status messages (a regression test guards this).
 
 ### Changed
 
