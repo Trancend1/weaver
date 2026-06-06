@@ -1,12 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Error · Weaver{% endblock %}
 {% block content %}
-<section class="panel">
-  <p class="crumbs"><a href="/ui">Dashboard</a> / <span>error</span></p>
-  <div class="error">
-    <h1>Something went wrong</h1>
-    <p>{{ message }}</p>
-    <p><a href="/ui">← Back to dashboard</a></p>
+<section class="panel c-panel">
+  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label":"Error"}] %}
+  {% set page_title = "Something went wrong" %}
+  {% set page_meta = "The request couldn't be completed." %}
+  {% include "partials/_page_header.html" %}
+  <div class="empty empty-state">
+    <p class="error" role="alert">{{ message }}</p>
+    <p><a class="btn btn--primary" href="/ui">Back to dashboard</a></p>
   </div>
 </section>
 {% endblock %}

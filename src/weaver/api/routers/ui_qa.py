@@ -15,6 +15,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
 from weaver.api.templating import templates
+from weaver.api.ui_context import project_layout, workspace_layout
 from weaver.errors import ChapterNotFoundError, VolumeNotFoundError, WeaverError
 from weaver.qa.report import QAReport
 from weaver.services.project_discovery import find_project
@@ -50,7 +51,16 @@ def novel_qa_page(
         report = analyze_novel(dp.project_toml, cwd=base)
     except WeaverError as exc:
         return _error(request, str(exc))
-    return _render(request, name, report, severity, category, "Novel", f"/ui/projects/{name}/qa")
+    return _render(
+        request,
+        name,
+        report,
+        severity,
+        category,
+        "Novel",
+        f"/ui/projects/{name}/qa",
+        layout="project",
+    )
 
 
 @router.get("/ui/projects/{name}/volumes/{volume_id}/qa", response_class=HTMLResponse)
@@ -82,6 +92,7 @@ def volume_qa_page(
         category,
         f"Volume {volume_id}",
         f"/ui/projects/{name}/volumes/{volume_id}/qa",
+        layout="project",
     )
 
 
@@ -114,6 +125,8 @@ def chapter_qa_page(
         category,
         "Chapter",
         f"/ui/projects/{name}/chapters/{chapter_id}/qa",
+        layout="workspace",
+        active_chapter_id=chapter_id,
     )
 
 
@@ -125,16 +138,25 @@ def _render(
     category: str,
     scope_label: str,
     qa_url: str,
+    *,
+    layout: str,
+    active_chapter_id: str | None = None,
 ) -> HTMLResponse:
     issues = report.issues
     if severity in _SEVERITIES:
         issues = tuple(issue for issue in issues if issue.severity == severity)
     if category in _CATEGORIES:
         issues = tuple(issue for issue in issues if issue.category == category)
+    layout_ctx = (
+        workspace_layout(request, name, active_nav="qa", active_chapter_id=active_chapter_id)
+        if layout == "workspace"
+        else project_layout(request, name, active_nav="qa")
+    )
     return templates.TemplateResponse(
         request,
         "qa.html",
         {
+            **layout_ctx,
             "name": name,
             "report": report,
             "issues": issues,

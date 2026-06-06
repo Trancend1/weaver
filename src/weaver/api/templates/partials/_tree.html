@@ -1,13 +1,23 @@
-<div id="tree">
+<div id="tree" class="project-tree">
   {% if tree.volumes %}
   <ul class="tree">
     {% for v in tree.volumes %}
     <li class="vol">
+      {% set v_done = v.chapters | sum(attribute="done_count") %}
+      {% set v_pct = (100 * v_done / (v.segment_count or 1)) | round | int %}
       <div class="vol-head">
-        <span class="vol-title">{{ v.title }}</span>
-        <span class="qa-badge-slot" id="qa-badge-vol-{{ v.id }}"></span>
-        <span class="meta">{{ v.source_format }} · {{ v.chapter_count }} ch ·
-          {{ v.chapters | sum(attribute="done_count") }}/{{ v.segment_count }} seg done</span>
+        <div class="vol-head__title">
+          <span class="vol-title">{{ v.title }}</span>
+          <span class="qa-badge-slot" id="qa-badge-vol-{{ v.id }}"></span>
+        </div>
+        <div class="vol-head__meta">
+          <span class="meta">{{ v.source_format | upper }} · {{ v.chapter_count }} chapters</span>
+          <span class="vol-progress">
+            <progress value="{{ v_done }}" max="{{ v.segment_count or 1 }}"
+              title="{{ v_done }} of {{ v.segment_count }} segments translated"></progress>
+            <span class="meta">{{ v_done }}/{{ v.segment_count }} · {{ v_pct }}%</span>
+          </span>
+        </div>
       </div>
       {% if v.chapters %}
       <ul class="chapters">
@@ -15,7 +25,7 @@
         <li class="chapter">
           <a class="ch-title" href="/ui/projects/{{ tree.project_name }}/chapters/{{ c.id }}">{{ c.title }}</a>
           <span class="qa-badge-slot" id="qa-badge-ch-{{ c.id }}"></span>
-          <span class="ch-progress meta">
+          <span class="ch-progress meta progress-block">
             <progress value="{{ c.done_count }}" max="{{ c.segment_count or 1 }}"
               title="{{ c.done_count }} of {{ c.segment_count }} segments done"></progress>
             {{ c.done_count }}/{{ c.segment_count }}
@@ -24,13 +34,13 @@
         {% endfor %}
       </ul>
       {% else %}
-      <p class="empty hint">No chapters in this volume.</p>
+      <p class="empty hint empty-state">No chapters in this volume.</p>
       {% endif %}
     </li>
     {% endfor %}
   </ul>
   {% else %}
-  <div class="empty">
+  <div class="empty empty-state">
     <p>This project has no volumes yet.</p>
     <p class="hint">Import a source (TXT/EPUB/HTML) below.</p>
   </div>

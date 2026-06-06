@@ -1,0 +1,24 @@
+{#- Inline monochrome line icons (Lucide-style), stroke = currentColor.
+    No icon font, no SVG sprite build step — just server-rendered markup.
+    Usage: {% from "partials/_icons.html" import icon %} {{ icon("qa") }} -#}
+{% macro icon(name) -%}
+<svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none"
+     stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+     stroke-linejoin="round" aria-hidden="true" focusable="false">
+{%- if name == "brand" -%}
+<path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><path d="M16 8 2 22"/><path d="M17.5 15H9"/>
+{%- elif name == "project" -%}
+<path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/>
+{%- elif name == "qa" -%}
+<path d="M20 6 9 17l-5-5"/>
+{%- elif name == "glossary" -%}
+<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>
+{%- elif name == "characters" -%}
+<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+{%- elif name == "memory" -%}
+<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>
+{%- else -%}
+<circle cx="12" cy="12" r="9"/>
+{%- endif -%}
+</svg>
+{%- endmacro %}

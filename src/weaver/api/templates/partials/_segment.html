@@ -1,16 +1,16 @@
-<div class="ws-seg" id="seg-{{ seg.id }}">
-  <div class="ws-src">
+<div class="ws-seg segment-row" id="seg-{{ seg.id }}">
+  <div class="ws-src segment-cell segment-cell--source">
     <span class="seg-kind">{{ seg.kind }}</span>
     <p class="seg-source">{{ seg.source_text }}</p>
   </div>
-  <div class="ws-tx">
+  <div class="ws-tx segment-cell segment-cell--translation">
     <form hx-post="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}"
-          hx-target="#seg-{{ seg.id }}" hx-swap="outerHTML">
-      <textarea name="translated_text" rows="3" class="seg-input">{{ seg.translated_text or "" }}</textarea>
-      <div class="seg-bar">
+          hx-target="#seg-{{ seg.id }}" hx-swap="outerHTML" class="segment-form">
+      <textarea name="translated_text" rows="3" class="seg-input" aria-label="Translation for segment {{ seg.id }}">{{ seg.translated_text or "" }}</textarea>
+      <div class="seg-bar toolbar-row">
         <button type="submit">Save</button>
         {% set _badge = 'ok' if seg.status in ('manual', 'translated') else 'bad' if seg.status in ('failed', 'stale') else '' %}
-        <span class="badge {{ _badge }}">{{ seg.status }}</span>
+        <span class="badge c-badge {{ _badge }}">{{ seg.status }}</span>
         {% if saved %}<span class="saved-note" role="status">Saved ✓</span>{% endif %}
         {% if error %}<span class="error" role="alert">{{ error }}</span>{% endif %}
         <button type="button" class="link-btn"

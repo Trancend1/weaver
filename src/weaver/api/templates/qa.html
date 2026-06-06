@@ -1,22 +1,17 @@
 {% extends "base.html" %}
-{% block title %}QA · {{ report.project }} · Weaver{% endblock %}
+{% block title %}Quality · {{ report.project }} · Weaver{% endblock %}
 {% block content %}
-<section class="panel">
-  <p class="crumbs">
-    <a href="/ui">Dashboard</a> /
-    <a href="/ui/projects/{{ report.project }}">{{ report.project }}</a> /
-    <span>QA</span>
-  </p>
-  <h1>QA report — {{ scope_label }}</h1>
-  {% if report.scope == "chapter" %}
-  <p class="meta"><a href="/ui/projects/{{ name }}/chapters/{{ report.scope_id }}">← Back to workspace</a></p>
-  {% endif %}
+<section class="panel c-panel">
+  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ report.project, "label": report.project}, {"href": none, "label":"QA"}] %}
+  {% set page_title = "Quality report · " ~ scope_label %}
+  {% set page_meta %}{% if report.scope == "chapter" %}<a href="/ui/projects/{{ name }}/chapters/{{ report.scope_id }}">← Back to workspace</a>{% else %}Read-only checks run before export. Nothing here changes your translations.{% endif %}{% endset %}
+  {% include "partials/_page_header.html" %}
   {% include "partials/_qa_summary.html" %}
 </section>
 
-<section class="panel">
+<section class="panel c-panel">
   <h2>Issues</h2>
-  <form class="inline-form" hx-get="{{ qa_url }}"
+  <form class="inline-form form-row" hx-get="{{ qa_url }}"
         hx-target="#qa-issues" hx-select="#qa-issues" hx-swap="outerHTML">
     <label>Severity
       <select name="severity">

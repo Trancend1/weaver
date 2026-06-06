@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% block title %}New novel · Weaver{% endblock %}
 {% block content %}
-<section class="panel">
-  <p class="crumbs"><a href="/ui">Dashboard</a> / <span>new novel</span></p>
-  <h1>Create a novel</h1>
-  <p class="meta">Upload a source file <strong>or</strong> pick one from the books dir below. The project name comes from the source filename.</p>
+<section class="panel c-panel">
+  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label":"new novel"}] %}
+  {% set page_title = "Create a novel" %}
+  {% set page_meta = "Upload a source file or pick one from the books dir below. The project name comes from the source filename." %}
+  {% include "partials/_page_header.html" %}
 
-  {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
+  {% if error %}<div class="error error-state" role="alert">{{ error }}</div>{% endif %}
 
-  <form method="post" action="/ui/new" enctype="multipart/form-data" class="stack">
+  <form method="post" action="/ui/new" enctype="multipart/form-data" class="stack form-stack">
     <label>Upload source
       <input type="file" name="file" accept=".epub,.txt,.html,.htm">
     </label>

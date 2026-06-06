@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Translation memory · {{ name }} · Weaver{% endblock %}
 {% block content %}
-<section class="panel">
-  <p class="crumbs"><a href="/ui">Dashboard</a> / <a href="/ui/projects/{{ name }}">{{ name }}</a> / <span>memory</span></p>
-  <h1>Translation memory — {{ name }}</h1>
-  <p class="meta">Deleting an entry removes only the TM row; chapter translations and history are untouched.</p>
+<section class="panel c-panel">
+  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ name, "label": name}, {"href": none, "label":"memory"}] %}
+  {% set page_title = "Translation memory · " ~ name %}
+  {% set page_meta = "Deleting an entry removes only the TM row; chapter translations and history are untouched." %}
+  {% include "partials/_page_header.html" %}
   {% include "partials/_memory.html" %}
 </section>
 {% endblock %}

@@ -1,12 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Not found · Weaver{% endblock %}
 {% block content %}
-<section class="panel">
-  <p class="crumbs"><a href="/ui">Dashboard</a> / <span>not found</span></p>
-  <div class="error">
-    <h1>404 — Not found</h1>
+<section class="panel c-panel">
+  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label":"Not found"}] %}
+  {% set page_title = "404 — not found" %}
+  {% set page_meta = "We couldn't find what you were looking for." %}
+  {% include "partials/_page_header.html" %}
+  <div class="empty empty-state">
     <p>{{ message }}</p>
-    <p><a href="/ui">← Back to dashboard</a></p>
+    <p><a class="btn btn--primary" href="/ui">Back to dashboard</a></p>
   </div>
 </section>
 {% endblock %}

@@ -4,7 +4,7 @@ Renders resolved chapter content (each block already the translation or its
 source fallback, decided by the export service) to a single ``.docx`` file. A
 ``.docx`` is a ZIP of flat WordprocessingML (OOXML) parts; this module hand-writes
 the minimal valid set with no third-party dependency (:mod:`python-docx` is *not*
-used — see ``docs/PHASE_D_DOCX_EXPORT_PLAN.md``).
+used — the Phase D DOCX export plan lives in git history).
 
 Like the TXT/HTML renderers this is a **pure renderer**: no database access and no
 fallback logic. DOCX is always synthesized from the resolved

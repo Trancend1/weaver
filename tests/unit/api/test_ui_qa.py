@@ -93,7 +93,7 @@ def test_clean_report_renders_empty_state(ctx) -> None:
     response = client.get("/ui/projects/clean/qa")
     assert response.status_code == 200
     body = response.text
-    assert "No QA issues found" in body
+    assert "No quality issues found" in body
     assert ">Clean<" in body
 
 
@@ -165,7 +165,7 @@ def test_tree_render_does_not_run_qa(ctx, monkeypatch) -> None:
 def test_project_tree_has_badge_slots_and_button(ctx) -> None:
     client, chapter_id, volume_id = ctx
     page = client.get("/ui/projects/issues").text
-    assert "Load QA badges" in page
+    assert "Load quality badges" in page
     assert "/ui/projects/issues/qa/tree-badges" in page
     assert f'id="qa-badge-ch-{chapter_id}"' in page
     assert f'id="qa-badge-vol-{volume_id}"' in page
@@ -196,7 +196,7 @@ def test_tree_badges_lazy_loads_and_runs_qa_once(ctx, monkeypatch) -> None:
     assert f'id="qa-badge-ch-{chapter_id}"' in body
     assert f'id="qa-badge-vol-{volume_id}"' in body
     assert ">Errors<" in body  # the "issues" project has a failed segment
-    assert "QA badges loaded" in body
+    assert "Quality badges loaded" in body
 
 
 def test_tree_badges_missing_project_is_non_fatal(ctx) -> None:

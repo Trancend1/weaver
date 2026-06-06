@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Glossary · {{ name }} · Weaver{% endblock %}
 {% block content %}
-<section class="panel">
-  <p class="crumbs"><a href="/ui">Dashboard</a> / <a href="/ui/projects/{{ name }}">{{ name }}</a> / <span>glossary</span></p>
-  <h1>Glossary — {{ name }}</h1>
-  <nav class="subnav">
+<section class="panel c-panel">
+  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ name, "label": name}, {"href": none, "label":"glossary"}] %}
+  {% set page_title = "Glossary · " ~ name %}
+  {% set page_meta = "Approved terms, candidate review, conflicts, and coverage diff." %}
+  {% include "partials/_page_header.html" %}
+  <nav class="subnav" aria-label="Glossary sections">
     <a href="#terms">Approved terms</a>
     <a href="#candidates">Candidate review</a>
     <a href="#conflicts">Conflicts</a>
@@ -15,29 +17,29 @@
   {% include "partials/_glossary_terms.html" %}
 </section>
 
-<section class="panel">
+<section class="panel c-panel">
   <h2 id="candidates">Candidate review</h2>
   {% include "partials/_glossary_candidates.html" %}
 </section>
 
-<section class="panel">
+<section class="panel c-panel">
   <h2 id="conflicts">Conflicts</h2>
   {% if conflicts %}
-  <ul>
+  <ul class="plain-list">
     {% for source, targets in conflicts %}
     <li><code>{{ source }}</code> → {{ targets | join(", ") }}</li>
     {% endfor %}
   </ul>
   {% else %}
-  <p class="empty hint">No approved-term conflicts.</p>
+  <p class="empty hint empty-state">No approved-term conflicts.</p>
   {% endif %}
 </section>
 
-<section class="panel">
+<section class="panel c-panel">
   <h2 id="diff">Coverage diff</h2>
   <p class="meta">Compare which approved glossary terms appear in two chapters, by reading-order
     number (1 = first chapter).</p>
-  <form class="inline-form" hx-get="/ui/projects/{{ name }}/glossary/diff"
+  <form class="inline-form form-row" hx-get="/ui/projects/{{ name }}/glossary/diff"
         hx-target="#glossary-diff-result" hx-swap="outerHTML">
     <label>Chapter A <input type="number" name="a" min="1" value="1"></label>
     <label>Chapter B <input type="number" name="b" min="1" value="2"></label>

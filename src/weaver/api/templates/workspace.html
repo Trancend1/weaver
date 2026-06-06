@@ -1,36 +1,33 @@
 {% extends "base.html" %}
 {% block title %}{{ ws.chapter_title or "Chapter" }} · {{ ws.project_name }} · Weaver{% endblock %}
 {% block content %}
-<section class="panel">
-  <p class="crumbs">
-    <a href="/ui">Dashboard</a> /
-    <a href="/ui/projects/{{ ws.project_name }}">{{ ws.project_name }}</a> /
-    <span>{{ ws.volume_title }}</span> / <span>{{ ws.chapter_title or "Chapter" }}</span>
-  </p>
-  <h1>{{ ws.chapter_title or "Chapter" }}</h1>
-  <p class="meta">{{ ws.segment_count }} segments · {{ ws.translated_count }} translated ·
-    <a href="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/qa">QA report</a></p>
+<section class="panel c-panel workspace-panel">
+  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ ws.project_name, "label": ws.project_name}, {"href": none, "label": ws.volume_title}, {"href": none, "label": ws.chapter_title or "Chapter"}] %}
+  {% set page_title = ws.chapter_title or "Chapter" %}
+  {% set page_meta %}{{ ws.segment_count }} segments · {{ ws.translated_count }} translated · <a href="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/qa">Quality report</a>{% endset %}
+  {% include "partials/_page_header.html" %}
 
-  <p class="hint"><strong>Translate</strong> fills in untranslated segments only.
-    <strong>Retranslate</strong> re-runs existing segments under the chosen safety mode —
-    manual edits stay protected unless you pick <em>force</em>.</p>
-
-  <div class="job-controls">
-    <form hx-post="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/translate"
-          hx-target="#job-panel" hx-swap="outerHTML" class="inline-form">
-      <button type="submit">Translate untranslated</button>
-    </form>
-    <form hx-post="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/retranslate"
-          hx-target="#job-panel" hx-swap="outerHTML" class="inline-form">
-      <label>Retranslate
-        <select name="mode">
-          <option value="skip_existing">skip existing</option>
-          <option value="retranslate_non_manual">re-translate (protect manual)</option>
-          <option value="force_selected">force (overwrite manual)</option>
-        </select>
-      </label>
-      <button type="submit">Run</button>
-    </form>
+  <div class="workspace-actions">
+    <p class="hint workspace-hint"><strong>Translate</strong> fills in untranslated segments only.
+      <strong>Retranslate</strong> re-runs existing segments under the chosen safety mode —
+      manual edits stay protected unless you pick <em>force</em>.</p>
+    <div class="job-controls">
+      <form hx-post="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/translate"
+            hx-target="#job-panel" hx-swap="outerHTML" class="inline-form form-row">
+        <button type="submit">Translate untranslated</button>
+      </form>
+      <form hx-post="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/retranslate"
+            hx-target="#job-panel" hx-swap="outerHTML" class="inline-form form-row">
+        <label>Retranslate
+          <select name="mode">
+            <option value="skip_existing">skip existing</option>
+            <option value="retranslate_non_manual">re-translate (protect manual)</option>
+            <option value="force_selected">force (overwrite manual)</option>
+          </select>
+        </label>
+        <button type="submit">Run</button>
+      </form>
+    </div>
   </div>
   <div id="job-panel"></div>
 
@@ -39,7 +36,7 @@
   {% if ws.segments %}
   {# #ws-grid refreshes itself once a translate job finishes: the terminal job
      response sends an `HX-Trigger: refreshGrid` header, this listens for it. #}
-  <div class="ws-grid" id="ws-grid"
+  <div class="ws-grid workspace-grid" id="ws-grid"
        hx-get="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}"
        hx-trigger="refreshGrid from:body"
        hx-select="#ws-grid" hx-swap="outerHTML">
@@ -50,7 +47,7 @@
     {% endfor %}
   </div>
   {% else %}
-  <div class="empty"><p>This chapter has no segments.</p></div>
+  <div class="empty empty-state"><p>This chapter has no segments.</p></div>
   {% endif %}
 </section>
 

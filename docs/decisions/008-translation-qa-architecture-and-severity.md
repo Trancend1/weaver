@@ -8,7 +8,7 @@ Accepted (maintainer, 2026-06-05). Gate B1 of **Phase B — Translation QA & Con
 
 Phase B adds a **read-only, report-first** QA capability: surface translation-quality and
 consistency problems before export, without auto-fix, provider/LLM calls, mutation, or
-semantic/vector analysis ([CLAUDE.md §2.3](../../CLAUDE.md), [PHASE_B_QA_PLAN.md](../PHASE_B_QA_PLAN.md)).
+semantic/vector analysis ([CLAUDE.md §2.3](../../CLAUDE.md); the Stage B1 plan lives in git history).
 
 A deterministic QA layer already exists and ships today:
 
@@ -77,7 +77,7 @@ on every tree render; explicit QA pages come first.
 
 ## Related Files
 
-- [PHASE_B_QA_PLAN.md](../PHASE_B_QA_PLAN.md) (Stage B1 plan: inventory, rule list, schema, B2–B6).
+- Stage B1 plan (inventory, rule list, schema, B2–B6) — retired to git history.
 - `src/weaver/qa/checks.py` (reused); new `weaver/qa/{consistency_checks,scope_checks}.py`,
   `services/translation_qa.py` (Stage B2).
 - `src/weaver/services/qa.py` (`weaver validate`, unchanged); ADR `0010` (archived, QA JSON schema).

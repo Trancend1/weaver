@@ -16,6 +16,7 @@ from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from weaver.api.templating import templates
+from weaver.api.ui_context import global_layout, project_layout
 from weaver.errors import (
     CharacterNotFoundError,
     GlossaryCandidateNotFoundError,
@@ -120,6 +121,7 @@ def glossary_page(name: str, request: Request) -> HTMLResponse:
     except WeaverError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     ctx: dict[str, object] = {
+        **project_layout(request, name, active_nav="glossary"),
         **_glossary_terms_ctx(request, name),
         **_candidates_ctx(request, name),
         "conflicts": conflicts,
@@ -269,6 +271,7 @@ def characters_page(name: str, request: Request) -> HTMLResponse:
         request,
         "characters.html",
         {
+            **project_layout(request, name, active_nav="characters"),
             "name": name,
             "characters": characters_service.list_all(_project_toml(request, name), cwd=base),
         },
@@ -394,9 +397,11 @@ def memory_page(
     name: str, request: Request, offset: int = Query(0, ge=0), find: str | None = None
 ) -> HTMLResponse:
     """Translation-memory admin: read entries + reuse stats, delete one entry."""
-    return templates.TemplateResponse(
-        request, "memory.html", _memory_ctx(request, name, offset=offset, find=find)
-    )
+    ctx = {
+        **project_layout(request, name, active_nav="memory"),
+        **_memory_ctx(request, name, offset=offset, find=find),
+    }
+    return templates.TemplateResponse(request, "memory.html", ctx)
 
 
 @router.get("/ui/projects/{name}/memory/entries", response_class=HTMLResponse)
@@ -431,6 +436,7 @@ def _config_ctx(request: Request, project: str | None) -> dict[str, object]:
     base = _base_dir(request)
     view = config_service.read_config(base, project=_opt(project))
     return {
+        **global_layout("config"),
         "view": view,
         "project": _opt(project),
         "projects": [dp.name for dp in discover_projects(base)],

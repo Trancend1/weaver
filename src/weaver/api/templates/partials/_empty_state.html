@@ -1,0 +1,4 @@
+<div class="empty empty-state {{ empty_class|default('') }}">
+  <p>{{ empty_title }}</p>
+  {% if empty_hint %}<p class="hint">{{ empty_hint|safe }}</p>{% endif %}
+</div>

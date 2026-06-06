@@ -1,26 +1,32 @@
 {% extends "base.html" %}
 {% block title %}{{ tree.project_name }} · Weaver{% endblock %}
 {% block content %}
-<section class="panel">
-  <p class="crumbs"><a href="/ui">Dashboard</a> / <span>{{ tree.project_name }}</span></p>
-  <h1>{{ tree.project_name }}</h1>
-  <nav class="subnav">
-    <a href="/ui/projects/{{ tree.project_name }}/qa">QA report</a>
+<section class="panel c-panel project-panel">
+  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label": tree.project_name}] %}
+  {% set page_title = tree.project_name %}
+  {% set page_meta = "Novel tree, import, export, and on-demand quality badges." %}
+  {% set page_actions %}<button class="btn btn--danger" type="button"
+    hx-post="/ui/projects/{{ tree.project_name }}/delete"
+    hx-confirm="Delete &quot;{{ tree.project_name }}&quot;? This permanently removes its translations, history, glossary, and exports. The original source file is not affected."
+    hx-swap="none">Delete project</button>{% endset %}
+  {% include "partials/_page_header.html" %}
+  <nav class="subnav" aria-label="Project sections">
+    <a href="/ui/projects/{{ tree.project_name }}/qa">Quality</a>
     <a href="/ui/projects/{{ tree.project_name }}/glossary">Glossary</a>
     <a href="/ui/projects/{{ tree.project_name }}/characters">Characters</a>
     <a href="/ui/projects/{{ tree.project_name }}/memory">Translation memory</a>
   </nav>
 
-  <p class="actions">
+  <p class="actions toolbar-row">
     <button type="button" hx-get="/ui/projects/{{ tree.project_name }}/qa/tree-badges"
-            hx-target="#qa-badge-status" hx-swap="innerHTML">Load QA badges</button>
-    <span id="qa-badge-status" class="meta">Badges load on demand — the tree never runs QA on its own.</span>
+            hx-target="#qa-badge-status" hx-swap="innerHTML">Load quality badges</button>
+    <span id="qa-badge-status" class="meta">Quality badges load only when you ask — the list never checks on its own.</span>
   </p>
 
   {% include "partials/_tree.html" %}
 </section>
 
-<section class="panel">
+<section class="panel c-panel">
   <h2>Import a volume</h2>
   <p class="meta">Add another source (.epub/.txt/.html) as a new volume. The tree above refreshes on success.</p>
 
@@ -28,7 +34,7 @@
 
   <form hx-post="/ui/projects/{{ tree.project_name }}/import"
         hx-target="#tree" hx-swap="outerHTML"
-        hx-encoding="multipart/form-data" class="stack">
+        hx-encoding="multipart/form-data" class="stack form-stack">
     <label>Upload source
       <input type="file" name="file" accept=".epub,.txt,.html,.htm">
     </label>
@@ -45,13 +51,13 @@
   </div>
 </section>
 
-<section class="panel">
+<section class="panel c-panel">
   <h2>Export novel</h2>
   <p class="meta">One artifact per volume. Each segment uses its latest translation; segments
-    you haven't translated yet fall back to the original source text. A QA check runs first —
+    you haven't translated yet fall back to the original source text. A quality check runs first —
     export is never blocked.</p>
   <form hx-get="/ui/projects/{{ tree.project_name }}/export/preflight"
-        hx-target="#export-panel" hx-swap="outerHTML" class="inline-form">
+        hx-target="#export-panel" hx-swap="outerHTML" class="inline-form form-row">
     <label>Format
       <select name="target">
         <option value="epub">EPUB</option>

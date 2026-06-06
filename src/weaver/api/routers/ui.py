@@ -15,7 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from weaver.api.jobs import JobRegistry
@@ -23,12 +23,13 @@ from weaver.api.routers.export import _start_export
 from weaver.api.routers.translate import _start_job as _start_translate_job
 from weaver.api.schemas import ExportRequest
 from weaver.api.templating import templates
+from weaver.api.ui_context import global_layout, project_layout, workspace_layout
 from weaver.core.global_config import load_global_config, resolve_config_value
 from weaver.errors import ChapterNotFoundError, SegmentNotFoundError, WeaverError
 from weaver.providers.registry import known_provider_types
 from weaver.services.chapter_workspace import chapter_workspace
 from weaver.services.import_source import import_volume
-from weaver.services.project import initialize_project, project_exists
+from weaver.services.project import delete_project, initialize_project, project_exists
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_tree import project_tree
 from weaver.services.segment_history import segment_translation_history
@@ -88,6 +89,7 @@ def dashboard(request: Request) -> HTMLResponse:
         request,
         "dashboard.html",
         {
+            **global_layout("dashboard"),
             "projects": _project_rows(base),
             "books_dir": str(base),
             "default_provider": default_provider,
@@ -118,7 +120,33 @@ def project_view(name: str, request: Request) -> HTMLResponse:
         return templates.TemplateResponse(
             request, "error.html", {"message": str(exc)}, status_code=422
         )
-    return templates.TemplateResponse(request, "project.html", {"tree": tree})
+    return templates.TemplateResponse(
+        request,
+        "project.html",
+        {**project_layout(request, name, active_nav="project", sidebar_tree=tree), "tree": tree},
+    )
+
+
+@router.post("/ui/projects/{name}/delete")
+def delete_project_submit(name: str, request: Request) -> Response:
+    """Permanently delete a project, then send the browser back to the dashboard.
+
+    HTMX-only: the button posts here and the ``HX-Redirect`` header navigates the
+    browser to ``/ui`` on success. The original imported source file is untouched.
+    """
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    if dp is None:
+        raise HTTPException(status_code=404, detail=f"No project named {name!r}.")
+    try:
+        delete_project(dp.project_toml)
+    except WeaverError as exc:
+        return HTMLResponse(
+            f'<div class="error error-state" role="alert">{exc}</div>',
+            status_code=422,
+            headers={"HX-Reswap": "innerHTML", "HX-Retarget": "#qa-badge-status"},
+        )
+    return Response(status_code=200, headers={"HX-Redirect": "/ui"})
 
 
 # --- create / import (Stage 11B-1) ------------------------------------------
@@ -139,7 +167,9 @@ def browse_fragment(request: Request, rel_dir: str = Query("", alias="dir")) -> 
 def new_project_page(request: Request) -> HTMLResponse:
     """New-project page: create form + sandboxed source browser."""
     return templates.TemplateResponse(
-        request, "new.html", {"provider_types": known_provider_types()}
+        request,
+        "new.html",
+        {**global_layout("new"), "provider_types": known_provider_types()},
     )
 
 
@@ -170,7 +200,7 @@ async def create_project_submit(
         return templates.TemplateResponse(
             request,
             "new.html",
-            {"error": str(exc), "provider_types": known_provider_types()},
+            {**global_layout("new"), "error": str(exc), "provider_types": known_provider_types()},
             status_code=400,
         )
     return RedirectResponse(url=f"/ui/projects/{result.project_name}", status_code=303)
@@ -243,7 +273,14 @@ def workspace_view(name: str, chapter_id: str, request: Request) -> HTMLResponse
         return templates.TemplateResponse(
             request, "error.html", {"message": str(exc)}, status_code=422
         )
-    return templates.TemplateResponse(request, "workspace.html", {"ws": ws})
+    return templates.TemplateResponse(
+        request,
+        "workspace.html",
+        {
+            **workspace_layout(request, name, active_chapter_id=chapter_id),
+            "ws": ws,
+        },
+    )
 
 
 def _render_segment(
