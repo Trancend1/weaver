@@ -20,6 +20,9 @@
         hx-on:click='document.getElementById("source_path").value = {{ e.rel_path|tojson }}; document.getElementById("selected_source").textContent = {{ e.name|tojson }};'>
         use
       </button>
+      {% if e.kind == "epub" %}
+      <a class="link-btn" href="/ui/epub-preview?source_path={{ e.rel_path|urlencode }}" target="_blank" rel="noopener">preview</a>
+      {% endif %}
       {% endif %}
     </li>
     {% endfor %}

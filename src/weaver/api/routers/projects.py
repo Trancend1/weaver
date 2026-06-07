@@ -30,12 +30,13 @@ from weaver.api.schemas import (
 )
 from weaver.errors import ChapterNotFoundError, SegmentNotFoundError, WeaverError
 from weaver.services.chapter_workspace import chapter_workspace
+from weaver.services.epub_structure_preview import preview_epub_structure
 from weaver.services.import_source import import_volume
 from weaver.services.project import initialize_project, project_exists
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_tree import project_tree
 from weaver.services.segment_history import segment_translation_history
-from weaver.services.source_browser import list_directory
+from weaver.services.source_browser import list_directory, resolve_source
 from weaver.services.source_intake import resolve_intake_source
 from weaver.services.workspace_edit import save_segment_translation
 
@@ -44,6 +45,38 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 
 def _base_dir(request: Request) -> Path:
     return request.app.state.base_dir  # type: ignore[no-any-return]
+
+
+@router.post("/epub-preview")
+async def preview_epub_endpoint(
+    request: Request,
+    file: UploadFile | None = File(None, description="EPUB file to preview."),
+    source_path: str | None = Form(
+        None, description="Sandbox-relative EPUB path selected from browse."
+    ),
+) -> dict[str, object]:
+    """Return a read-only ParsedEpub preview without importing or persisting it."""
+
+    base = _base_dir(request)
+    if file is None and not source_path:
+        raise HTTPException(status_code=422, detail="Upload or source_path is required.")
+
+    tmp_path: Path | None = None
+    try:
+        if file is not None:
+            suffix = Path(file.filename or "preview.epub").suffix or ".epub"
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                tmp_path = Path(tmp.name)
+                tmp.write(await file.read())
+            preview_path = tmp_path
+        else:
+            preview_path = resolve_source(base, source_path or "")
+        return preview_epub_structure(preview_path)
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
 
 
 @router.get("", response_model=ProjectListResponse)

@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}EPUB Preview · Weaver{% endblock %}
+
+{% macro nav_items(items) %}
+{% for item in items %}
+<li>
+  <span class="epub-nav-tree__label">{{ item.label or "(untitled)" }}</span>
+  {% if item.linked_spine_index is not none %}<span class="badge">spine {{ item.linked_spine_index }}</span>{% endif %}
+  {% if item.linked_manifest_id is none and item.href %}<span class="badge bad" title="Does not resolve to a manifest item">unresolved</span>{% endif %}
+  {% if item.href %}<code>{{ item.href }}{% if item.fragment %}#{{ item.fragment }}{% endif %}</code>{% endif %}
+  {% if item.children %}<ul>{{ nav_items(item.children) }}</ul>{% endif %}
+</li>
+{% endfor %}
+{% endmacro %}
+
+{% block content %}
+<section class="panel">
+  <p class="crumbs"><a href="/ui">Dashboard</a> / <span>EPUB preview</span></p>
+  <h1>EPUB structure preview</h1>
+  <p class="meta">Read-only inspection of metadata, reading order, navigation, images, and
+    validation readiness. Nothing is imported, translated, or saved.</p>
+
+  <form method="get" action="/ui/epub-preview" class="inline-form">
+    <label for="source_path">Sandbox source path</label>
+    <input id="source_path" name="source_path" value="{{ source_path }}"
+      placeholder="relative/path/to/book.epub" />
+    <button type="submit">Preview</button>
+  </form>
+
+  {% if error %}
+  <p class="error" role="alert">{{ error }}</p>
+  {% endif %}
+</section>
+
+{% if preview %}
+{% set md = preview.metadata %}
+{% set sc = preview.severity_counts %}
+
+<section class="panel">
+  <nav class="subnav" aria-label="Preview sections">
+    <a href="#summary">Summary</a>
+    <a href="#toc">Contents</a>
+    <a href="#reading-order">Reading order</a>
+    <a href="#excerpts">Excerpts</a>
+    <a href="#images">Images</a>
+    <a href="#validation">Validation</a>
+  </nav>
+
+  <div class="qa-summary__status">
+    {% if preview.readiness == "safe" %}
+    <span class="badge ok">Safe to translate</span>
+    {% elif preview.readiness == "warnings" %}
+    <span class="badge warn">Warnings — review before import</span>
+    {% else %}
+    <span class="badge bad">Blocking errors</span>
+    {% endif %}
+    <span class="meta">{{ sc.error }} errors · {{ sc.warning }} warnings · {{ sc.info }} notes</span>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat"><span class="stat__value">{{ preview.counts.spine }}</span><span class="stat__label">Spine</span></div>
+    <div class="stat"><span class="stat__value">{{ preview.counts.navigation }}</span><span class="stat__label">Nav entries</span></div>
+    <div class="stat"><span class="stat__value">{{ preview.counts.images }}</span><span class="stat__label">Images</span></div>
+    <div class="stat"><span class="stat__value">{{ preview.counts.manifest }}</span><span class="stat__label">Manifest</span></div>
+    <div class="stat {% if sc.error %}is-active stat--bad{% elif sc.warning %}is-active stat--warn{% endif %}"><span class="stat__value">{{ preview.counts.validation_issues }}</span><span class="stat__label">Issues</span></div>
+  </div>
+</section>
+
+<section class="panel" id="summary">
+  <h2>Summary</h2>
+  <table class="grid">
+    <tbody>
+      <tr><th>Title</th><td>{{ md.title }}</td></tr>
+      <tr><th>Author</th><td>{{ md.creator or "—" }}</td></tr>
+      <tr><th>Language</th><td>{{ md.language }}</td></tr>
+      <tr><th>Publisher</th><td>{{ md.publisher or "—" }}</td></tr>
+      <tr><th>Identifier</th><td class="cell-clip">{{ md.identifier or "—" }}</td></tr>
+      {% if md.series %}<tr><th>Series</th><td>{{ md.series }}{% if md.series_index %} · #{{ md.series_index }}{% endif %}</td></tr>{% endif %}
+      <tr><th>Reading direction</th><td>{{ preview.page_progression_direction or "default (ltr)" }}</td></tr>
+      {% if md.description %}<tr><th>Description</th><td>{{ md.description }}</td></tr>{% endif %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel" id="toc">
+  <h2>Table of contents</h2>
+  {% set toc = preview.navigation | selectattr("nav_type", "equalto", "toc") | list %}
+  {% if toc %}
+  <ul class="tree epub-nav-tree">{{ nav_items(toc) }}</ul>
+  {% else %}
+  <div class="empty"><p>No table of contents found in NAV or NCX.</p></div>
+  {% endif %}
+
+  {% set landmarks = preview.navigation | selectattr("nav_type", "equalto", "landmarks") | list %}
+  {% if landmarks %}
+  <h3>Landmarks</h3>
+  <ul class="plain-list">
+    {% for item in landmarks %}<li>{{ item.label }} <code>{{ item.href }}</code></li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  {% set pages = preview.navigation | selectattr("nav_type", "equalto", "page-list") | list %}
+  {% if pages %}
+  <h3>Page list</h3>
+  <p class="meta">{{ pages | length }} page targets.</p>
+  {% endif %}
+</section>
+
+<section class="panel" id="reading-order">
+  <h2>Reading order</h2>
+  <p class="meta">Spine order · direction: {{ preview.page_progression_direction or "ltr (default)" }}.</p>
+  <div class="table-scroll">
+    <table class="grid">
+      <thead><tr><th class="num">#</th><th>Document</th><th>Flow</th><th>Spread</th><th>State</th></tr></thead>
+      <tbody>
+        {% for item in preview.spine %}
+        <tr>
+          <td class="num">{{ item.index }}</td>
+          <td class="cell-clip">{% if item.href %}<code>{{ item.href }}</code>{% else %}<span class="meta">{{ item.idref }}</span>{% endif %}</td>
+          <td>{% if item.linear %}linear{% else %}<span class="badge warn">non-linear</span>{% endif %}</td>
+          <td>{{ item.page_spread or "—" }}</td>
+          <td>
+            {% if not item.exists_in_manifest %}<span class="badge bad">missing in manifest</span>
+            {% elif not item.exists_in_archive %}<span class="badge bad">missing file</span>
+            {% else %}<span class="badge ok">ok</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel" id="excerpts">
+  <h2>Chapter excerpts</h2>
+  {% if preview.excerpts %}
+  <p class="meta">Untranslated source text, trimmed for inspection only.</p>
+  {% for ex in preview.excerpts %}
+  <div class="epub-excerpt">
+    <div class="epub-excerpt__head">
+      <strong>{{ ex.label or "Chapter " ~ ex.spine_index }}</strong>
+      <code>{{ ex.href }}</code>
+    </div>
+    <p lang="{{ md.language }}">{{ ex.text }}</p>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="empty"><p>No readable chapter text found to preview.</p></div>
+  {% endif %}
+</section>
+
+<section class="panel" id="images">
+  <h2>Images</h2>
+  {% if preview.images %}
+  <div class="table-scroll">
+    <table class="grid">
+      <thead><tr><th>Role</th><th>Kind</th><th>Size</th><th>Bytes</th><th>Used by</th><th>File</th></tr></thead>
+      <tbody>
+        {% for image in preview.images %}
+        <tr>
+          <td>{{ image.image_role | replace("_", " ") | capitalize }}</td>
+          <td>{{ image.image_kind }}</td>
+          <td>{% if image.width and image.height %}{{ image.width }}×{{ image.height }}{% else %}—{% endif %}</td>
+          <td class="num">{% if image.byte_size %}{{ (image.byte_size / 1024) | round(1) }} KB{% else %}—{% endif %}</td>
+          <td>{% if image.referenced_by %}{{ image.referenced_by | length }} doc(s){% else %}<span class="meta">unreferenced</span>{% endif %}</td>
+          <td class="cell-clip"><code>{{ image.href }}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><p>No images declared in the manifest.</p></div>
+  {% endif %}
+</section>
+
+<section class="panel" id="validation">
+  <h2>Validation</h2>
+  <p class="meta">Errors block safe import/translation. Warnings and notes are advisory only.</p>
+  {% if preview.validation_by_scope %}
+  {% for scope, issues in preview.validation_by_scope.items() %}
+  <h3>{{ scope }}</h3>
+  <ul class="plain-list">
+    {% for issue in issues %}
+    <li>
+      {% if issue.severity == "error" %}<span class="badge bad">error</span>
+      {% elif issue.severity == "warning" %}<span class="badge warn">warning</span>
+      {% else %}<span class="badge">note</span>{% endif %}
+      <code>{{ issue.code }}</code> {{ issue.message }}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endfor %}
+  {% else %}
+  <div class="empty"><p>No structural validation issues found. Safe to translate.</p></div>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

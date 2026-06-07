@@ -72,3 +72,23 @@ Shipped since the reset baseline: Volume tier (schema v3), character database (`
 ## Dependencies
 
 Core: typer, rich, pydantic v2, ebooklib, openai SDK, google-generativeai, jinja2, httpx, sqlite3/tomllib (stdlib). Optional extras: `web` (FastAPI + uvicorn), `tui` (textual), `wizard` (questionary). See [pyproject.toml](../pyproject.toml).
+
+## Phase F EPUB package inspection
+
+Phase F adds a parallel EPUB package-inspection path without replacing the
+production import/export path:
+
+- `readers/epub.read_epub()` remains the import, translation, and export source
+  reader and still returns `DocumentIR`.
+- `readers/epub.parse_epub_structure()` returns `ParsedEpub` from
+  `core/epub_structure.py` for OPF metadata, manifest/resources, spine,
+  NAV/NCX, image metadata, validation issues, and preservation context.
+- `readers/epub_validation.py` owns deterministic non-fatal EPUB structure
+  validation used by the parser contract.
+- `services/epub_structure_preview.py` serializes `ParsedEpub` for read-only JSON
+  and UI preview surfaces; it does not write SQLite or expose image bytes.
+- `services/epub_export_fidelity.py` compares source/export EPUB structures and
+  reports passed checks, warnings, critical gaps, missing assets, and counts.
+- OCR/vision extraction is not implemented; future OCR must be adapter-based and
+  separately approved if it adds dependencies, providers, credentials, or image
+  output behavior.

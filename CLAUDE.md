@@ -4,7 +4,7 @@ Offline-capable, glossary-aware **JP→EN** light-novel translation workbench. T
 
 **Not:** SaaS, consumer product, hosted service, complex SPA.
 
-> **Status (2026-06-06):** **`v0.7.0` stable released** (FastAPI is the sole web cockpit; Flask fully removed). Phases A–D complete. **Phase E — Design System & UI overhaul: COMPLETE** on `feat/design-system-implementaion`: token migration (`app.css` `:root`), 3-mode layout dispatch (`api/ui_context.py`), left-aligned topbar + brand mark + favicon, widened sidebar + line-icon nav (`partials/_icons.html`), project/volume cards, QA stat tiles, segmented sub-nav, component partials, standardized breadcrumb/404/error, "QA"→"Quality" copy, project delete (web + CLI), and an external-browser launch fix. Design system distilled to [docs/DESIGN_NOTES.md](docs/DESIGN_NOTES.md). Full gate green: **796 tests / 4 skipped**, pyright 0, ruff + format clean. **Next: Phase F — Feature Polishing** (see §2.3). Detailed MVP/Phase-A–D history lives in git history.
+> **Status (2026-06-06):** **`v0.7.0` stable released** (FastAPI is the sole web cockpit; Flask fully removed). Phases A–D complete. **Phase E — Design System & UI overhaul: COMPLETE** on `feat/design-system-implementaion`: token migration (`app.css` `:root`), 3-mode layout dispatch (`api/ui_context.py`), left-aligned topbar + brand mark + favicon, widened sidebar + line-icon nav (`partials/_icons.html`), project/volume cards, QA stat tiles, segmented sub-nav, component partials, standardized breadcrumb/404/error, "QA"→"Quality" copy, project delete (web + CLI), and an external-browser launch fix. Design system distilled to [docs/DESIGN_NOTES.md](docs/DESIGN_NOTES.md). Full gate green: **796 tests / 4 skipped**, pyright 0, ruff + format clean. **Phase F — EPUB Light Novel Metadata, Structure & Image Text Completeness: COMPLETE**; next is Phase G distribution/installer. Detailed MVP/Phase-A–F history lives in git history and active docs.
 
 ---
 
@@ -24,7 +24,8 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 | [docs/PROVIDER_AND_MODEL_CONFIG.md](docs/PROVIDER_AND_MODEL_CONFIG.md) | Providers, models, secret store |
 | [docs/TRANSLATION_PIPELINE.md](docs/TRANSLATION_PIPELINE.md) | Import → segment → translate → QA → export |
 | [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md) | MVP features, gap analysis, sprint mapping, acceptance |
-| [docs/PHASE_F_PLAN.md](docs/PHASE_F_PLAN.md) | Phase F — Feature Polishing: scope, stages, exit criteria for the pre-user-testing hardening pass |
+| [docs/PHASE_F_PLAN.md](docs/PHASE_F_PLAN.md) | Phase F — EPUB light-novel metadata/structure parsing plan and closeout status |
+| [docs/EPUB_PARSER_AUDIT.md](docs/EPUB_PARSER_AUDIT.md) | Additive EPUB parser/preview/fidelity audit and OCR gating notes |
 | [docs/MAINTENANCE.md](docs/MAINTENANCE.md) | Cleanup, testing, regression, release, migration discipline |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Active ADR index (`001`–`008`) |
 | [docs/decisions/](docs/decisions/) | Active ADRs `001`–`008` |
@@ -48,7 +49,7 @@ Foundation (v0.6.0) ✅
   → Phase C — Release hardening ✅  (v0.7.0 stable)
   → Phase D ✅ — DOCX export ✅ · QA config ✅ · combined ZIP ✅ · QA tree badges ✅ · provider hardening ✅
   → Phase E — Design System & UI overhaul ✅
-  → Phase F — Feature Polishing   ⬅ next
+  → Phase F — EPUB Light Novel Metadata, Structure & Image Text Completeness ✅
   → Phase G — Distribution & Installer
 ```
 
@@ -60,7 +61,7 @@ Foundation (v0.6.0) ✅
 | **Phase C — Release hardening** | CHANGELOG `[Unreleased]` → `[0.7.0]` (Phase A + B entries); version consistency; soak 25/25; clean wheel install; annotated tag `v0.7.0`. | ✅ `v0.7.0` |
 | **Phase D — multi-item** | DOCX export **✅** (`renderers/docx.py`, custom OOXML, no `python-docx`) · QA thresholds config **✅** (`[qa]` table) · combined ZIP bundle **✅** (`services/export_bundle.py`) · QA tree badges **✅** (opt-in) · provider config hardening **✅** (`providers/config_values.py`). | ✅ |
 | **Phase E — Design System & UI overhaul** | Token system + hybrid layout: CSS variable migration (`app.css` `:root`), 3-mode layout dispatch (`ui_context.py`), left-aligned topbar + brand mark + favicon, widened sidebar + line-icon nav, project/volume cards, QA stat tiles, segmented sub-nav, component partials, standardized breadcrumb/404/error, "QA"→"Quality" copy, project delete (web + CLI), external-browser launch fix. Reference: `docs/DESIGN_NOTES.md`. No backend behavior change — CSS + Jinja2 + HTMX + thin presentation routes. | ✅ |
-| **Phase F — Feature Polishing** | UI/UX refinement, workspace usability cleanup, empty/loading/error states, responsive layout, accessibility pass, copy consistency, visual consistency, final QA/export flow stabilization, docs cleanup, and full regression validation before user testing. Plan: [docs/PHASE_F_PLAN.md](docs/PHASE_F_PLAN.md). | ⏳ next |
+| **Phase F — EPUB Light Novel Metadata, Structure & Image Text Completeness** | Additive EPUB package parsing foundation: OPF metadata, manifest/resources, spine, NAV/NCX, image classification, deterministic validation, read-only preview API/UI, translation preservation context, export fidelity checks, and broader fixtures. `read_epub()`, `DocumentIR`, import, translation, export, and OCR behavior unchanged. Plan: [docs/PHASE_F_PLAN.md](docs/PHASE_F_PLAN.md). Audit: [docs/EPUB_PARSER_AUDIT.md](docs/EPUB_PARSER_AUDIT.md). | ✅ |
 | **Phase G — Distribution & Installer** | Build installable local distribution flow: @weaver/cli → npm install -g @weaver/cli → weaver. The wrapper checks Python/uv availability, installs or bootstraps the Python package, runs the local FastAPI cockpit, and opens the browser to localhost. Sub-phases: G1 packaging audit; G2 pipx/uv install hardening; G3 npm launcher wrapper; G4 optional desktop/local launcher; G5 release signing, checksum, and security.| ⬜ pending |
 Legend: ✅ complete · 🟡 in progress · ⏳ next · ⬜ pending · 🚫 blocked.
 
@@ -79,42 +80,33 @@ Before starting any phase or stage, run this gate:
 
 Required reminder before any phase transition: **"Check exit criteria first. No next phase until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Phase E COMPLETE → next: Phase F (Feature Polishing)
+### 2.3 Active Phase — Phase F COMPLETE → next: Phase G (Distribution & Installer)
 
-> **Phase E shipped** on `feat/design-system-implementaion`. Full gate green: **796 tests / 4 skipped**, pyright 0, ruff + format clean, `weaver --help` OK. The branch is a UI/presentation overhaul plus two small additive features. **Next: Phase F — Feature Polishing** ([docs/PHASE_F_PLAN.md](docs/PHASE_F_PLAN.md)); run the §2.2 gate before starting.
+> **Phase F shipped** on feat/epub-metadata-parse as an additive EPUB package-parsing foundation. It adds ParsedEpub, parse_epub_structure(), deterministic validation, read-only preview API/UI, translation preservation context, export fidelity reports, and broader fixtures. read_epub(), DocumentIR, import, translation, export, SQLite, OCR, and image-byte behavior remain unchanged. **Next: Phase G — Distribution & Installer**; run the §2.2 gate before starting.
 
-**Phase E — shipped:**
-- **Design tokens** — full `--color-*` / `--text-*` / `--space-*` / `--radius-*` / `--shadow-*` / `--z-*` set in `app.css :root`; legacy class aliases retained for compatibility. Distilled in [docs/DESIGN_NOTES.md](docs/DESIGN_NOTES.md).
-- **Layout** — 3-mode dispatch (`api/ui_context.py`, URL-based): global / project (264px sidebar) / workspace (56px rail). Topbar = brand mark + left nav (replaced the floating right pill); content centered + width-bounded.
-- **Components** — dashboard project cards, volume cards with progress, QA stat tiles, segmented sub-nav, line-icon sidebar (`partials/_icons.html`), `_page_header` breadcrumb on every page incl. 404/error, favicon.
-- **Copy** — "QA" → "Quality" across the cockpit; active-voice 404/error; sentence case; tagline removed.
-- **Features (additive)** — project delete (`services/project.delete_project`; web `POST /ui/projects/{name}/delete` → `HX-Redirect`; CLI `weaver delete`); external-browser launch fix (`cli/open_browser.py`, bypasses an editor-injected `$BROWSER`).
+**Phase F — shipped:**
+- **Parser contract** — OPF metadata, manifest/resources, spine, NAV/NCX, images, validation issues, and preservation context live beside the existing DocumentIR path.
+- **Preview** — POST /projects/epub-preview and /ui/epub-preview?source_path=... expose read-only EPUB structure summaries without DB writes or image bytes.
+- **Fidelity** — services/epub_export_fidelity.py compares source/export structures and reports passed checks, warnings, critical gaps, missing assets, and counts.
+- **OCR gating** — no OCR/vision/provider/dependency shipped; future OCR must be adapter-based and ADR/approval-gated.
 
 **Carry-over invariants (unchanged):**
-- **Web is FastAPI-only** (ADR `004`); UI is server-rendered Jinja2 + HTMX, no SPA/build, no web fonts (ADR `007`).
-- **No backend behavior change in Phase E** — UI routes stayed thin adapters over existing services; no schema/HTMX-contract change; QA stays read-only/deterministic (ADR `008`).
-- Server binds **`127.0.0.1` only** (loopback; never user-configurable for security).
+- read_epub() remains the import/export/translation path and returns DocumentIR.
+- Import, translation, renderer/export, SQLite persistence, and image assets are not mutated by Phase F preview/parser/fidelity services.
+- Web remains FastAPI-only; UI routes stay thin adapters over framework-agnostic services.
 
 ### 2.4 Exit Criteria
 
-> **MVP acceptance gate: met & LOCKED** (Sprint 9C, 2026-06-02), shipped as `v0.7.0-rc.1`; the MVP-stabilization + RC1 evidence reports now live in **git history**. The MVP checklist lives in [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md). **Phases A–D** complete (PRs #18 / #19 / #21; `v0.7.0` tagged 2026-06-05).
+> **MVP acceptance gate: met & LOCKED** (Sprint 9C, 2026-06-02), shipped as 
+0.7.0-rc.1; the MVP-stabilization + RC1 evidence reports now live in **git history**. The MVP checklist lives in [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md). **Phases A–F** complete.
 
-**Phase E — met & complete:**
+**Phase F — met & complete** (detail in [docs/PHASE_F_PLAN.md](docs/PHASE_F_PLAN.md) and [docs/EPUB_PARSER_AUDIT.md](docs/EPUB_PARSER_AUDIT.md)):
 
-- [x] Token system migrated to `app.css :root`; legacy class aliases preserved; no inline hex in templates.
-- [x] 3-mode layout dispatch via `api/ui_context.py`; topbar / sidebar / cards / stat-tiles / sub-nav shipped; breadcrumb on every page incl. 404/error.
-- [x] **No backend behavior change:** services / schemas / HTMX contracts and all DOM IDs (`#tree`, `#ws-grid`, `#job-panel`, `#export-panel`, `#qa-badge-status`, `seg-*`, qa-badge slots) intact.
-- [x] Additive features carry tests: project delete (web + CLI + service), external-browser launch.
-- [x] No web fonts / no build / no SPA; reduced-motion honored; `:focus-visible` rings; `role="alert"` / `status` preserved.
-- [x] Full gate green (`pytest` 796/4 skip, `pyright` 0, `ruff` + format); `weaver --help` OK; docs updated (`DESIGN_NOTES.md`; stale docs retired).
-
-**Phase F — Feature Polishing exits only when** (detail in [docs/PHASE_F_PLAN.md](docs/PHASE_F_PLAN.md)):
-
-- [ ] Every cockpit surface re-walked: empty / loading / error / hover / active / disabled states verified, including @390px.
-- [ ] QA + export flows stabilized end-to-end on a real EPUB; no dead controls or broken links.
-- [ ] Copy consistency pass (terminology, sentence case, active voice) across all pages.
-- [ ] Accessibility pass (keyboard path, focus order, contrast, labels) with findings fixed or logged.
-- [ ] Docs match code; full regression green before user testing.
+- [x] Additive ParsedEpub package contract shipped beside DocumentIR.
+- [x] OPF metadata, manifest/resources, spine, NAV/NCX, image classification, validation, preservation context, preview, and fidelity checks covered by targeted tests.
+- [x] read_epub(), import, translation, export, SQLite, OCR, and image-byte behavior unchanged.
+- [x] Preview API/UI is read-only and sandboxed.
+- [x] OCR/vision remains unimplemented and separately gated behind adapter/provider/dependency approval.
 
 ### 2.5 Phase Log
 
@@ -132,6 +124,7 @@ One row per phase/era; deep detail lives in the linked docs and git history.
 | Phase C — Release hardening | **Complete.** CHANGELOG promoted to `[0.7.0]` (Phase A + B entries); version consistency confirmed; soak 25/25; clean wheel install; annotated tag `v0.7.0` on `main` (2026-06-05). |
 | Phase D — multi-item | **Complete (PR #21, `feat/docx-export`).** Five focused commits: (1) DOCX export target — custom minimal OOXML `renderers/docx.py`, no `python-docx`/no new dep, synthesized from the DB (no write-back); (2) configurable QA thresholds via `[qa]` (`qa/thresholds.py`), defaults unchanged when absent, validated, foreign keys ignored; (3) combined ZIP bundle (`services/export_bundle.py`, `bundle` flag, `bundle_path`); (4) opt-in QA tree badges (out-of-band HTMX, zero QA on tree render — Gate B1 preserved); (5) provider config hardening (`providers/config_values.py`, numeric validation + invalid-model mapping, no key leak). Gate: 780 tests / 4 skipped, pyright 0, ruff + format clean, clean wheel build. Merged-omnibus EPUB intentionally deferred. |
 | Phase E — Design System & UI overhaul | **Complete (`feat/design-system-implementaion`).** Token migration to `app.css :root` (color/type/space/radius/shadow/z-index) with legacy class aliases kept; 3-mode layout dispatch (`api/ui_context.py`); left-aligned topbar + brand mark + favicon; widened 264px sidebar with inline line icons (`partials/_icons.html`); dashboard project cards + volume progress cards; QA stat tiles; segmented sub-nav; `_page_header` breadcrumb standardized across all pages incl. 404/error; "QA"→"Quality" copy + active-voice errors. Additive: project delete (web `POST …/delete` + CLI `weaver delete` + `services/project.delete_project`, with path guard) and external-browser launch fix (`cli/open_browser.py`). No backend/schema/HTMX-contract change. Design exploration (DESIGN.md/DESIGN_GUIDE.md) distilled to `docs/DESIGN_NOTES.md`. Gate: 796 tests / 4 skipped, pyright 0, ruff + format clean. |
+| Phase F — EPUB Light Novel Metadata, Structure & Image Text Completeness | **Complete (feat/epub-metadata-parse).** Additive ParsedEpub package model and parse_epub_structure() for OPF metadata, manifest/resources, spine, NAV/NCX, image classification, validation issues, preservation context, read-only preview API/UI, export fidelity report, and broader synthetic light-novel fixtures. read_epub(), DocumentIR, import, translation, export, SQLite, OCR, and image-byte behavior unchanged. OCR/vision remains adapter/ADR-gated future work. |
 
 ---
 
