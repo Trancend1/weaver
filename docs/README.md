@@ -21,6 +21,7 @@ Two surfaces drive the **same** core:
 | Use / extend the web cockpit | [COCKPIT_WORKFLOW.md](COCKPIT_WORKFLOW.md) |
 | Configure providers, models, API keys | [PROVIDER_AND_MODEL_CONFIG.md](PROVIDER_AND_MODEL_CONFIG.md) |
 | Understand how a segment becomes a translation | [TRANSLATION_PIPELINE.md](TRANSLATION_PIPELINE.md) |
+| Understand EPUB package parsing / preview / fidelity | [PHASE_F_PLAN.md](PHASE_F_PLAN.md), [EPUB_PARSER_AUDIT.md](EPUB_PARSER_AUDIT.md) |
 | See MVP scope, gaps, and the sprint plan | [MVP_SCOPE.md](MVP_SCOPE.md) |
 | Edit the cockpit UI (tokens, layout, components) | [DESIGN_NOTES.md](DESIGN_NOTES.md) |
 | Maintain the repo (cleanup, tests, releases) | [MAINTENANCE.md](MAINTENANCE.md) |

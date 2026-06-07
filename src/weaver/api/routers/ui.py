@@ -28,12 +28,13 @@ from weaver.core.global_config import load_global_config, resolve_config_value
 from weaver.errors import ChapterNotFoundError, SegmentNotFoundError, WeaverError
 from weaver.providers.registry import known_provider_types
 from weaver.services.chapter_workspace import chapter_workspace
+from weaver.services.epub_structure_preview import preview_epub_structure
 from weaver.services.import_source import import_volume
 from weaver.services.project import delete_project, initialize_project, project_exists
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_tree import project_tree
 from weaver.services.segment_history import segment_translation_history
-from weaver.services.source_browser import list_directory
+from weaver.services.source_browser import list_directory, resolve_source
 from weaver.services.source_intake import resolve_intake_source
 from weaver.services.workspace_edit import save_segment_translation
 
@@ -94,6 +95,29 @@ def dashboard(request: Request) -> HTMLResponse:
             "books_dir": str(base),
             "default_provider": default_provider,
             "default_model": default_model,
+        },
+    )
+
+
+@router.get("/ui/epub-preview", response_class=HTMLResponse)
+def epub_preview_page(request: Request, source_path: str = Query("")) -> HTMLResponse:
+    """Read-only EPUB structure preview page for a sandboxed source path."""
+
+    preview: dict[str, Any] | None = None
+    error: str | None = None
+    if source_path.strip():
+        try:
+            preview = preview_epub_structure(resolve_source(_base_dir(request), source_path))
+        except WeaverError as exc:
+            error = str(exc)
+    return templates.TemplateResponse(
+        request,
+        "epub_preview.html",
+        {
+            **global_layout("epub-preview"),
+            "source_path": source_path,
+            "preview": preview,
+            "error": error,
         },
     )
 

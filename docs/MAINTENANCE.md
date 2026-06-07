@@ -26,6 +26,23 @@ uv run pyright
 - `requires_ollama` / `requires_cloud` / `slow` markers gate environment-dependent tests; CI skips them.
 - Acceptance gate: `uv run python bench/run_acceptance_gate.py` (AC-1..AC-9).
 
+## Phase F EPUB closeout validation
+Use this bundle when changing EPUB package parsing, preview, preservation
+context, validation, or export fidelity checks:
+
+```bash
+uv run pytest -q
+uv run pyright
+uv run ruff check .
+uv run ruff format --check .
+uv run weaver --help
+```
+
+Targeted smoke before a full run: EPUB structure tests, preview service/API/UI
+tests, renderer EPUB tests, import-source tests, and export-fidelity tests.
+OCR/vision remains out of scope unless a separate ADR/approval explicitly adds
+an adapter, dependency/provider, credential behavior, or image output contract.
+
 ## MVP stabilization validation (Sprint 9 baseline)
 The exact gate run to lock the MVP baseline — the full matrix lives in git history.
 ```bash

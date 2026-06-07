@@ -737,3 +737,12 @@ textarea:focus-visible,
   }
   .htmx-indicator { transition: none; }
 }
+
+/* EPUB structure preview (Phase F) */
+.epub-nav-tree ul { list-style: none; padding-left: var(--space-md); margin: var(--space-xs) 0 0; border-left: 1px solid var(--color-line-soft); }
+.epub-nav-tree li { padding: 0.2rem 0; }
+.epub-nav-tree__label { font-weight: 650; margin-right: var(--space-xs); }
+.epub-nav-tree code { margin-left: var(--space-xs); }
+.epub-excerpt { border: 1px solid var(--color-line-soft); border-radius: var(--radius-md); padding: var(--space-sm) var(--space-md); margin: var(--space-sm) 0; background: var(--color-canvas); }
+.epub-excerpt__head { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: baseline; margin-bottom: var(--space-xs); }
+.epub-excerpt p { margin: 0; color: var(--color-body); white-space: pre-wrap; overflow-wrap: anywhere; }

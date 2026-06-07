@@ -30,6 +30,7 @@ weaver serve-api                      # same FastAPI app, headless (no browser),
 | Dashboard | Lists every discovered project under `--books-dir` (no path typing). |
 | Cockpit (per project) | Read-only status mirror of `weaver inspect`; entry to actions below. |
 | New project | Browse the sandboxed books dir **or** upload an EPUB; pick provider + template; run `init`. |
+| EPUB structure preview | Read-only uploaded/sandboxed EPUB preview for metadata, resource counts, reading order, navigation, image roles, short untranslated chapter excerpts, and validation issues with a safe/warnings/errors readiness badge. Linked from the source browser ("preview" on `.epub` entries). |
 | Provider/model config | Write project `[provider]` or global default from a dropdown; API key writes to the secret store only. |
 | Translate | Start (first-N / retry-failed), live **SSE** progress, cooperative **stop** (committed segments stay). |
 | Glossary review | Paginated approve / edit / reject of pending candidates; approved-term conflicts + per-chapter coverage diff shown read-only. |
@@ -43,6 +44,19 @@ browser → FastAPI UI router (api/routers/ui*.py)
 long jobs: api/routers/{translate,batch,export} → api/jobs.py (JobRegistry, single-process thread workers) → SSE stream → htmx-updated panel
 ```
 HTMX provides liveness (progress, partial updates) without a JS build step.
+
+## EPUB structure preview (Phase F)
+
+Phase F adds a read-only preview surface for inspecting EPUB package structure
+before deeper import/export integration:
+
+| Method | Path | Service | Notes |
+|---|---|---|---|
+| POST | `/projects/epub-preview` | `epub_structure_preview.preview_epub_structure` | Accepts an uploaded EPUB or sandboxed `source_path`; returns metadata, counts, resources, spine, navigation, images, chapter excerpts, validation issues (flat and grouped by scope), and readiness flags. No SQLite writes, no image bytes, no OCR, no translation. |
+| GET | `/ui/epub-preview?source_path=...` | `epub_structure_preview.preview_epub_structure` | Minimal server-rendered preview page for the same read-only structure data. |
+
+The preview parser uses `parse_epub_structure()` and does not replace
+`read_epub()` in the import, translation, or export workflow.
 
 ## FastAPI browser UI (Sprint 11 — `src/weaver/api/`, ADR `007`)
 
