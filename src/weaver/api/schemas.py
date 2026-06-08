@@ -849,3 +849,26 @@ class JobDetailResponse(BaseModel):
     job: JobSummaryResponse
     result: dict[str, Any] | None
     events: list[JobEventResponse]
+
+
+# ---------------------------------------------------------------------------
+# EPUB preservation snapshot (Sprint J — ADR 010-adjacent)
+# ---------------------------------------------------------------------------
+
+
+class SnapshotStatusResponse(BaseModel):
+    """Lightweight snapshot status for one volume."""
+
+    volume_id: int
+    state: str  # "missing" | "fresh" | "stale"
+    source_hash: str | None
+    parser_version: int | None
+    created_at: str | None
+    updated_at: str | None
+
+
+class ReparseJobResponse(BaseModel):
+    """Acknowledgement payload from a reparse job submission."""
+
+    job_id: str
+    volume_id: int

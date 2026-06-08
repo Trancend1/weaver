@@ -11,6 +11,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Response, UploadFile
 
+from weaver.api.jobs import ParseResult
 from weaver.api.schemas import (
     BrowseEntryResponse,
     BrowseListingResponse,
@@ -21,9 +22,11 @@ from weaver.api.schemas import (
     NovelTreeResponse,
     ProjectListResponse,
     ProjectSummaryResponse,
+    ReparseJobResponse,
     SegmentTranslationHistoryResponse,
     SegmentTranslationResponse,
     SegmentTranslationUpdate,
+    SnapshotStatusResponse,
     TranslationAttemptResponse,
     VolumeResponse,
     WorkspaceSegmentResponse,
@@ -36,6 +39,10 @@ from weaver.errors import (
     WeaverError,
 )
 from weaver.services.chapter_workspace import chapter_workspace
+from weaver.services.epub_reparse import (
+    reparse_volume,
+    status_for_volume,
+)
 from weaver.services.epub_structure_preview import preview_epub_structure
 from weaver.services.import_source import import_volume
 from weaver.services.project import delete_project, initialize_project, project_exists
@@ -463,3 +470,82 @@ def delete_volume_endpoint(name: str, volume_id: int, request: Request) -> Respo
     except WeaverError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return Response(status_code=204)
+
+
+# --- EPUB preservation snapshot (Sprint J4) --------------------------------
+
+
+def _require_project(request: Request, name: str):
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    if dp is None:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found.")
+    if dp.error:
+        raise HTTPException(status_code=422, detail=dp.error)
+    return base, dp
+
+
+@router.get(
+    "/{name}/volumes/{volume_id}/snapshot",
+    response_model=SnapshotStatusResponse,
+)
+def get_volume_snapshot_status(
+    name: str, volume_id: int, request: Request
+) -> SnapshotStatusResponse:
+    """Report whether the volume's EPUB snapshot is missing/fresh/stale."""
+    base, dp = _require_project(request, name)
+    try:
+        status = status_for_volume(dp.project_toml, volume_id, cwd=base)
+    except VolumeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return SnapshotStatusResponse(
+        volume_id=status.volume_id,
+        state=status.state,
+        source_hash=status.source_hash,
+        parser_version=status.parser_version,
+        created_at=status.created_at,
+        updated_at=status.updated_at,
+    )
+
+
+@router.post(
+    "/{name}/volumes/{volume_id}/reparse",
+    response_model=ReparseJobResponse,
+    status_code=202,
+)
+def submit_volume_reparse(name: str, volume_id: int, request: Request) -> ReparseJobResponse:
+    """Submit a Sprint I persistent parse job that refreshes the snapshot."""
+    base, dp = _require_project(request, name)
+    jobs = _jobs(request)
+    if jobs is None:
+        raise HTTPException(status_code=503, detail="Job registry is not available.")
+
+    project_toml = dp.project_toml
+
+    def runner(should_cancel) -> ParseResult:  # noqa: ARG001 — single-unit parse
+        status = reparse_volume(project_toml, volume_id, cwd=base)
+        # Bring back enough counters to feed the result_json contract.
+        from contextlib import closing
+
+        from weaver.services.epub_snapshot import read_snapshot
+
+        parsed = read_snapshot((base / ".weaver" / name / "weaver.db").resolve(), volume_id)
+        _ = closing  # silence unused (closing used inside read_snapshot)
+        return ParseResult(
+            volume_id=volume_id,
+            source_hash=status.source_hash or "",
+            parser_version=status.parser_version or 0,
+            manifest_count=len(parsed.manifest) if parsed else 0,
+            spine_count=len(parsed.spine) if parsed else 0,
+            nav_count=len(parsed.navigation) if parsed else 0,
+            image_count=len(parsed.images) if parsed else 0,
+            validation_count=len(parsed.validation_issues) if parsed else 0,
+        )
+
+    try:
+        job = jobs.submit_parse(project_name=name, volume_id=volume_id, runner=runner)
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return ReparseJobResponse(job_id=job.id, volume_id=volume_id)
