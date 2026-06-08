@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Character Drafts · {{ name }} · Weaver{% endblock %}
+{% block content %}
+<section class="panel c-panel">
+  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ name, "label": name}, {"href": none, "label":"character drafts"}] %}
+  {% set page_title = "Character Page Drafts · " ~ name %}
+  {% set page_meta = "Review XHTML/text-only character page drafts. No OCR, no image processing." %}
+  {% include "partials/_page_header.html" %}
+
+  <div class="drafts-controls">
+    <p class="hint">Character page drafts are extracted from XHTML text content. Only pages with actual text content are processed — images are never scanned.</p>
+  </div>
+
+  <div id="drafts-list" hx-get="/ui/projects/{{ name }}/drafts/list" hx-trigger="load" hx-target="#drafts-list" hx-swap="outerHTML">
+    <p class="empty hint empty-state">Loading drafts…</p>
+  </div>
+</section>
+{% endblock %}

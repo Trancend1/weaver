@@ -1,0 +1,39 @@
+{% if drafts %}
+<div class="drafts-grid" id="drafts-list">
+  {% for d in drafts %}
+  <div class="draft-card card" id="draft-{{ d.id }}">
+    <div class="draft-header">
+      <span class="badge c-badge {{ 'ok' if d.status == 'approved' else 'bad' if d.status == 'rejected' else '' }}">{{ d.status }}</span>
+      {% if d.heading %}<strong>{{ d.heading }}</strong>{% endif %}
+      {% if d.page_identifier %}<span class="meta">{{ d.page_identifier }}</span>{% endif %}
+    </div>
+    <div class="draft-source">
+      <strong>Source text:</strong>
+      <p>{{ d.source_text[:300] }}{% if d.source_text|length > 300 %}…{% endif %}</p>
+    </div>
+    <div class="draft-target">
+      <strong>Draft:</strong>
+      <p>{{ d.draft_text[:500] }}{% if d.draft_text|length > 500 %}…{% endif %}</p>
+    </div>
+    {% if d.status == 'draft' %}
+    <div class="draft-actions toolbar-row">
+      <button class="btn-sm" hx-post="/ui/projects/{{ name }}/drafts/{{ d.id }}/approve" hx-target="#draft-{{ d.id }}" hx-swap="outerHTML">Approve</button>
+      <button class="btn-sm" hx-post="/ui/projects/{{ name }}/drafts/{{ d.id }}/reject" hx-target="#draft-{{ d.id }}" hx-swap="outerHTML">Reject</button>
+    </div>
+    {% endif %}
+    <details class="draft-provenance">
+      <summary class="meta">Provenance</summary>
+      <pre class="provenance-detail">{{ d.provenance | tojson(indent=2) if d.provenance is mapping else d.provenance }}</pre>
+    </details>
+    <p class="meta">Created: {{ d.created_at }} · Updated: {{ d.updated_at }}</p>
+  </div>
+  {% endfor %}
+  {% if total_count > drafts|length %}
+  <p class="meta">Showing {{ drafts|length }} of {{ total_count }} drafts.</p>
+  {% endif %}
+</div>
+{% else %}
+<div class="empty empty-state" id="drafts-list">
+  <p>No character page drafts yet. Generate a draft from a character page chapter to see it here.</p>
+</div>
+{% endif %}

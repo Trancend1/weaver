@@ -29,6 +29,14 @@
     {% set item_label = 'Memory' %}
     {% set item_key = 'memory' %}
     {% include "partials/_sidebar_item.html" %}
+    {% set item_href = '/ui/projects/' ~ project_name ~ '/candidates' %}
+    {% set item_label = 'Candidates' %}
+    {% set item_key = 'candidates' %}
+    {% include "partials/_sidebar_item.html" %}
+    {% set item_href = '/ui/projects/' ~ project_name ~ '/character-drafts' %}
+    {% set item_label = 'Drafts' %}
+    {% set item_key = 'drafts' %}
+    {% include "partials/_sidebar_item.html" %}
   </nav>
 
   {% if sidebar_tree and layout_mode == "project" %}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Candidates · {{ name }} · Weaver{% endblock %}
+{% block content %}
+<section class="panel c-panel">
+  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ name, "label": name}, {"href": none, "label":"candidates"}] %}
+  {% set page_title = "Translation Candidates · " ~ name %}
+  {% set page_meta = "Review, approve, reject, or apply AI-generated translation candidates." %}
+  {% include "partials/_page_header.html" %}
+
+  <div class="candidates-controls">
+    <p class="hint">Candidates are AI-generated translation suggestions. They <strong>never</strong> overwrite the current translation until you explicitly <em>apply</em> them.</p>
+  </div>
+
+  <div id="candidates-list" hx-get="/ui/projects/{{ name }}/candidates/list" hx-trigger="load" hx-target="#candidates-list" hx-swap="outerHTML">
+    <p class="empty hint empty-state">Loading candidates…</p>
+  </div>
+</section>
+{% endblock %}
