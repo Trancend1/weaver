@@ -6,7 +6,7 @@ All types are read-only response models. Domain logic stays in
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -799,3 +799,53 @@ class QAReportResponse(BaseModel):
     summary_by_category: dict[str, int]
     summary_by_chapter: list[QAScopeSummaryResponse]
     summary_by_volume: list[QAScopeSummaryResponse]
+
+
+# ---------------------------------------------------------------------------
+# Unified job detail / list (Sprint I — ADR 010)
+# ---------------------------------------------------------------------------
+
+
+class JobSummaryResponse(BaseModel):
+    """Single persisted job entry (kind-agnostic)."""
+
+    id: str
+    kind: str
+    status: str
+    project_name: str
+    scope: str | None
+    scope_id: str | None
+    chapter_id: str | None
+    mode: str | None
+    target: str | None
+    total_units: int
+    done_units: int
+    failed_units: int
+    skipped_units: int
+    current_label: str | None
+    error_summary: str | None
+    started_at: str
+    finished_at: str | None
+
+
+class JobListResponse(BaseModel):
+    """Persisted jobs for one project, newest first."""
+
+    jobs: list[JobSummaryResponse]
+
+
+class JobEventResponse(BaseModel):
+    """One persisted job event for SSE replay/diagnostics."""
+
+    id: int
+    event: str
+    data: dict[str, Any]
+    created_at: str
+
+
+class JobDetailResponse(BaseModel):
+    """Persisted job + replayed event log (kind-agnostic detail surface)."""
+
+    job: JobSummaryResponse
+    result: dict[str, Any] | None
+    events: list[JobEventResponse]

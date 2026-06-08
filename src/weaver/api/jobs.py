@@ -1,13 +1,19 @@
-"""In-memory background translation jobs for the FastAPI cockpit (Sprint 4A/4B).
+"""In-memory + SQLite-backed background jobs for the FastAPI cockpit.
 
-A translate request submits a runner; the runner executes on one daemon thread,
-reporting per-segment progress and honouring a cooperative cancel flag. The job's
-live progress, terminal state, and result are read back by job id, and progress
-events can be streamed as Server-Sent Events.
+A translate / batch / export request submits a runner; the runner executes on
+one daemon thread, reporting per-segment progress and honouring a cooperative
+cancel flag. The job's live progress, terminal state, and result are read back
+by job id, and progress events can be streamed as Server-Sent Events.
 
-# JobRegistry is temporary infrastructure.
+Sprint I (ADR 010) added a SQLite durability layer behind this in-memory
+registry. When the registry is constructed with a ``base_dir``, every status
+transition + sampled progress snapshot + SSE event is mirrored to the owning
+project's ``weaver.db`` so a browser refresh, a navigation, or a process
+restart never loses the job's state.
+
+# JobRegistry is single-process, in-thread infrastructure.
 # Do not build Celery, Redis, RabbitMQ, Kafka, Dramatiq, RQ, or distributed workers.
-# Single-process thread worker only.
+# SQLite is the durability layer (ADR 010), not a queue.
 
 Stdlib + shared service types only; no FastAPI imports so the registry
 stays trivially testable and framework-agnostic (ADR 004).
@@ -16,13 +22,19 @@ stays trivially testable and framework-agnostic (ADR 004).
 from __future__ import annotations
 
 import json
+import logging
 import queue
+import sqlite3
 import threading
+import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import closing
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
+from weaver.errors import WeaverError
 from weaver.services.batch_translate import (
     BatchProgressCallback,
     BatchProgressSnapshot,
@@ -33,9 +45,24 @@ from weaver.services.export_book import (
     ExportProgressSnapshot,
     ExportResult,
 )
+from weaver.services.job_store import (
+    JOB_KIND_BATCH,
+    JOB_KIND_EXPORT,
+    JOB_KIND_TRANSLATE,
+    append_event,
+    db_path_for,
+    insert_job,
+    update_job_progress,
+    update_job_terminal,
+)
+from weaver.services.logging_setup import log_job_event
 from weaver.services.translation import ProgressCallback
 from weaver.services.workspace_translate import ChapterTranslationResult
+from weaver.storage.db import connect_database
 from weaver.storage.segments import SegmentRecord
+
+logger = logging.getLogger("weaver.job")
+_PROGRESS_FLUSH_INTERVAL_SECONDS = 1.0
 
 # A runner is a closure built by the route around ``run_translation``. It receives
 # a cooperative cancel predicate and a progress callback, and returns the run
@@ -51,6 +78,164 @@ ExportJobRunner = Callable[[ShouldCancel, ExportProgressCallback], ExportResult]
 # Sentinel pushed onto the event queue when the worker finishes (any outcome), so
 # an SSE generator knows to stop draining.
 _STREAM_END: None = None
+
+
+class JobStorage:
+    """Per-job persistence mediator (ADR 010).
+
+    Wraps the SQLite calls each running job needs: status, progress, events.
+    A single instance is created once per submitted job and shared with the
+    worker thread. ``db_path=None`` means persistence is disabled (used in
+    pure-memory tests + when the registry has no books-dir).
+
+    Connections are opened **per call** — never shared across threads — so the
+    registry remains GIL-bound but never collides on a sqlite3 handle.
+    """
+
+    def __init__(self, *, job_id: str, db_path: Path | None) -> None:
+        self.job_id = job_id
+        self.db_path = db_path
+        self._last_flush = 0.0
+        self._lock = threading.Lock()
+
+    @property
+    def enabled(self) -> bool:
+        return self.db_path is not None
+
+    def insert(
+        self,
+        *,
+        kind: str,
+        project_name: str,
+        scope: str | None,
+        scope_id: str | None,
+        chapter_id: str | None,
+        mode: str | None,
+        target: str | None,
+        total_units: int,
+    ) -> None:
+        if not self.enabled:
+            return
+        try:
+            with closing(connect_database(self.db_path)) as conn:  # type: ignore[arg-type]
+                insert_job(
+                    conn,
+                    job_id=self.job_id,
+                    kind=kind,
+                    project_name=project_name,
+                    scope=scope,
+                    scope_id=scope_id,
+                    chapter_id=chapter_id,
+                    mode=mode,
+                    target=target,
+                    total_units=total_units,
+                )
+        except (WeaverError, sqlite3.Error) as exc:
+            logger.warning(
+                "job.insert.failed", extra={"data": {"job_id": self.job_id, "error": str(exc)}}
+            )
+            return
+        # G6 lifecycle event — separate from the SSE event log (job_events).
+        log_job_event(
+            "job.submitted",
+            job_id=self.job_id,
+            kind=kind,
+            project=project_name,
+            scope=scope,
+            scope_id=scope_id,
+            chapter_id=chapter_id,
+            target=target,
+            total_units=total_units,
+        )
+
+    def flush_progress(
+        self,
+        *,
+        done_units: int,
+        failed_units: int,
+        skipped_units: int = 0,
+        total_units: int | None = None,
+        current_label: str | None = None,
+        force: bool = False,
+    ) -> None:
+        """Flush counters at most once per :data:`_PROGRESS_FLUSH_INTERVAL_SECONDS`.
+
+        ``force=True`` bypasses the interval — terminal flushes use it.
+        """
+        if not self.enabled:
+            return
+        with self._lock:
+            now = time.monotonic()
+            if not force and now - self._last_flush < _PROGRESS_FLUSH_INTERVAL_SECONDS:
+                return
+            self._last_flush = now
+        try:
+            with closing(connect_database(self.db_path)) as conn:  # type: ignore[arg-type]
+                update_job_progress(
+                    conn,
+                    job_id=self.job_id,
+                    done_units=done_units,
+                    failed_units=failed_units,
+                    skipped_units=skipped_units,
+                    total_units=total_units,
+                    current_label=current_label,
+                )
+        except (WeaverError, sqlite3.Error) as exc:
+            logger.warning(
+                "job.progress.failed", extra={"data": {"job_id": self.job_id, "error": str(exc)}}
+            )
+
+    def append_event(self, *, event: str, data: dict[str, Any]) -> int | None:
+        """Persist one SSE event and return the new event id (or None on failure)."""
+        if not self.enabled:
+            return None
+        try:
+            with closing(connect_database(self.db_path)) as conn:  # type: ignore[arg-type]
+                return append_event(
+                    conn,
+                    project_id=None,
+                    job_id=self.job_id,
+                    event=event,
+                    data=data,
+                )
+        except (WeaverError, sqlite3.Error) as exc:
+            logger.warning(
+                "job.event.failed",
+                extra={"data": {"job_id": self.job_id, "error": str(exc), "event": event}},
+            )
+            return None
+
+    def finish(
+        self,
+        *,
+        status: str,
+        result: dict[str, Any] | None,
+        error_summary: str | None,
+    ) -> None:
+        """Synchronously persist a terminal status before the terminal SSE event."""
+        if not self.enabled:
+            return
+        try:
+            with closing(connect_database(self.db_path)) as conn:  # type: ignore[arg-type]
+                update_job_terminal(
+                    conn,
+                    job_id=self.job_id,
+                    status=status,
+                    result=result,
+                    error_summary=error_summary,
+                )
+        except (WeaverError, sqlite3.Error) as exc:
+            logger.warning(
+                "job.finish.failed",
+                extra={"data": {"job_id": self.job_id, "error": str(exc), "status": status}},
+            )
+            return
+        log_job_event(
+            "job.finished",
+            job_id=self.job_id,
+            status=status,
+            error_summary=error_summary,
+        )
 
 
 @dataclass
@@ -81,6 +266,7 @@ class TranslationJob:
     error: str | None = None
     progress: JobProgress = field(default_factory=JobProgress)
     queue: queue.Queue[dict[str, Any] | None] = field(default_factory=queue.Queue)
+    storage: JobStorage | None = None
     _cancel: threading.Event = field(default_factory=threading.Event)
     _lock: threading.Lock = field(default_factory=threading.Lock)
     _updated_segment_ids: list[str] = field(default_factory=list)
@@ -133,19 +319,30 @@ class TranslationJob:
                 self.progress.failed += 1
             if segment.id not in self._updated_segment_ids:
                 self._updated_segment_ids.append(segment.id)
-        self.queue.put(
-            {
-                "event": "progress",
-                "data": {
-                    "current": index,
-                    "total": total,
-                    "segment_id": segment.id,
-                    "status": "translated" if translated else "failed",
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                },
-            }
-        )
+            current = self.progress.current
+            done = self.progress.translated
+            failed = self.progress.failed
+        if self.storage is not None:
+            self.storage.flush_progress(
+                done_units=done,
+                failed_units=failed,
+                total_units=total,
+                current_label=segment.id,
+            )
+        data = {
+            "current": index,
+            "total": total,
+            "segment_id": segment.id,
+            "status": "translated" if translated else "failed",
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+        }
+        event_id = self.storage.append_event(event="progress", data=data) if self.storage else None
+        envelope: dict[str, Any] = {"event": "progress", "data": data}
+        if event_id is not None:
+            envelope["id"] = event_id
+        self.queue.put(envelope)
+        _ = current  # silence unused (kept for symmetry with snapshot path)
 
     def run(self) -> None:
         """Execute the runner on the worker thread, emitting queue events.
@@ -155,33 +352,64 @@ class TranslationJob:
         sentinel. The broad ``except`` is the web-boundary analogue of the CLI
         boundary (CLAUDE.md §4.2): an unhandled worker-thread exception would
         vanish silently, so it is surfaced — on the job and on the stream — not
-        swallowed.
+        swallowed. SQLite mirroring is synchronous before the terminal event so
+        a refresh-after-finish always sees the persisted terminal row.
         """
 
+        terminal_data: dict[str, Any]
         try:
             self.result = self.runner(self.should_cancel, self.on_progress)
         except Exception as exc:  # noqa: BLE001 - web boundary; surfaced, not swallowed
             self.status = "failed"
             self.error = str(exc)
-            self.queue.put({"event": "error", "data": {"message": str(exc)}})
+            terminal_data = {"message": str(exc)}
+            if self.storage is not None:
+                self.storage.flush_progress(
+                    done_units=self.progress.translated,
+                    failed_units=self.progress.failed,
+                    force=True,
+                )
+                self.storage.finish(status="failed", result=None, error_summary=str(exc))
+            event_id = (
+                self.storage.append_event(event="error", data=terminal_data)
+                if self.storage
+                else None
+            )
+            envelope: dict[str, Any] = {"event": "error", "data": terminal_data}
+            if event_id is not None:
+                envelope["id"] = event_id
+            self.queue.put(envelope)
         else:
             self.status = "cancelled" if self.should_cancel() else "done"
             result = self.result
-            self.queue.put(
-                {
-                    "event": self.status,
-                    "data": {
-                        "selected": result.selected,
-                        "translated": result.translated,
-                        "reused_from_memory": result.reused_from_memory,
-                        "failed": result.failed,
-                        "skipped": result.skipped,
-                        "input_tokens": result.input_tokens,
-                        "output_tokens": result.output_tokens,
-                        "cancelled": result.cancelled,
-                    },
-                }
+            terminal_data = {
+                "selected": result.selected,
+                "translated": result.translated,
+                "reused_from_memory": result.reused_from_memory,
+                "failed": result.failed,
+                "skipped": result.skipped,
+                "input_tokens": result.input_tokens,
+                "output_tokens": result.output_tokens,
+                "cancelled": result.cancelled,
+            }
+            if self.storage is not None:
+                self.storage.flush_progress(
+                    done_units=result.translated,
+                    failed_units=result.failed,
+                    skipped_units=result.skipped,
+                    total_units=self.progress.total,
+                    force=True,
+                )
+                self.storage.finish(status=self.status, result=terminal_data, error_summary=None)
+            event_id = (
+                self.storage.append_event(event=self.status, data=terminal_data)
+                if self.storage
+                else None
             )
+            envelope = {"event": self.status, "data": terminal_data}
+            if event_id is not None:
+                envelope["id"] = event_id
+            self.queue.put(envelope)
         finally:
             self.queue.put(_STREAM_END)
 
@@ -233,6 +461,7 @@ class BatchJob:
     error: str | None = None
     progress: BatchProgress = field(default_factory=BatchProgress)
     queue: queue.Queue[dict[str, Any] | None] = field(default_factory=queue.Queue)
+    storage: JobStorage | None = None
     _cancel: threading.Event = field(default_factory=threading.Event)
     _lock: threading.Lock = field(default_factory=threading.Lock)
     _thread: threading.Thread | None = field(default=None, repr=False)
@@ -288,7 +517,20 @@ class BatchJob:
                 skipped=snapshot.skipped,
                 failed=snapshot.failed,
             )
-        self.queue.put({"event": "progress", "data": _batch_progress_data(snapshot)})
+        if self.storage is not None:
+            self.storage.flush_progress(
+                done_units=snapshot.segments_done,
+                failed_units=snapshot.failed,
+                skipped_units=snapshot.skipped,
+                total_units=snapshot.segments_total,
+                current_label=snapshot.current_chapter_id,
+            )
+        data = _batch_progress_data(snapshot)
+        event_id = self.storage.append_event(event="progress", data=data) if self.storage else None
+        envelope: dict[str, Any] = {"event": "progress", "data": data}
+        if event_id is not None:
+            envelope["id"] = event_id
+        self.queue.put(envelope)
 
     def run(self) -> None:
         """Execute the runner on the worker thread, emitting queue events.
@@ -304,11 +546,34 @@ class BatchJob:
         except Exception as exc:  # noqa: BLE001 - web boundary; surfaced, not swallowed
             self.status = "failed"
             self.error = str(exc)
-            self.queue.put({"event": "error", "data": {"message": str(exc)}})
+            if self.storage is not None:
+                self.storage.finish(status="failed", result=None, error_summary=str(exc))
+            data = {"message": str(exc)}
+            event_id = self.storage.append_event(event="error", data=data) if self.storage else None
+            envelope: dict[str, Any] = {"event": "error", "data": data}
+            if event_id is not None:
+                envelope["id"] = event_id
+            self.queue.put(envelope)
         else:
             result = self.result
             self.status = "cancelled" if result.cancelled else "done"
-            self.queue.put({"event": self.status, "data": _batch_result_data(result)})
+            data = _batch_result_data(result)
+            if self.storage is not None:
+                self.storage.flush_progress(
+                    done_units=result.segments_total,
+                    failed_units=result.failed,
+                    skipped_units=result.skipped,
+                    total_units=result.segments_total,
+                    force=True,
+                )
+                self.storage.finish(status=self.status, result=data, error_summary=None)
+            event_id = (
+                self.storage.append_event(event=self.status, data=data) if self.storage else None
+            )
+            envelope = {"event": self.status, "data": data}
+            if event_id is not None:
+                envelope["id"] = event_id
+            self.queue.put(envelope)
         finally:
             self.queue.put(_STREAM_END)
 
@@ -355,6 +620,7 @@ class ExportJob:
     error: str | None = None
     progress: ExportProgress = field(default_factory=ExportProgress)
     queue: queue.Queue[dict[str, Any] | None] = field(default_factory=queue.Queue)
+    storage: JobStorage | None = None
     _cancel: threading.Event = field(default_factory=threading.Event)
     _lock: threading.Lock = field(default_factory=threading.Lock)
     _thread: threading.Thread | None = field(default=None, repr=False)
@@ -400,7 +666,22 @@ class ExportJob:
                 translated_segments=snapshot.translated_segments,
                 fallback_segments=snapshot.fallback_segments,
             )
-        self.queue.put({"event": "progress", "data": _export_progress_data(snapshot)})
+        if self.storage is not None:
+            label = snapshot.current_volume_title or (
+                str(snapshot.current_volume_id) if snapshot.current_volume_id is not None else None
+            )
+            self.storage.flush_progress(
+                done_units=snapshot.volumes_done,
+                failed_units=0,
+                total_units=snapshot.volumes_total,
+                current_label=label,
+            )
+        data = _export_progress_data(snapshot)
+        event_id = self.storage.append_event(event="progress", data=data) if self.storage else None
+        envelope: dict[str, Any] = {"event": "progress", "data": data}
+        if event_id is not None:
+            envelope["id"] = event_id
+        self.queue.put(envelope)
 
     def run(self) -> None:
         """Execute the runner on the worker thread, emitting queue events.
@@ -416,11 +697,33 @@ class ExportJob:
         except Exception as exc:  # noqa: BLE001 - web boundary; surfaced, not swallowed
             self.status = "failed"
             self.error = str(exc)
-            self.queue.put({"event": "error", "data": {"message": str(exc)}})
+            if self.storage is not None:
+                self.storage.finish(status="failed", result=None, error_summary=str(exc))
+            data = {"message": str(exc)}
+            event_id = self.storage.append_event(event="error", data=data) if self.storage else None
+            envelope: dict[str, Any] = {"event": "error", "data": data}
+            if event_id is not None:
+                envelope["id"] = event_id
+            self.queue.put(envelope)
         else:
             result = self.result
             self.status = "cancelled" if result.cancelled else "done"
-            self.queue.put({"event": self.status, "data": _export_result_data(result)})
+            data = _export_result_data(result)
+            if self.storage is not None:
+                self.storage.flush_progress(
+                    done_units=result.volumes_exported,
+                    failed_units=0,
+                    total_units=result.volumes_total,
+                    force=True,
+                )
+                self.storage.finish(status=self.status, result=data, error_summary=None)
+            event_id = (
+                self.storage.append_event(event=self.status, data=data) if self.storage else None
+            )
+            envelope = {"event": self.status, "data": data}
+            if event_id is not None:
+                envelope["id"] = event_id
+            self.queue.put(envelope)
         finally:
             self.queue.put(_STREAM_END)
 
@@ -529,13 +832,30 @@ class JobRegistry:
     Chapter jobs (:class:`TranslationJob`) and batch jobs (:class:`BatchJob`)
     live in separate dicts; both key on a globally-unique ``uuid4().hex``, so a
     batch id is never resolvable via :meth:`get` and vice-versa.
+
+    When constructed with a ``base_dir`` (the books directory), every job's
+    status, sampled progress, and SSE events are persisted to the owning
+    project's ``weaver.db`` via :class:`JobStorage`. When ``base_dir`` is
+    ``None`` (tests, ad-hoc registry) jobs run in memory only — the same
+    behaviour Sprints 4A/4B shipped.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, base_dir: Path | None = None) -> None:
         self._lock = threading.Lock()
         self._jobs: dict[str, TranslationJob] = {}
         self._batch_jobs: dict[str, BatchJob] = {}
         self._export_jobs: dict[str, ExportJob] = {}
+        self._base_dir = base_dir
+
+    @property
+    def base_dir(self) -> Path | None:
+        return self._base_dir
+
+    def _storage_for(self, project_name: str, job_id: str) -> JobStorage:
+        db_path: Path | None = None
+        if self._base_dir is not None:
+            db_path = db_path_for(self._base_dir, project_name)
+        return JobStorage(job_id=job_id, db_path=db_path)
 
     def submit(
         self,
@@ -559,13 +879,26 @@ class JobRegistry:
             The created :class:`TranslationJob` (already running).
         """
 
+        job_id = uuid.uuid4().hex
+        storage = self._storage_for(project_name, job_id)
+        storage.insert(
+            kind=JOB_KIND_TRANSLATE,
+            project_name=project_name,
+            scope="chapter",
+            scope_id=chapter_id,
+            chapter_id=chapter_id,
+            mode=mode,
+            target=None,
+            total_units=total,
+        )
         job = TranslationJob(
-            id=uuid.uuid4().hex,
+            id=job_id,
             project_name=project_name,
             chapter_id=chapter_id,
             mode=mode,
             runner=runner,
             progress=JobProgress(total=total),
+            storage=storage,
         )
         thread = threading.Thread(
             target=job.run,
@@ -624,13 +957,26 @@ class JobRegistry:
             The created :class:`BatchJob` (already running).
         """
 
+        job_id = uuid.uuid4().hex
+        storage = self._storage_for(project_name, job_id)
+        storage.insert(
+            kind=JOB_KIND_BATCH,
+            project_name=project_name,
+            scope=scope,
+            scope_id=scope_id,
+            chapter_id=None,
+            mode=mode,
+            target=None,
+            total_units=0,
+        )
         job = BatchJob(
-            id=uuid.uuid4().hex,
+            id=job_id,
             project_name=project_name,
             scope=scope,
             scope_id=scope_id,
             mode=mode,
             runner=runner,
+            storage=storage,
         )
         thread = threading.Thread(
             target=job.run,
@@ -671,13 +1017,26 @@ class JobRegistry:
             The created :class:`ExportJob` (already running).
         """
 
+        job_id = uuid.uuid4().hex
+        storage = self._storage_for(project_name, job_id)
+        storage.insert(
+            kind=JOB_KIND_EXPORT,
+            project_name=project_name,
+            scope=scope,
+            scope_id=scope_id,
+            chapter_id=None,
+            mode=None,
+            target=target,
+            total_units=0,
+        )
         job = ExportJob(
-            id=uuid.uuid4().hex,
+            id=job_id,
             project_name=project_name,
             scope=scope,
             scope_id=scope_id,
             target=target,
             runner=runner,
+            storage=storage,
         )
         thread = threading.Thread(
             target=job.run,
@@ -701,13 +1060,51 @@ def format_sse(event: dict[str, Any]) -> str:
     """Serialize one queue event to a ``text/event-stream`` frame.
 
     Args:
-        event: ``{"event": <name>, "data": <json-serializable dict>}``.
+        event: ``{"event": <name>, "data": <json-serializable dict>, "id"?: int}``.
 
     Returns:
-        An SSE frame: an ``event:`` line, a ``data:`` line (compact JSON), and the
-        terminating blank line.
+        An SSE frame with an optional ``id:`` line (used for Last-Event-Id
+        resume per Sprint I4 / ADR 010 §SSE resume), an ``event:`` line, a
+        ``data:`` line (compact JSON), and the terminating blank line.
     """
 
     name = str(event["event"])
     payload = json.dumps(event["data"], ensure_ascii=False)
+    if "id" in event and event["id"] is not None:
+        return f"id: {event['id']}\nevent: {name}\ndata: {payload}\n\n"
     return f"event: {name}\ndata: {payload}\n\n"
+
+
+def parse_last_event_id(value: str | None) -> int:
+    """Parse the ``Last-Event-Id`` header / query value to a positive int.
+
+    Returns ``0`` for missing, empty, or unparseable values — that is, replay
+    everything from the beginning. Never raises (a malformed header from a
+    reconnecting client should not 500).
+    """
+    if value is None:
+        return 0
+    raw = str(value).strip()
+    if not raw:
+        return 0
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return 0
+    return parsed if parsed > 0 else 0
+
+
+def replay_persisted_events(
+    db_path: Path | None, job_id: str, *, after_id: int
+) -> Iterator[dict[str, Any]]:
+    """Yield persisted SSE-event envelopes for ``job_id`` with id > ``after_id``."""
+    from weaver.services.job_store import list_events_after  # local import; module-level cycle risk
+
+    if db_path is None:
+        return
+    try:
+        with closing(connect_database(db_path)) as conn:
+            for row in list_events_after(conn, job_id=job_id, after_id=after_id):
+                yield {"event": row.event, "data": row.data, "id": row.id}
+    except (WeaverError, sqlite3.Error) as exc:
+        logger.warning("job.replay.failed", extra={"data": {"job_id": job_id, "error": str(exc)}})

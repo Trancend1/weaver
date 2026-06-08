@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Job {{ job.id[:8] }} · {{ project_name }} · Weaver{% endblock %}
+{% block content %}
+<section class="panel c-panel"
+  {% if job.status == "running" %}
+  hx-get="/ui/projects/{{ project_name }}/jobs/{{ job.id }}/detail"
+  hx-trigger="every 1s"
+  hx-target="this"
+  hx-swap="outerHTML"
+  {% endif %}>
+  {% set page_crumbs = [
+    {"href":"/ui", "label":"Dashboard"},
+    {"href":"/ui/projects/" ~ project_name, "label": project_name},
+    {"href":"/ui/projects/" ~ project_name ~ "/jobs", "label": "Jobs"},
+    {"href": none, "label": job.id[:8]}
+  ] %}
+  {% set page_title = "Job " ~ job.id[:8] %}
+  {% set page_meta = job.kind ~ " · " ~ (job.scope or "—") ~ (" · " ~ job.scope_id if job.scope_id else "") %}
+  {% if job.status == "running" %}
+    {% set page_actions %}<form method="post" action="/ui/projects/{{ project_name }}/jobs/{{ job.id }}/detail/cancel" style="display:inline">
+      <button type="submit" class="btn btn--danger">Cancel</button>
+    </form>{% endset %}
+  {% endif %}
+  {% include "partials/_page_header.html" %}
+
+  <dl class="job-meta">
+    <dt>Status</dt><dd><span class="badge job-status job-status--{{ job.status }}">{{ job.status }}</span></dd>
+    <dt>Progress</dt><dd>
+      {% if job.total_units %}
+      <progress value="{{ job.done_units }}" max="{{ job.total_units }}"></progress>
+      <span class="meta">{{ job.done_units }}/{{ job.total_units }}{% if job.failed_units %} · {{ job.failed_units }} failed{% endif %}{% if job.skipped_units %} · {{ job.skipped_units }} skipped{% endif %}</span>
+      {% else %}
+      <span class="meta">{{ job.done_units }} done{% if job.failed_units %} · {{ job.failed_units }} failed{% endif %}</span>
+      {% endif %}
+    </dd>
+    <dt>Started</dt><dd class="meta">{{ job.started_at }}</dd>
+    <dt>Finished</dt><dd class="meta">{{ job.finished_at or "—" }}</dd>
+    {% if job.current_label %}<dt>Current</dt><dd class="meta">{{ job.current_label }}</dd>{% endif %}
+  </dl>
+
+  {% if job.error_summary %}
+  <div class="error error-state" role="alert">
+    <strong>Error:</strong> {{ job.error_summary }}
+  </div>
+  {% endif %}
+
+  {% if result %}
+  <details class="job-result">
+    <summary>Result</summary>
+    <pre>{{ result | tojson(indent=2) }}</pre>
+  </details>
+  {% endif %}
+
+  <h2>Event log</h2>
+  {% if events %}
+  <ol class="job-events">
+    {% for e in events %}
+    <li class="job-event job-event--{{ e.event }}">
+      <span class="meta">#{{ e.id }} · {{ e.created_at }}</span>
+      <strong>{{ e.event }}</strong>
+      {% if e.data %}<code class="job-event__data">{{ e.data | tojson }}</code>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="meta">No events recorded.</p>
+  {% endif %}
+</section>
+{% endblock %}

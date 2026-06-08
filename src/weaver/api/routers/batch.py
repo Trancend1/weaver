@@ -19,7 +19,13 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from weaver.api.jobs import BatchJob, JobRegistry, format_sse
+from weaver.api.jobs import (
+    BatchJob,
+    JobRegistry,
+    format_sse,
+    parse_last_event_id,
+    replay_persisted_events,
+)
 from weaver.api.schemas import (
     BatchChapterOutcomeResponse,
     BatchJobProgressResponse,
@@ -169,15 +175,28 @@ def cancel_batch_job(name: str, job_id: str, request: Request) -> BatchJobStatus
 def stream_batch_job(name: str, job_id: str, request: Request) -> StreamingResponse:
     """Stream a batch job's aggregate progress as Server-Sent Events until done.
 
-    Single-consumer: events are drained from the job's queue. A late subscriber
-    still sees the buffered progress events followed by the terminal event."""
+    Honours ``Last-Event-Id`` (header or ``?last_event_id=``) for SSE resume
+    per ADR 010 §SSE resume."""
     job = _require_batch_job(request, name, job_id)
+    last_event_id = parse_last_event_id(
+        request.headers.get("Last-Event-Id") or request.query_params.get("last_event_id")
+    )
+    db_path = job.storage.db_path if job.storage is not None else None
+    terminal_at_open = job.status in {"done", "failed", "cancelled"}
 
     def stream() -> Iterator[str]:
+        seen: set[int] = set()
+        for envelope in replay_persisted_events(db_path, job_id, after_id=last_event_id):
+            seen.add(int(envelope["id"]))
+            yield format_sse(envelope)
+        if terminal_at_open:
+            return
         while True:
             event = job.queue.get()
             if event is None:  # stream-end sentinel
                 break
+            if isinstance(event.get("id"), int) and event["id"] in seen:
+                continue
             yield format_sse(event)
 
     return StreamingResponse(
