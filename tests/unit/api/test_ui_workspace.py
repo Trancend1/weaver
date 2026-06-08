@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -56,6 +57,53 @@ def test_workspace_renders_segments(ws_client: TestClient) -> None:
     seg_id = _first_segment_id(ws_client, name, chapter_id)
     assert f'id="seg-{seg_id}"' in r.text
     assert 'name="translated_text"' in r.text
+
+
+def test_workspace_renders_workflow_toolbar_and_progress(ws_client: TestClient) -> None:
+    name = _name(ws_client)
+    chapter_id = _first_chapter_id(ws_client, name)
+    page = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}").text
+    assert "workspace-tools" in page
+    assert "Next untranslated" in page
+    assert "Collapse translated" in page
+    assert "workspace-summary" in page
+    assert "workspace-progress" in page
+    assert "Translate untranslated / empty segments" in page
+    assert "Manual source of truth" in page or "Needs translation" in page
+
+
+def test_workspace_navigation_stays_project_scoped(ws_client: TestClient) -> None:
+    name = _name(ws_client)
+    chapter_id = _first_chapter_id(ws_client, name)
+    page = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}").text
+    assert f'href="/ui/projects/{name}"' in page
+    assert f'href="/ui/projects/{name}/chapters/{chapter_id}/qa"' in page
+    assert f'href="/ui/projects/{name}/candidates"' in page
+    assert f'href="/ui/projects/{name}/export/preflight"' in page
+    assert 'href="/ui"' not in page.split("page-header", 1)[1].split("</header>", 1)[0]
+
+
+def test_workspace_segment_actions_are_contextual(ws_client: TestClient) -> None:
+    name = _name(ws_client)
+    chapter_id = _first_chapter_id(ws_client, name)
+    seg_id = _first_segment_id(ws_client, name, chapter_id)
+    page = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}").text
+    assert f'id="seg-{seg_id}-source"' in page
+    assert f'id="seg-{seg_id}-translation"' in page
+    assert "Copy source" in page
+    assert "Copy translation" in page
+    assert "Clear unsaved" in page
+    assert f"/ui/projects/{name}/candidates?chapter_id={chapter_id}" in page
+    assert f"segment_id={seg_id}" in page
+
+
+def test_workspace_has_no_duplicate_ids(ws_client: TestClient) -> None:
+    name = _name(ws_client)
+    chapter_id = _first_chapter_id(ws_client, name)
+    page = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}").text
+    ids = re.findall(r'\sid="([^"]+)"', page)
+    duplicates = {id_value for id_value in ids if ids.count(id_value) > 1}
+    assert duplicates == set()
 
 
 def test_workspace_unknown_chapter_404(ws_client: TestClient) -> None:
