@@ -262,3 +262,30 @@ def test_export_default_has_null_bundle_path(client_with_projects: TestClient) -
     _wait_export(client_with_projects, job_id)
     result = client_with_projects.get(f"/projects/{name}/export/jobs/{job_id}").json()["result"]
     assert result["bundle_path"] is None
+
+
+def test_epub_export_result_includes_fidelity_reports(client_with_projects: TestClient) -> None:
+    """EPUB export result includes fidelity_reports in JSON response (Sprint K4)."""
+    name = _name(client_with_projects)
+    resp = client_with_projects.post(f"/projects/{name}/export/novel")
+    assert resp.status_code == 202
+    job_id = resp.json()["job_id"]
+
+    _wait_export(client_with_projects, job_id)
+    status = client_with_projects.get(f"/projects/{name}/export/jobs/{job_id}").json()
+    assert status["status"] == "done"
+
+    result = status["result"]
+    assert "fidelity_reports" in result
+    assert len(result["fidelity_reports"]) >= 1
+    fr = result["fidelity_reports"][0]
+    assert "source_path" in fr
+    assert "exported_path" in fr
+    assert "source_counts" in fr
+    assert "exported_counts" in fr
+    assert isinstance(fr["passed_checks"], list)
+    assert isinstance(fr["warnings"], list)
+    assert isinstance(fr["critical_gaps"], list)
+    assert isinstance(fr["missing_resources"], list)
+    assert fr["warning_count"] >= 0
+    assert fr["critical_count"] >= 0

@@ -13,6 +13,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 from weaver.errors import ExportError
+from weaver.renderers._atomic import atomic_write_text
 from weaver.renderers.rendered_document import RenderChapter, block_to_html
 
 _HTML_TEMPLATE = (
@@ -72,7 +73,7 @@ def render_html(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        output_path.write_text(content, encoding="utf-8")
+        atomic_write_text(output_path, content)
     except OSError as exc:
         raise ExportError(
             f"Failed to write HTML export to '{output_path}'. "

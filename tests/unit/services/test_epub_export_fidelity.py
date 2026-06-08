@@ -9,7 +9,7 @@ from ebooklib import epub
 
 from weaver.readers.epub import parse_epub_structure, read_epub
 from weaver.renderers.epub import render_translated_epub
-from weaver.services.epub_export_fidelity import compare_epub_export_fidelity
+from weaver.services.epub_export_fidelity import compare_epub_export_fidelity, report_to_dict
 from weaver.services.epub_structure_preview import preview_epub_structure
 from weaver.services.import_source import import_volume
 from weaver.services.project import initialize_project
@@ -351,3 +351,34 @@ def test_light_novel_fidelity_catches_missing_export_asset(tmp_path: Path) -> No
     assert report.critical_count >= 1
     assert "Images/insert_art_01.png" in report.missing_resources
     assert any(check.code == "missing-image-resource" for check in report.critical_gaps)
+
+
+def test_report_to_dict_round_trip(tmp_path: Path) -> None:
+    """report_to_dict produces a JSON-safe dict that preserves all fields."""
+    source = tmp_path / "source.epub"
+    output = tmp_path / "output.epub"
+    _write_fidelity_epub(source)
+    render_translated_epub(
+        source_epub_path=source,
+        output_path=output,
+        document=read_epub(source),
+        translations_by_segment_id={},
+    )
+    report = compare_epub_export_fidelity(source, output)
+    d = report_to_dict(report)
+
+    assert isinstance(d, dict)
+    assert d["source_path"] == str(source)
+    assert d["exported_path"] == str(output)
+    assert isinstance(d["source_counts"], dict)
+    assert isinstance(d["exported_counts"], dict)
+    assert len(d["passed_checks"]) >= 1
+    assert isinstance(d["warnings"], list)
+    assert isinstance(d["critical_gaps"], list)
+    assert isinstance(d["missing_resources"], list)
+    assert d["warning_count"] == len(d["warnings"])
+    assert d["critical_count"] == len(d["critical_gaps"])
+    for check in d["passed_checks"]:
+        assert "severity" in check
+        assert "code" in check
+        assert "message" in check

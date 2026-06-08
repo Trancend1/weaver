@@ -18,6 +18,7 @@ from ebooklib.epub import EpubBook, EpubException, EpubHtml, EpubNcx
 
 from weaver.core.ir import BlockIR, DocumentIR
 from weaver.errors import EpubWriteError
+from weaver.renderers._atomic import atomic_write_epub
 
 XHTML_NAMESPACE = "http://www.w3.org/1999/xhtml"
 EPUB_NAMESPACE = "http://www.idpf.org/2007/ops"
@@ -107,14 +108,7 @@ def render_translated_epub(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     _ensure_navigation_items(book)
     _ensure_toc_entries(book, document=document, items_by_href=items_by_href)
-    try:
-        epub.write_epub(str(output_path), book)
-    except (OSError, EpubException) as exc:
-        raise EpubWriteError(
-            f"Failed to write translated EPUB to '{output_path}'. "
-            "Likely cause: target directory is not writable or disk is full. "
-            "Next command: check filesystem permissions or free space."
-        ) from exc
+    atomic_write_epub(output_path, book)
 
     return EpubRenderResult(
         output_path=output_path,

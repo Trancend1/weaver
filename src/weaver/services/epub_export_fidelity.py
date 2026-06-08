@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from weaver.core.epub_structure import ParsedEpub
 from weaver.readers.epub import parse_epub_structure
@@ -307,3 +308,29 @@ def _compare_validation(
                 scope="validation",
             )
         )
+
+
+def report_to_dict(report: EpubExportFidelityReport) -> dict[str, Any]:
+    """Serialize an :class:`EpubExportFidelityReport` to a JSON-safe dict."""
+    return {
+        "source_path": str(report.source_path),
+        "exported_path": str(report.exported_path),
+        "source_counts": dict(report.source_counts),
+        "exported_counts": dict(report.exported_counts),
+        "passed_checks": [_check_to_dict(c) for c in report.passed_checks],
+        "warnings": [_check_to_dict(c) for c in report.warnings],
+        "critical_gaps": [_check_to_dict(c) for c in report.critical_gaps],
+        "missing_resources": list(report.missing_resources),
+        "warning_count": report.warning_count,
+        "critical_count": report.critical_count,
+    }
+
+
+def _check_to_dict(check: FidelityCheck) -> dict[str, Any]:
+    return {
+        "severity": check.severity,
+        "code": check.code,
+        "message": check.message,
+        "href": check.href,
+        "scope": check.scope,
+    }

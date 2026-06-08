@@ -717,6 +717,31 @@ class ExportJobProgressResponse(BaseModel):
     fallback_segments: int
 
 
+class FidelityCheckResponse(BaseModel):
+    """One source-vs-export fidelity check outcome (Sprint K4)."""
+
+    severity: str
+    code: str
+    message: str
+    href: str | None = None
+    scope: str | None = None
+
+
+class ExportFidelityReportResponse(BaseModel):
+    """EPUB source-vs-export fidelity comparison result (Sprint K4)."""
+
+    source_path: str
+    exported_path: str
+    source_counts: dict[str, int]
+    exported_counts: dict[str, int]
+    passed_checks: list[FidelityCheckResponse]
+    warnings: list[FidelityCheckResponse]
+    critical_gaps: list[FidelityCheckResponse]
+    missing_resources: list[str]
+    warning_count: int = 0
+    critical_count: int = 0
+
+
 class ExportJobResultResponse(BaseModel):
     """Aggregate counts and per-volume artifacts for a finished export."""
 
@@ -733,6 +758,7 @@ class ExportJobResultResponse(BaseModel):
     cancelled: bool
     bundle_path: str | None = None
     artifacts: list[ExportArtifactResponse]
+    fidelity_reports: list[ExportFidelityReportResponse] = []
 
 
 class ExportJobStatusResponse(BaseModel):

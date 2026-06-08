@@ -5,6 +5,20 @@
     <span class="meta">target: {{ target }}{% if bundle %} · bundle ZIP{% endif %}</span>
   </div>
 
+  {% if snapshot_advisories %}
+  <div class="snapshot-advisories">
+    <p class="hint">EPUB preservation snapshot advisories:</p>
+    <ul class="plain-list">
+      {% for adv in snapshot_advisories %}
+      <li>
+        <span class="badge c-badge {{ 'bad' if adv.state in ('missing', 'error') else 'warn' }}">{{ adv.state }}</span>
+        {{ adv.volume_title }} — {{ adv.detail }}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
   {% if report is none %}
   <p class="meta">Quality check unavailable: {{ qa_error }}. You can still export.</p>
   {% elif report.total_issues == 0 %}

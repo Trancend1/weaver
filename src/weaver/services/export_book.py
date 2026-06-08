@@ -28,6 +28,7 @@ Framework-agnostic: no web/CLI/job types here (ADR 002/004).
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections.abc import Callable
 from contextlib import closing
@@ -45,6 +46,10 @@ from weaver.renderers.epub_synthesis import synthesize_epub
 from weaver.renderers.html import render_html
 from weaver.renderers.rendered_document import RenderChapter
 from weaver.renderers.txt import render_txt
+from weaver.services.epub_export_fidelity import (
+    EpubExportFidelityReport,
+    compare_epub_export_fidelity,
+)
 from weaver.services.export_bundle import bundle_filename, write_export_bundle
 from weaver.services.project_paths import resolve_database_path, resolve_output_dir
 from weaver.services.workspace_translate import load_single_project
@@ -57,6 +62,8 @@ from weaver.storage.segments import (
 )
 from weaver.storage.translations import ExportSegmentState, list_export_segment_states
 from weaver.storage.volumes import VolumeRecord, list_volumes
+
+logger = logging.getLogger(__name__)
 
 ExportTarget = Literal["epub", "txt", "html", "docx"]
 # EPUB (8A) + TXT/HTML (8C) + DOCX (Phase D). DOCX is synthesized from resolved
@@ -114,6 +121,7 @@ class ExportResult:
     generated_at: str
     cancelled: bool = False
     bundle_path: Path | None = None
+    fidelity_reports: tuple[EpubExportFidelityReport, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -277,6 +285,7 @@ def run_export(
     """
 
     artifacts: list[ExportArtifact] = []
+    fidelity_reports: list[EpubExportFidelityReport] = []
     translated_segments = 0
     fallback_segments = 0
     chapters_exported = 0
@@ -291,6 +300,19 @@ def run_export(
                 connection, volume_plan, project=plan.project, target=plan.target
             )
             artifacts.append(artifact)
+            if plan.target == "epub" and volume_plan.source_format == "epub":
+                try:
+                    report = compare_epub_export_fidelity(
+                        source_epub=volume_plan.source_path,
+                        exported_epub=artifact.output_path,
+                    )
+                    fidelity_reports.append(report)
+                except Exception:  # noqa: BLE001 - non-fatal; fidelity does not block export
+                    logger.warning(
+                        "Fidelity check failed for volume %s",
+                        volume_plan.volume_id,
+                        exc_info=True,
+                    )
             translated_segments += artifact.translated_segments
             fallback_segments += artifact.fallback_segments
             chapters_exported += artifact.chapters_exported
@@ -332,6 +354,7 @@ def run_export(
         generated_at=datetime.now(UTC).isoformat(),
         cancelled=cancelled,
         bundle_path=bundle_path,
+        fidelity_reports=tuple(fidelity_reports),
     )
 
 

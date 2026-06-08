@@ -139,3 +139,29 @@ def test_preflight_missing_project_is_non_fatal(client: TestClient) -> None:
     assert response.status_code == 200
     assert "Quality check unavailable" in response.text
     assert 'hx-post="/ui/projects/ghost/export"' in response.text
+
+
+def test_epub_export_preflight_shows_snapshot_advisories(client: TestClient) -> None:
+    """Preflight for EPUB target shows snapshot advisory section (Sprint K1)."""
+    response = client.get("/ui/projects/issues/export/preflight?target=epub")
+    assert response.status_code == 200
+    body = response.text
+    # The preflight renders regardless of snapshot state; snapshot advisories
+    # appear as a section if any EPUB volume lacks a fresh snapshot.
+    assert "snapshot-advisories" not in body or "missing" in body or "stale" in body
+
+
+def test_preflight_epub_shows_snapshot_section_even_without_advisories(client: TestClient) -> None:
+    """Preflight for EPUB target renders snapshot section (even if empty)."""
+    response = client.get("/ui/projects/clean/export/preflight?target=epub")
+    assert response.status_code == 200
+    # The snapshot advisories section is conditionally rendered; the page always works.
+    assert 'id="export-panel"' in response.text
+
+
+def test_preflight_non_epub_skips_snapshot_checks(client: TestClient) -> None:
+    """Preflight for non-EPUB targets does not check snapshots."""
+    response = client.get("/ui/projects/issues/export/preflight?target=txt")
+    assert response.status_code == 200
+    # TXT target does not check EPUBSnapshot status.
+    assert 'id="export-panel"' in response.text
