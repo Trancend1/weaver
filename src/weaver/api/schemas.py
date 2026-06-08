@@ -898,3 +898,103 @@ class ReparseJobResponse(BaseModel):
 
     job_id: str
     volume_id: int
+
+
+# ---------------------------------------------------------------------------
+# Translation candidate review (Sprint L — Candidate Review)
+# ---------------------------------------------------------------------------
+
+
+class CandidateResponse(BaseModel):
+    """One translation candidate row."""
+
+    id: str
+    project_id: int
+    volume_id: int | None
+    chapter_id: str
+    segment_id: str
+    source_text: str
+    candidate_text: str
+    provider: str
+    model: str
+    status: str
+    provenance: dict[str, Any]
+    created_at: str
+    updated_at: str
+
+
+class CandidateGenerateRequest(BaseModel):
+    """Request to generate one translation candidate for a segment."""
+
+    provider: str | None = None
+    model: str | None = None
+
+
+class CandidateGenerateResponse(BaseModel):
+    """Result of generating one translation candidate."""
+
+    candidate: CandidateResponse
+
+
+class CandidateListResponse(BaseModel):
+    """List of candidates for a segment or chapter."""
+
+    candidates: list[CandidateResponse]
+    total_count: int
+
+
+class CandidateActionResponse(BaseModel):
+    """Result of approve/reject/apply on a candidate."""
+
+    candidate: CandidateResponse
+    action: str
+
+
+class CandidateApplyRequest(BaseModel):
+    """Request to apply a candidate (optionally with edits)."""
+
+    edited_text: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Character page drafts (Sprint L — Character Text Draft)
+# ---------------------------------------------------------------------------
+
+
+class CharacterDraftResponse(BaseModel):
+    """One character page draft row."""
+
+    id: str
+    project_id: int
+    volume_id: int | None
+    chapter_id: str
+    segment_id: str | None
+    source_text: str
+    draft_text: str
+    heading: str | None
+    page_identifier: str | None
+    status: str
+    provenance: dict[str, Any]
+    created_at: str
+    updated_at: str
+
+
+class CharacterDraftListResponse(BaseModel):
+    """List of character page drafts."""
+
+    drafts: list[CharacterDraftResponse]
+    total_count: int
+
+
+class CharacterDraftGenerateResponse(BaseModel):
+    """Result of generating one character page draft."""
+
+    draft: CharacterDraftResponse | None
+    message: str
+
+
+class CharacterDraftActionResponse(BaseModel):
+    """Result of approve/reject on a character draft."""
+
+    draft: CharacterDraftResponse
+    action: str

@@ -359,6 +359,80 @@ def _migrate_to_v7(connection: sqlite3.Connection) -> None:
         )
 
 
+def _migrate_to_v8(connection: sqlite3.Connection) -> None:
+    """Translation candidates + character page drafts (schema v8, Sprint L).
+
+    Two additive tables for the candidate-review workflow: ``translation_candidates``
+    stores AI-generated translation suggestions (never auto-mutates the current
+    translation), and ``character_page_drafts`` stores XHTML/text-only character
+    page extractions (no OCR, no image processing). Both carry full provenance
+    records as JSON. Idempotent: only creates tables and indexes when absent.
+    """
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS translation_candidates (
+          id TEXT PRIMARY KEY,
+          project_id INTEGER NOT NULL REFERENCES projects(id),
+          volume_id INTEGER REFERENCES volumes(id),
+          chapter_id TEXT NOT NULL REFERENCES chapters(id),
+          segment_id TEXT NOT NULL REFERENCES segments(id),
+          source_text TEXT NOT NULL,
+          candidate_text TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          model TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN (
+            'pending',
+            'approved',
+            'rejected',
+            'applied',
+            'superseded',
+            'failed'
+          )),
+          provenance_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_candidates_segment "
+        "ON translation_candidates(segment_id, status)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_candidates_project "
+        "ON translation_candidates(project_id, status)"
+    )
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS character_page_drafts (
+          id TEXT PRIMARY KEY,
+          project_id INTEGER NOT NULL REFERENCES projects(id),
+          volume_id INTEGER REFERENCES volumes(id),
+          chapter_id TEXT NOT NULL REFERENCES chapters(id),
+          segment_id TEXT REFERENCES segments(id),
+          source_text TEXT NOT NULL,
+          draft_text TEXT NOT NULL,
+          heading TEXT,
+          page_identifier TEXT,
+          status TEXT NOT NULL CHECK (status IN (
+            'draft',
+            'approved',
+            'rejected'
+          )),
+          provenance_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_char_drafts_project "
+        "ON character_page_drafts(project_id, status)"
+    )
+
+
 _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _migrate_to_v2,
     3: _migrate_to_v3,
@@ -366,4 +440,5 @@ _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     5: _migrate_to_v5,
     6: _migrate_to_v6,
     7: _migrate_to_v7,
+    8: _migrate_to_v8,
 }

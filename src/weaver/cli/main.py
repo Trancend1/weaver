@@ -46,6 +46,7 @@ from weaver.services.project import (
     initialize_project,
     inspect_project,
     project_exists,
+    project_name_exists,
 )
 from weaver.services.qa import (
     ValidationReport,
@@ -107,11 +108,14 @@ def main(
 @app.command(
     "init",
     epilog=(
-        "Examples:\n  weaver init novel.epub\n  weaver init novel.epub --from-template light-novel"
+        "Examples:\n"
+        "  weaver init my-novel\n"
+        "  weaver init my-novel --from-template light-novel\n"
+        "  weaver init novel.epub  # legacy: create project, then import first volume"
     ),
 )
 def init_project(
-    input_epub: Path,
+    project_or_source: Path,
     from_template: str | None = typer.Option(
         None,
         "--from-template",
@@ -124,20 +128,35 @@ def init_project(
         help="Skip confirmation when overwriting an existing project.",
     ),
 ) -> None:
-    """Create a Weaver project from an EPUB."""
+    """Create an empty project, or import a source as the first volume."""
 
-    if not yes and project_exists(input_epub):
+    is_source = project_or_source.exists() or project_or_source.suffix.lower() in {
+        ".epub",
+        ".txt",
+        ".html",
+        ".htm",
+    }
+    project_name = project_or_source.stem if is_source else str(project_or_source)
+    exists = project_exists(project_or_source) if is_source else project_name_exists(project_name)
+    if not yes and exists:
         typer.confirm(
-            f"Project already exists for {input_epub.name}. Overwrite?",
+            f"Project already exists for {project_name}. Continue?",
             abort=True,
         )
 
     try:
-        result = initialize_project(input_epub, template=from_template)
+        result = initialize_project(
+            project_or_source if is_source else None,
+            template=from_template,
+            project_name=project_name,
+        )
     except WeaverError as exc:
         _exit_with_error(exc)
 
-    typer.echo(f"Reading {input_epub}...")
+    if is_source:
+        typer.echo(f"Reading {project_or_source}...")
+    else:
+        typer.echo(f"Creating empty project {project_name}...")
     typer.echo(f"Created: {result.project_toml}")
     typer.echo(f"Database: {result.database_path}")
     typer.echo(f"Detected: {result.chapter_count} chapters, {result.segment_count} segments")
@@ -149,7 +168,10 @@ def init_project(
         typer.echo(f"Template: {from_template}")
     typer.echo("")
     typer.echo("Next:")
-    typer.echo(f"  weaver glossary review {result.project_toml}")
+    if result.chapter_count:
+        typer.echo(f"  weaver glossary review {result.project_toml}")
+    else:
+        typer.echo(f"  weaver import {result.project_toml} <volume.epub>")
 
 
 @app.command(

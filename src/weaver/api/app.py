@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from weaver import __version__
 from weaver.api.jobs import JobRegistry
 from weaver.api.routers.batch import router as batch_router
+from weaver.api.routers.candidates import router as candidates_router
 from weaver.api.routers.characters import router as characters_router
 from weaver.api.routers.config import router as config_router
 from weaver.api.routers.export import router as export_router
@@ -141,6 +142,7 @@ def create_api_app(base_dir: Path | None = None) -> FastAPI:
     app.include_router(export_router)
     app.include_router(glossary_router)
     app.include_router(glossary_review_router)
+    app.include_router(candidates_router)
     app.include_router(characters_router)
     app.include_router(translation_memory_router)
     app.include_router(config_router)

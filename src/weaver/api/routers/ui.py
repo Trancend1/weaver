@@ -12,6 +12,7 @@ ships on ``weaver serve-api`` alongside the JSON API (Flask removed in Sprint 13
 
 from __future__ import annotations
 
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,11 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Respon
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from weaver.api.jobs import JobRegistry
+from weaver.api.routers.candidates import (
+    apply_candidate_endpoint,
+    approve_candidate_endpoint,
+    reject_candidate_endpoint,
+)
 from weaver.api.routers.export import _start_export
 from weaver.api.routers.translate import _start_job as _start_translate_job
 from weaver.api.schemas import ExportRequest
@@ -43,14 +49,16 @@ from weaver.services.job_store import (
     list_events_after,
     list_jobs_for_project,
 )
-from weaver.services.project import delete_project, initialize_project, project_exists
+from weaver.services.project import delete_project, initialize_project, project_name_exists
 from weaver.services.project_discovery import discover_projects, find_project
+from weaver.services.project_paths import resolve_database_path
 from weaver.services.project_tree import project_tree
 from weaver.services.segment_history import segment_translation_history
 from weaver.services.source_browser import list_directory, resolve_source
 from weaver.services.source_intake import resolve_intake_source
 from weaver.services.volume import delete_volume_from_project
 from weaver.services.workspace_edit import save_segment_translation
+from weaver.storage.db import connect_database
 
 router = APIRouter(tags=["ui"], include_in_schema=False)
 
@@ -493,8 +501,9 @@ async def create_project_submit(
     source_path: str | None = Form(None),
     provider: str | None = Form(None),
     template: str | None = Form(None),
+    project_name: str | None = Form(None),
 ) -> HTMLResponse | RedirectResponse:
-    """Create a novel from an uploaded/browsed source, then go to its view.
+    """Create a project, optionally importing an uploaded/browsed first volume.
 
     Reuses the same services as ``POST /projects/create`` (no logic here). On
     failure the form is re-rendered with the error; on success → 303 to the
@@ -503,11 +512,20 @@ async def create_project_submit(
     base = _base_dir(request)
     uploaded = (file.filename, await file.read()) if file is not None and file.filename else None
     try:
-        source = resolve_intake_source(base, uploaded=uploaded, source_path=source_path)
-        if project_exists(source, cwd=base):
-            raise WeaverError(f"A project named {source.stem!r} already exists.")
+        source = None
+        if uploaded is not None or source_path:
+            source = resolve_intake_source(base, uploaded=uploaded, source_path=source_path)
+        name = (project_name or "").strip() or (source.stem if source is not None else "")
+        if not name:
+            raise WeaverError("Project name is required.")
+        if project_name_exists(name, cwd=base):
+            raise WeaverError(f"A project named {name!r} already exists.")
         result = initialize_project(
-            source, cwd=base, template=template or None, provider=provider or None
+            source,
+            cwd=base,
+            template=template or None,
+            provider=provider or None,
+            project_name=name,
         )
     except WeaverError as exc:
         return templates.TemplateResponse(
@@ -806,3 +824,228 @@ def ui_export_cancel(name: str, job_id: str, request: Request) -> HTMLResponse:
         )
     job.request_cancel()
     return _render_export_job(request, name, job_id)
+
+
+# --- candidate review UI (Sprint L3 — HTMX surfaces) ------------------------
+
+
+@router.get("/ui/projects/{name}/candidates", response_class=HTMLResponse)
+def ui_candidates_page(name: str, request: Request) -> HTMLResponse:
+    """Translation candidates review page."""
+    return templates.TemplateResponse(
+        request,
+        "candidates.html",
+        {**project_layout(request, name, active_nav="candidates"), "name": name},
+    )
+
+
+@router.get("/ui/projects/{name}/candidates/list", response_class=HTMLResponse)
+def ui_candidates_list(name: str, request: Request) -> HTMLResponse:
+    """HTMX fragment: list of candidates for a project."""
+    from weaver.storage.candidates import list_candidates_for_project
+
+    project_toml = _resolve_project_toml(request, name)
+    db_path = resolve_database_path(project_toml, cwd=_base_dir(request))
+    candidates: list[dict] = []
+    total = 0
+    try:
+        with closing(connect_database(db_path)) as conn:
+            project = conn.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
+            if project is not None:
+                pid = int(project["id"])
+                rows = list_candidates_for_project(conn, project_id=pid, limit=200)
+                total = len(rows)
+                candidates = [_candidate_to_ui_json(r) for r in rows]
+    except WeaverError:
+        pass
+    return templates.TemplateResponse(
+        request,
+        "partials/_candidates_list.html",
+        {"candidates": candidates, "total_count": total, "name": name},
+    )
+
+
+@router.post("/ui/projects/{name}/candidates/{candidate_id}/approve", response_class=HTMLResponse)
+def ui_candidate_approve(name: str, candidate_id: str, request: Request) -> HTMLResponse:
+    """Approve a candidate (HTMX). Re-renders the candidate card."""
+    from contextlib import suppress
+
+    with suppress(HTTPException):
+        approve_candidate_endpoint(name, candidate_id, request)
+    return ui_candidates_rerender_card(request, name, candidate_id)
+
+
+@router.post("/ui/projects/{name}/candidates/{candidate_id}/reject", response_class=HTMLResponse)
+def ui_candidate_reject(name: str, candidate_id: str, request: Request) -> HTMLResponse:
+    """Reject a candidate (HTMX). Re-renders the candidate card."""
+    from contextlib import suppress
+
+    with suppress(HTTPException):
+        reject_candidate_endpoint(name, candidate_id, request)
+    return ui_candidates_rerender_card(request, name, candidate_id)
+
+
+@router.post("/ui/projects/{name}/candidates/{candidate_id}/apply", response_class=HTMLResponse)
+def ui_candidate_apply(name: str, candidate_id: str, request: Request) -> HTMLResponse:
+    """Apply a candidate to its segment (HTMX). Re-renders the candidate card."""
+    from contextlib import suppress
+
+    with suppress(HTTPException):
+        apply_candidate_endpoint(name, candidate_id, request)
+    return ui_candidates_rerender_card(request, name, candidate_id)
+
+
+def ui_candidates_rerender_card(request: Request, name: str, candidate_id: str) -> HTMLResponse:
+    """Re-render one candidate card after a status transition."""
+    from weaver.storage.candidates import get_candidate
+
+    project_toml = _resolve_project_toml(request, name)
+    db_path = resolve_database_path(project_toml, cwd=_base_dir(request))
+    c = None
+    try:
+        with closing(connect_database(db_path)) as conn:
+            c = get_candidate(conn, candidate_id=candidate_id)
+    except (LookupError, WeaverError):
+        return HTMLResponse(
+            f'<div class="error" id="candidate-{candidate_id}">Candidate not found.</div>'
+        )
+    candidate = _candidate_to_ui_json(c)
+    return templates.TemplateResponse(
+        request,
+        "partials/_candidates_list.html",
+        {
+            "candidates": [candidate],
+            "total_count": 1,
+            "name": name,
+        },
+    )
+
+
+def _candidate_to_ui_json(c: Any) -> dict:
+    import json
+
+    prov = c.provenance_json
+    return {
+        "id": c.id,
+        "project_id": c.project_id,
+        "volume_id": c.volume_id,
+        "chapter_id": c.chapter_id,
+        "segment_id": c.segment_id,
+        "source_text": c.source_text,
+        "candidate_text": c.candidate_text,
+        "provider": c.provider,
+        "model": c.model,
+        "status": c.status,
+        "provenance": json.loads(prov) if isinstance(prov, str) else prov,
+        "created_at": c.created_at,
+        "updated_at": c.updated_at,
+    }
+
+
+# --- character drafts UI (Sprint L4 — HTMX surfaces) ------------------------
+
+
+@router.get("/ui/projects/{name}/character-drafts", response_class=HTMLResponse)
+def ui_drafts_page(name: str, request: Request) -> HTMLResponse:
+    """Character page drafts review page."""
+    return templates.TemplateResponse(
+        request,
+        "character_drafts.html",
+        {**project_layout(request, name, active_nav="drafts"), "name": name},
+    )
+
+
+@router.get("/ui/projects/{name}/drafts/list", response_class=HTMLResponse)
+def ui_drafts_list(name: str, request: Request) -> HTMLResponse:
+    """HTMX fragment: list of character drafts for a project."""
+    from weaver.storage.character_drafts import list_drafts_for_project
+
+    project_toml = _resolve_project_toml(request, name)
+    db_path = resolve_database_path(project_toml, cwd=_base_dir(request))
+    drafts: list[dict] = []
+    total = 0
+    try:
+        with closing(connect_database(db_path)) as conn:
+            project = conn.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
+            if project is not None:
+                pid = int(project["id"])
+                rows = list_drafts_for_project(conn, project_id=pid, limit=200)
+                total = len(rows)
+                for r in rows:
+                    drafts.append(_draft_to_ui_json(r))
+    except WeaverError:
+        pass
+    return templates.TemplateResponse(
+        request,
+        "partials/_drafts_list.html",
+        {"drafts": drafts, "total_count": total, "name": name},
+    )
+
+
+@router.post("/ui/projects/{name}/drafts/{draft_id}/approve", response_class=HTMLResponse)
+def ui_draft_approve(name: str, draft_id: str, request: Request) -> HTMLResponse:
+    """Approve a character draft (HTMX). Re-renders the draft card."""
+    from contextlib import suppress
+
+    from weaver.api.routers.candidates import approve_draft_endpoint
+
+    with suppress(HTTPException):
+        approve_draft_endpoint(name, draft_id, request)
+    return ui_drafts_rerender_card(request, name, draft_id)
+
+
+@router.post("/ui/projects/{name}/drafts/{draft_id}/reject", response_class=HTMLResponse)
+def ui_draft_reject(name: str, draft_id: str, request: Request) -> HTMLResponse:
+    """Reject a character draft (HTMX). Re-renders the draft card."""
+    from contextlib import suppress
+
+    from weaver.api.routers.candidates import reject_draft_endpoint
+
+    with suppress(HTTPException):
+        reject_draft_endpoint(name, draft_id, request)
+    return ui_drafts_rerender_card(request, name, draft_id)
+
+
+def ui_drafts_rerender_card(request: Request, name: str, draft_id: str) -> HTMLResponse:
+    """Re-render one draft card after a status transition."""
+    from weaver.storage.character_drafts import get_draft
+
+    project_toml = _resolve_project_toml(request, name)
+    db_path = resolve_database_path(project_toml, cwd=_base_dir(request))
+    d = None
+    try:
+        with closing(connect_database(db_path)) as conn:
+            d = get_draft(conn, draft_id=draft_id)
+    except (LookupError, WeaverError):
+        return HTMLResponse(f'<div class="error" id="draft-{draft_id}">Draft not found.</div>')
+    draft = _draft_to_ui_json(d)
+    return templates.TemplateResponse(
+        request,
+        "partials/_drafts_list.html",
+        {
+            "drafts": [draft],
+            "total_count": 1,
+            "name": name,
+        },
+    )
+
+
+def _draft_to_ui_json(d: Any) -> dict:
+    import json
+
+    prov = d.provenance_json
+    return {
+        "id": d.id,
+        "project_id": d.project_id,
+        "volume_id": d.volume_id,
+        "chapter_id": d.chapter_id,
+        "segment_id": d.segment_id,
+        "source_text": d.source_text,
+        "draft_text": d.draft_text,
+        "heading": d.heading,
+        "page_identifier": d.page_identifier,
+        "status": d.status,
+        "provenance": json.loads(prov) if isinstance(prov, str) else prov,
+        "created_at": d.created_at,
+        "updated_at": d.updated_at,
+    }

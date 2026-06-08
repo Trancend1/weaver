@@ -232,3 +232,56 @@ CREATE TABLE IF NOT EXISTS epub_snapshot_validation (
   data_json TEXT NOT NULL,
   PRIMARY KEY (volume_id, position)
 );
+
+-- Sprint L (ADR 010-adjacent) — translation candidate review & character text drafts.
+-- Additive tables: translation_candidates for AI-suggested translations (never
+-- auto-mutate current translation); character_page_drafts for XHTML/text-only
+-- character page extraction (no OCR, no image processing).
+
+CREATE TABLE IF NOT EXISTS translation_candidates (
+  id TEXT PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  volume_id INTEGER REFERENCES volumes(id),
+  chapter_id TEXT NOT NULL REFERENCES chapters(id),
+  segment_id TEXT NOT NULL REFERENCES segments(id),
+  source_text TEXT NOT NULL,
+  candidate_text TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN (
+    'pending',
+    'approved',
+    'rejected',
+    'applied',
+    'superseded',
+    'failed'
+  )),
+  provenance_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_candidates_segment ON translation_candidates(segment_id, status);
+CREATE INDEX IF NOT EXISTS idx_candidates_project ON translation_candidates(project_id, status);
+
+CREATE TABLE IF NOT EXISTS character_page_drafts (
+  id TEXT PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  volume_id INTEGER REFERENCES volumes(id),
+  chapter_id TEXT NOT NULL REFERENCES chapters(id),
+  segment_id TEXT REFERENCES segments(id),
+  source_text TEXT NOT NULL,
+  draft_text TEXT NOT NULL,
+  heading TEXT,
+  page_identifier TEXT,
+  status TEXT NOT NULL CHECK (status IN (
+    'draft',
+    'approved',
+    'rejected'
+  )),
+  provenance_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_char_drafts_project ON character_page_drafts(project_id, status);

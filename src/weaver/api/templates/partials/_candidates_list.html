@@ -1,0 +1,44 @@
+{% if candidates %}
+<div class="candidates-grid" id="candidates-list">
+  {% for c in candidates %}
+  <div class="candidate-card card" id="candidate-{{ c.id }}">
+    <div class="candidate-header">
+      <span class="badge c-badge {{ 'ok' if c.status == 'applied' else 'bad' if c.status in ('rejected','failed') else '' }}">{{ c.status }}</span>
+      <span class="meta">{{ c.provider }}/{{ c.model }}</span>
+    </div>
+    <div class="candidate-source">
+      <strong>Source:</strong>
+      <p>{{ c.source_text }}</p>
+    </div>
+    <div class="candidate-target">
+      <strong>Candidate:</strong>
+      <p>{{ c.candidate_text or '<em>empty (generation failed)</em>'|safe }}</p>
+    </div>
+    {% if c.status == 'pending' %}
+    <div class="candidate-actions toolbar-row">
+      <button class="btn-sm" hx-post="/ui/projects/{{ name }}/candidates/{{ c.id }}/approve" hx-target="#candidate-{{ c.id }}" hx-swap="outerHTML">Approve</button>
+      <button class="btn-sm" hx-post="/ui/projects/{{ name }}/candidates/{{ c.id }}/reject" hx-target="#candidate-{{ c.id }}" hx-swap="outerHTML">Reject</button>
+      <button class="btn-sm" hx-post="/ui/projects/{{ name }}/candidates/{{ c.id }}/apply" hx-target="#candidate-{{ c.id }}" hx-swap="outerHTML">Apply</button>
+    </div>
+    {% elif c.status == 'approved' %}
+    <div class="candidate-actions toolbar-row">
+      <button class="btn-sm" hx-post="/ui/projects/{{ name }}/candidates/{{ c.id }}/apply" hx-target="#candidate-{{ c.id }}" hx-swap="outerHTML">Apply to segment</button>
+      <button class="btn-sm" hx-post="/ui/projects/{{ name }}/candidates/{{ c.id }}/reject" hx-target="#candidate-{{ c.id }}" hx-swap="outerHTML">Reject</button>
+    </div>
+    {% endif %}
+    <details class="candidate-provenance">
+      <summary class="meta">Provenance</summary>
+      <pre class="provenance-detail">{{ c.provenance | tojson(indent=2) if c.provenance is mapping else c.provenance }}</pre>
+    </details>
+    <p class="meta">Created: {{ c.created_at }} · Updated: {{ c.updated_at }}</p>
+  </div>
+  {% endfor %}
+  {% if total_count > candidates|length %}
+  <p class="meta">Showing {{ candidates|length }} of {{ total_count }} candidates.</p>
+  {% endif %}
+</div>
+{% else %}
+<div class="empty empty-state" id="candidates-list">
+  <p>No translation candidates yet. Generate a candidate from a segment's workspace to see it here.</p>
+</div>
+{% endif %}

@@ -91,3 +91,11 @@ class DatabaseError(WeaverError):
 
 class ProjectNotFoundError(WeaverError):
     """Requested project directory does not exist under the books dir."""
+
+
+class CandidateNotFoundError(WeaverError):
+    """Requested translation candidate (by id) does not exist."""
+
+
+class CharacterDraftNotFoundError(WeaverError):
+    """Requested character page draft (by id) does not exist."""
