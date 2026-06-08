@@ -4,7 +4,7 @@ Offline-capable, glossary-aware **JP→EN** light-novel translation workbench. T
 
 **Not:** SaaS, consumer product, hosted service, complex SPA.
 
-> **Status (2026-06-06):** **`v0.7.0` stable released** (FastAPI is the sole web cockpit; Flask fully removed). Phases A–D complete. **Phase E — Design System & UI overhaul: COMPLETE** on `feat/design-system-implementaion`: token migration (`app.css` `:root`), 3-mode layout dispatch (`api/ui_context.py`), left-aligned topbar + brand mark + favicon, widened sidebar + line-icon nav (`partials/_icons.html`), project/volume cards, QA stat tiles, segmented sub-nav, component partials, standardized breadcrumb/404/error, "QA"→"Quality" copy, project delete (web + CLI), and an external-browser launch fix. Design system distilled to [docs/DESIGN_NOTES.md](docs/DESIGN_NOTES.md). Full gate green: **796 tests / 4 skipped**, pyright 0, ruff + format clean. **Phase F — EPUB Light Novel Metadata, Structure & Image Text Completeness: COMPLETE**; next is Phase G distribution/installer. Detailed MVP/Phase-A–F history lives in git history and active docs.
+> **Status (2026-06-08):** **`v0.7.0` stable.** Phases A–F complete. **Strategic pivot (ADR `009`): post-Phase-F roadmap is Sprint G–O on the line "HTMX-first, FastAPI-stable, Tauri-sidecar-ready".** The earlier "Phase Final — npm `@weaver/cli` wrapper" target is **deferred legacy** — replaced by a Tauri sidecar path that hardens the FastAPI runtime first. **Active sprint: Sprint G — FastAPI Stability & Tauri-Ready Runtime Foundation.** Full plan: [docs/weaver_next_plan.md](docs/weaver_next_plan.md). New governing ADRs: `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology). Phase F gate (last green): **843 tests / 4 skipped**, pyright 0, ruff + format clean.
 
 ---
 
@@ -26,9 +26,12 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 | [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md) | MVP features, gap analysis, sprint mapping, acceptance |
 | [docs/PHASE_F_PLAN.md](docs/PHASE_F_PLAN.md) | Phase F — EPUB light-novel metadata/structure parsing plan and closeout status |
 | [docs/EPUB_PARSER_AUDIT.md](docs/EPUB_PARSER_AUDIT.md) | Additive EPUB parser/preview/fidelity audit and OCR gating notes |
+| [docs/weaver_next_plan.md](docs/weaver_next_plan.md) | **Active post-Phase-F roadmap: Sprint G–O (HTMX-first, FastAPI-stable, Tauri-sidecar-ready). Governed by ADR `009`. Sprint G is the active sprint.** |
+| [docs/SIDECAR_CONTRACT.md](docs/SIDECAR_CONTRACT.md) | Sprint G7 — runtime contract a Tauri (or any) host shell binds against: lifecycle, endpoints, exit codes, session token. |
+| [docs/SPRINT_G_RUNTIME_AUDIT.md](docs/SPRINT_G_RUNTIME_AUDIT.md) | Sprint G1 read-only audit driving G2–G7: dev-only assumptions, hardcoded paths, missing runtime contracts. |
 | [docs/MAINTENANCE.md](docs/MAINTENANCE.md) | Cleanup, testing, regression, release, migration discipline |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | Active ADR index (`001`–`008`) |
-| [docs/decisions/](docs/decisions/) | Active ADRs `001`–`008` |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Active ADR index (`001`–`011`) |
+| [docs/decisions/](docs/decisions/) | Active ADRs `001`–`011` (`009` strategic pivot · `010` persistent job core · `011` Project terminology) |
 | [ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md) · [PROMPT_DESIGN.md](docs/PROMPT_DESIGN.md) · [SECURITY_AND_PERFORMANCE.md](docs/SECURITY_AND_PERFORMANCE.md) · [AI_SLOP_PREVENTION.md](docs/AI_SLOP_PREVENTION.md) | Supplementary reference specs (still active) |
 
 > Completed point-in-time records (Phase A UI audit, MVP per-sprint log, Flask→FastAPI sprint audits, pre-reset specs/strategy/old ADRs) were removed from the tree on 2026-06-05; they remain in **git history**. On 2026-06-06 the completed-phase plans (B, D), the RC1 / MVP-stabilization reports, and the Phase-E design exploration (`DESIGN.md` / `DESIGN_GUIDE.md`) were likewise retired into **git history**.
@@ -39,7 +42,7 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 
 ### 2.1 Roadmap
 
-Forward-looking phase roadmap. MVP is shipped; the per-sprint MVP detail is archived (see below).
+Forward-looking roadmap. Phases A–F shipped (`v0.7.0` stable). The post-Phase-F roadmap is the Sprint G–O sequence in [docs/weaver_next_plan.md](docs/weaver_next_plan.md), governed by ADR [`009`](docs/decisions/009-htmx-first-fastapi-stable-tauri-sidecar-ready.md).
 
 ```txt
 Foundation (v0.6.0) ✅
@@ -47,23 +50,41 @@ Foundation (v0.6.0) ✅
   → Phase A — UI/UX Polish ✅
   → Phase B — Translation QA & Consistency Checks ✅
   → Phase C — Release hardening ✅  (v0.7.0 stable)
-  → Phase D ✅ — DOCX export ✅ · QA config ✅ · combined ZIP ✅ · QA tree badges ✅ · provider hardening ✅
+  → Phase D — DOCX export · QA config · combined ZIP · QA tree badges · provider hardening ✅
   → Phase E — Design System & UI overhaul ✅
   → Phase F — EPUB Light Novel Metadata, Structure & Image Text Completeness ✅
-  → Phase G — Distribution & Installer
+  → Sprint G — FastAPI Stability & Tauri-Ready Runtime Foundation   ⏳ active
+  → Sprint H — Project & Volume Lifecycle Contract (Novel → Project; ADR 011)
+  → Sprint I — Persistent Job Core (SQLite-backed, in-process; ADR 010)
+  → Sprint J — EPUB Preservation Snapshot & Parser Hardening (persists Phase F)
+  → Sprint K — Export Fidelity Integration (consumes Sprint J)
+  → Sprint L — Candidate Review + Character Text Draft
+  → Sprint M — Image Preview / OCR Security Gate (ADR 012)
+  → Sprint N — Tauri Shell Alpha
+  → Sprint O — Production Desktop Packaging
 ```
 
-| Phase | Scope | Status |
-| ----- | ----- | ------ |
+| Phase / Sprint | Scope | Status |
+| -------------- | ----- | ------ |
 | MVP (Sprints 1–13) | Core JP→EN cockpit: Novel/Volume/Chapter structure & import; two-column workspace; provider AI translate + safe retranslate; glossary + character DB (prompt injection); translation memory; batch; EPUB/TXT/HTML export. FastAPI made the sole web surface (Flask removed, Sprint 13B). | ✅ `v0.7.0-rc.1` |
 | Phase A — UI/UX Polish | Cockpit UI polish on Jinja2 + HTMX (ADR `007`): shared shell / a11y / responsive @390px, workspace UX, dashboard + admin clarity. Presentation/copy only; no backend/provider/stack change. | ✅ |
 | Phase B — Translation QA & Consistency Checks | Read-only, deterministic QA reports before export (report-first, no auto-fix): QA engine → JSON API → UI report/badges → advisory pre-export warning. No provider calls, no mutation, no semantic/vector. ADR `008`. Stages B1–B6. | ✅ |
-| **Phase C — Release hardening** | CHANGELOG `[Unreleased]` → `[0.7.0]` (Phase A + B entries); version consistency; soak 25/25; clean wheel install; annotated tag `v0.7.0`. | ✅ `v0.7.0` |
-| **Phase D — multi-item** | DOCX export **✅** (`renderers/docx.py`, custom OOXML, no `python-docx`) · QA thresholds config **✅** (`[qa]` table) · combined ZIP bundle **✅** (`services/export_bundle.py`) · QA tree badges **✅** (opt-in) · provider config hardening **✅** (`providers/config_values.py`). | ✅ |
-| **Phase E — Design System & UI overhaul** | Token system + hybrid layout: CSS variable migration (`app.css` `:root`), 3-mode layout dispatch (`ui_context.py`), left-aligned topbar + brand mark + favicon, widened sidebar + line-icon nav, project/volume cards, QA stat tiles, segmented sub-nav, component partials, standardized breadcrumb/404/error, "QA"→"Quality" copy, project delete (web + CLI), external-browser launch fix. Reference: `docs/DESIGN_NOTES.md`. No backend behavior change — CSS + Jinja2 + HTMX + thin presentation routes. | ✅ |
-| **Phase F — EPUB Light Novel Metadata, Structure & Image Text Completeness** | Additive EPUB package parsing foundation: OPF metadata, manifest/resources, spine, NAV/NCX, image classification, deterministic validation, read-only preview API/UI, translation preservation context, export fidelity checks, and broader fixtures. `read_epub()`, `DocumentIR`, import, translation, export, and OCR behavior unchanged. Plan: [docs/PHASE_F_PLAN.md](docs/PHASE_F_PLAN.md). Audit: [docs/EPUB_PARSER_AUDIT.md](docs/EPUB_PARSER_AUDIT.md). | ✅ |
-| **Phase G — Distribution & Installer** | Build installable local distribution flow: @weaver/cli → npm install -g @weaver/cli → weaver. The wrapper checks Python/uv availability, installs or bootstraps the Python package, runs the local FastAPI cockpit, and opens the browser to localhost. Sub-phases: G1 packaging audit; G2 pipx/uv install hardening; G3 npm launcher wrapper; G4 optional desktop/local launcher; G5 release signing, checksum, and security.| ⬜ pending |
-Legend: ✅ complete · 🟡 in progress · ⏳ next · ⬜ pending · 🚫 blocked.
+| Phase C — Release hardening | CHANGELOG `[Unreleased]` → `[0.7.0]` (Phase A + B entries); version consistency; soak 25/25; clean wheel install; annotated tag `v0.7.0`. | ✅ `v0.7.0` |
+| Phase D — multi-item | DOCX export · QA thresholds config · combined ZIP bundle · QA tree badges · provider config hardening. | ✅ |
+| Phase E — Design System & UI overhaul | Token system + hybrid layout; project delete (web + CLI); external-browser launch fix. Reference: `docs/DESIGN_NOTES.md`. No backend behavior change. | ✅ |
+| Phase F — EPUB Light Novel Metadata, Structure & Image Text Completeness | Additive EPUB package parsing foundation: OPF metadata, manifest/resources, spine, NAV/NCX, image classification, deterministic validation, read-only preview API/UI, translation preservation context, export fidelity checks, broader fixtures. `read_epub()`, `DocumentIR`, import, translation, export, OCR behavior unchanged. Plan: [docs/PHASE_F_PLAN.md](docs/PHASE_F_PLAN.md). | ✅ |
+| **Sprint G — FastAPI Stability & Tauri-Ready Runtime Foundation** | Runtime endpoints (`/healthz`, `/version`, `/runtime/status`); env modes (`dev`/`desktop`/`test`); app-data directory abstraction (`services/app_paths.py`); relative-route + asset hardening; desktop security baseline (127.0.0.1 only, CORS strict, `/docs` off, session-token draft); structured logs (runtime/backend/job/export/provider); `docs/SIDECAR_CONTRACT.md`. No UI rewrite, no Tauri code, no `.msi`/`.dmg`. Governed by ADR `009`. Plan: [docs/weaver_next_plan.md](docs/weaver_next_plan.md). | ⏳ active |
+| Sprint H — Project & Volume Lifecycle Contract | Novel → Project copy/CLI/docs consolidation (ADR `011`; schema already uses `projects`); volume lifecycle status field (`created` → `exported` ∪ `failed`); explicit JSON + HTMX CRUD on projects/volumes; status propagation hooks in import/translate/export. Schema v3 → v4 additive. | ⬜ pending |
+| Sprint I — Persistent Job Core & Realtime Contract | SQLite-backed JobRegistry (ADR `010`; tables `jobs`, `job_progress_snapshots`; `job_events.job_id` additive); standardized status + progress schema; cold-start recovery (`running` → `failed`); SSE resume via `Last-Event-Id`; one Job Detail UI; wire `import_source`/`translation`/`batch_translate`/`export_book`. **No external queue.** Schema v4 → v5. | ⬜ pending |
+| Sprint J — EPUB Preservation Snapshot & Parser Hardening | Persist Phase F `ParsedEpub` into 6 additive tables keyed by `volume_id`; source-hash + parser-version invalidation; reparse-as-Job (consumes Sprint I); image-format dimension coverage (JPEG/WebP/SVG); CLI `weaver epub-inspect`. Schema v5 → v6. | ⬜ pending |
+| Sprint K — Export Fidelity Integration | Renderer reads preservation snapshot; pre-export advisory in preflight; post-export fidelity report on job result; regression gate `epub_export_fidelity`; atomic export write (`.partial` → rename). | ⬜ pending |
+| Sprint L — Candidate Review + Character Text Draft | Translation candidate model + status state machine; grounded candidate generation (no auto-mutation); Character Page text draft (XHTML/text only, no images); provenance on every AI artifact. Schema v6 → v7. | ⬜ pending |
+| Sprint M — Image Preview / OCR Security Gate | ADR `012` Gate A (image-bytes policy: MIME allowlist, size cap, path traversal protection, no mutation); Gate B (OCR adapter, credential reuse, cost control); Gate C (optional impl: thumbnail endpoint + OCR-as-Job → drafts). | ⬜ pending |
+| Sprint N — Tauri Shell Alpha | `desktop/` subtree (isolated); shell launches FastAPI sidecar on 127.0.0.1; waits `/healthz`; opens WebView; sends session token; pipes sidecar logs; clean shutdown; crash screen on backend failure. No UI rewrite. | ⬜ pending |
+| Sprint O — Production Desktop Packaging | Windows + macOS packaging; app icon/name/version; bundle sidecar (PyOxidizer or equivalent — O-stage ADR); smoke-test build; `docs/INSTALL_DESKTOP.md`; debug-bundle export. Auto-updater / code signing / notarization out of scope. | ⬜ pending |
+| Deferred (legacy) — npm `@weaver/cli` wrapper | Earlier "Phase Final — Distribution & Installer" target (`npm install -g @weaver/cli → weaver`). **Replaced by Sprints N + O** per ADR `009`. Revisiting requires a new ADR. | 🚫 deferred |
+
+Legend: ✅ complete · 🟡 in progress · ⏳ active · ⬜ pending · 🚫 deferred / blocked.
 
 > MVP per-sprint detail (Sprints 1–13 + RC1) and the Phase A stage log live in **git history**. MVP gap analysis: [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md). Phase/sprint ordering is dependency-driven, not calendar.
 
@@ -80,33 +101,47 @@ Before starting any phase or stage, run this gate:
 
 Required reminder before any phase transition: **"Check exit criteria first. No next phase until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Phase F COMPLETE → next: Phase G (Distribution & Installer)
+### 2.3 Active Phase — Sprint G: FastAPI Stability & Tauri-Ready Runtime Foundation
 
-> **Phase F shipped** on feat/epub-metadata-parse as an additive EPUB package-parsing foundation. It adds ParsedEpub, parse_epub_structure(), deterministic validation, read-only preview API/UI, translation preservation context, export fidelity reports, and broader fixtures. read_epub(), DocumentIR, import, translation, export, SQLite, OCR, and image-byte behavior remain unchanged. **Next: Phase G — Distribution & Installer**; run the §2.2 gate before starting.
+> Phase F is complete. The active post-Phase-F sprint is **Sprint G**, governed by ADR [`009`](docs/decisions/009-htmx-first-fastapi-stable-tauri-sidecar-ready.md). Full scope and task order live in [docs/weaver_next_plan.md](docs/weaver_next_plan.md) Sprint G section. Sprint H may **not** start until G8 (the final runtime-readiness gate) passes; run the §2.2 gate before each sub-stage.
 
-**Phase F — shipped:**
-- **Parser contract** — OPF metadata, manifest/resources, spine, NAV/NCX, images, validation issues, and preservation context live beside the existing DocumentIR path.
-- **Preview** — POST /projects/epub-preview and /ui/epub-preview?source_path=... expose read-only EPUB structure summaries without DB writes or image bytes.
-- **Fidelity** — services/epub_export_fidelity.py compares source/export structures and reports passed checks, warnings, critical gaps, missing assets, and counts.
-- **OCR gating** — no OCR/vision/provider/dependency shipped; future OCR must be adapter-based and ADR/approval-gated.
+**Sprint G — in-scope summary:**
 
-**Carry-over invariants (unchanged):**
-- read_epub() remains the import/export/translation path and returns DocumentIR.
-- Import, translation, renderer/export, SQLite persistence, and image assets are not mutated by Phase F preview/parser/fidelity services.
-- Web remains FastAPI-only; UI routes stay thin adapters over framework-agnostic services.
+- **Runtime endpoints** — `GET /healthz`, `GET /version`, `GET /runtime/status`. Cold response < 50 ms.
+- **Env modes** — `WEAVER_ENV` ∈ `dev | desktop | test`; `WEAVER_HOST` default `127.0.0.1`; `WEAVER_PORT` default `8765` (auto when `0`); `WEAVER_DOCS` toggle (auto `false` in desktop).
+- **App-data abstraction** — `services/app_paths.py` resolves `workspace_dir / database_dir / cache_dir / export_dir / logs_dir / temp_dir / config_dir` from one OS-correct root (`~/.weaver/` POSIX, `%APPDATA%/Weaver/` Windows, `~/Library/Application Support/Weaver/` macOS), overridable via `WEAVER_DATA_DIR`. Existing `~/.weaver/secrets.toml` location and `0o600` mode are preserved.
+- **Relative HTMX routes + asset hardening** — UI must work under any `WEAVER_PORT`.
+- **Desktop security baseline** — bind 127.0.0.1 only (refuse 0.0.0.0 startup in desktop); CORS same-origin; `/docs` and `/redoc` off; session-token draft (header `X-Weaver-Session`, optional dev, required desktop).
+- **Structured logging** — JSON-lines files in `logs_dir`: `runtime.log`, `backend.log`, `job.log`, `export.log`, `provider.log`. Rotation 10 MiB × 5. No keys/secrets.
+- **Sidecar contract doc** — `docs/SIDECAR_CONTRACT.md` (start → poll `/healthz` → open webview → session token → graceful shutdown; stdout/stderr conventions; exit code map `0/64/65/66`).
+
+**Sprint G — out of scope (deferred to Sprint N+ per ADR `009`):**
+
+- Tauri workspace, `.msi`/`.dmg`, auto-updater, code signing, Rust command bridge, any UI rewrite.
+- Job persistence (Sprint I + ADR `010`).
+- Project rename copy pass (Sprint H + ADR `011`).
+
+**Carry-over invariants (unchanged across the Sprint G–O run):**
+
+- `read_epub()` and `DocumentIR` remain the import/export/translation path; Phase F's `ParsedEpub` is the structural layer.
+- State writes go through services. CLI/web never touch SQLite directly.
+- API keys via env vars or `~/.weaver/secrets.toml` only — never in config, never logged, never rendered.
+- Locked stack (CLAUDE.md §3) unchanged. Tauri lives in `desktop/`, not as a Python dependency.
 
 ### 2.4 Exit Criteria
 
-> **MVP acceptance gate: met & LOCKED** (Sprint 9C, 2026-06-02), shipped as 
-0.7.0-rc.1; the MVP-stabilization + RC1 evidence reports now live in **git history**. The MVP checklist lives in [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md). **Phases A–F** complete.
+> **MVP acceptance gate: met & LOCKED** (Sprint 9C, 2026-06-02), shipped as `0.7.0-rc.1`; RC1 evidence reports live in **git history**. The MVP checklist lives in [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md). **Phases A–F** complete (Phase F detail in [docs/PHASE_F_PLAN.md](docs/PHASE_F_PLAN.md) and [docs/EPUB_PARSER_AUDIT.md](docs/EPUB_PARSER_AUDIT.md)).
 
-**Phase F — met & complete** (detail in [docs/PHASE_F_PLAN.md](docs/PHASE_F_PLAN.md) and [docs/EPUB_PARSER_AUDIT.md](docs/EPUB_PARSER_AUDIT.md)):
+**Sprint G — exit criteria** (governed by ADR `009`; full task order in [docs/weaver_next_plan.md](docs/weaver_next_plan.md)):
 
-- [x] Additive ParsedEpub package contract shipped beside DocumentIR.
-- [x] OPF metadata, manifest/resources, spine, NAV/NCX, image classification, validation, preservation context, preview, and fidelity checks covered by targeted tests.
-- [x] read_epub(), import, translation, export, SQLite, OCR, and image-byte behavior unchanged.
-- [x] Preview API/UI is read-only and sandboxed.
-- [x] OCR/vision remains unimplemented and separately gated behind adapter/provider/dependency approval.
+- [x] G1 — Runtime audit doc lists every dev-only assumption with file:line refs. ([docs/SPRINT_G_RUNTIME_AUDIT.md](docs/SPRINT_G_RUNTIME_AUDIT.md))
+- [x] G2 — `services/app_paths.py` ships; OS-aware root, `WEAVER_DATA_DIR` override; `serve` stops relying on `os.chdir` (`WEAVER_BOOKS_DIR`); `services/glossary.py` outlier rewired to accept `cwd=`.
+- [x] G3 — `/healthz` (`{ok, ts}`), `/version`, `/runtime/status` ship via `api/routers/runtime.py`; cold-response budget covered by `tests/unit/api/test_runtime.py::test_healthz_cold_response_under_50ms`.
+- [x] G4 — `tests/integration/test_runtime_random_port.py` boots Uvicorn on `port=0`, asserts `/ui` + an HTMX endpoint; static-grep guard rejects any absolute `http://` URL in `hx-*` attributes.
+- [x] G5 — `services/runtime_env.py` + `api/app.py` middleware: desktop refuses `host != 127.0.0.1` (exit `64`), CORS same-origin, `/docs` + `/redoc` + `/openapi.json` 404, `X-Weaver-Session` enforced when set, public-paths bypass kept (`/healthz`, `/health`, `/version`, `/static/*`).
+- [x] G6 — `services/logging_setup.py` writes five JSON-lines files in `logs_dir` (rotation 10 MiB × 5); `log_provider_event` scrubs secret-shaped fields; regression test `test_provider_log_contains_no_api_keys_regression`.
+- [x] G7 — [docs/SIDECAR_CONTRACT.md](docs/SIDECAR_CONTRACT.md) ships with lifecycle, launch args, endpoint contract, stdout conventions, exit-code map (`0/64/65/66`), stability guarantees; linked from §1.
+- [x] G8 — Full gate green: 879 passed / 4 skipped (was 843 / 4), pyright 0, ruff + format clean, clean wheel build (`dist/weaver-0.7.0-py3-none-any.whl` contains all four new modules).
 
 ### 2.5 Phase Log
 
@@ -125,6 +160,8 @@ One row per phase/era; deep detail lives in the linked docs and git history.
 | Phase D — multi-item | **Complete (PR #21, `feat/docx-export`).** Five focused commits: (1) DOCX export target — custom minimal OOXML `renderers/docx.py`, no `python-docx`/no new dep, synthesized from the DB (no write-back); (2) configurable QA thresholds via `[qa]` (`qa/thresholds.py`), defaults unchanged when absent, validated, foreign keys ignored; (3) combined ZIP bundle (`services/export_bundle.py`, `bundle` flag, `bundle_path`); (4) opt-in QA tree badges (out-of-band HTMX, zero QA on tree render — Gate B1 preserved); (5) provider config hardening (`providers/config_values.py`, numeric validation + invalid-model mapping, no key leak). Gate: 780 tests / 4 skipped, pyright 0, ruff + format clean, clean wheel build. Merged-omnibus EPUB intentionally deferred. |
 | Phase E — Design System & UI overhaul | **Complete (`feat/design-system-implementaion`).** Token migration to `app.css :root` (color/type/space/radius/shadow/z-index) with legacy class aliases kept; 3-mode layout dispatch (`api/ui_context.py`); left-aligned topbar + brand mark + favicon; widened 264px sidebar with inline line icons (`partials/_icons.html`); dashboard project cards + volume progress cards; QA stat tiles; segmented sub-nav; `_page_header` breadcrumb standardized across all pages incl. 404/error; "QA"→"Quality" copy + active-voice errors. Additive: project delete (web `POST …/delete` + CLI `weaver delete` + `services/project.delete_project`, with path guard) and external-browser launch fix (`cli/open_browser.py`). No backend/schema/HTMX-contract change. Design exploration (DESIGN.md/DESIGN_GUIDE.md) distilled to `docs/DESIGN_NOTES.md`. Gate: 796 tests / 4 skipped, pyright 0, ruff + format clean. |
 | Phase F — EPUB Light Novel Metadata, Structure & Image Text Completeness | **Complete (feat/epub-metadata-parse).** Additive ParsedEpub package model and parse_epub_structure() for OPF metadata, manifest/resources, spine, NAV/NCX, image classification, validation issues, preservation context, read-only preview API/UI, export fidelity report, and broader synthetic light-novel fixtures. read_epub(), DocumentIR, import, translation, export, SQLite, OCR, and image-byte behavior unchanged. OCR/vision remains adapter/ADR-gated future work. |
+| Post-F strategic pivot (2026-06-08) | ADR [`009`](docs/decisions/009-htmx-first-fastapi-stable-tauri-sidecar-ready.md) merged. Replaces "Phase Final — npm `@weaver/cli` wrapper" with the Sprint G–O sequence (HTMX-first, FastAPI-stable, Tauri-sidecar-ready). Companion ADRs `010` (persistent job core, SQLite in-process) and `011` (Project terminology) accepted. Full plan: [docs/weaver_next_plan.md](docs/weaver_next_plan.md). Active sprint: Sprint G. |
+| Sprint G — FastAPI Stability & Tauri-Ready Runtime Foundation | **Complete (branch `feat/FastAPI-stability-Tauri-ready`).** Eight stages G1–G8: G1 read-only audit ([docs/SPRINT_G_RUNTIME_AUDIT.md](docs/SPRINT_G_RUNTIME_AUDIT.md)); G2 `services/app_paths.py` (OS-aware root + `WEAVER_DATA_DIR` override) + `WEAVER_BOOKS_DIR` env-var path replaces the `os.chdir` in `serve` + `services/glossary.py` outlier accepts `cwd=`; G3 `api/routers/runtime.py` adds `/healthz` (`{ok, ts}`) and `/runtime/status` alongside the legacy `/health` (preserved bit-identical); G4 random-port integration test + static-grep guard against absolute URLs in `hx-*` attributes; G5 `services/runtime_env.py` env-mode dispatch (`dev`/`desktop`/`test`), desktop refuses non-loopback bind (exit `64`), `/docs` `/redoc` `/openapi.json` 404 in desktop, CORS same-origin, `X-Weaver-Session` middleware (public bypass: `/healthz` `/health` `/version` `/static/*`); G6 `services/logging_setup.py` writes five JSON-lines files (`runtime.log`/`backend.log`/`job.log`/`export.log`/`provider.log`) with `provider.log` field-scrub regression; G7 [docs/SIDECAR_CONTRACT.md](docs/SIDECAR_CONTRACT.md) (lifecycle, launch args, exit codes `0/64/65/66`, stability guarantees) linked from §1. Gate: **879 passed / 4 skipped**, pyright 0, ruff + format clean, clean wheel build (`weaver-0.7.0-py3-none-any.whl` carries all four new modules). No schema migration, no Tauri code, no job persistence — those land in Sprints H, N, I respectively. |
 
 ---
 
@@ -134,7 +171,9 @@ One row per phase/era; deep detail lives in the linked docs and git history.
 
 **Web cockpit:** **FastAPI** (ADR `004`), behind optional extra `weaver[web]` (FastAPI + Uvicorn + python-multipart); core install pulls no web framework. UI is server-rendered **Jinja2 + HTMX**, no Node/build, no SPA (ADR `007`); HTMX vendored as a static asset (no CDN). asyncio unlocked **only** for the FastAPI web layer. The legacy Flask cockpit was removed in Sprint 13B (Flask→FastAPI migration complete; FastAPI is the sole web surface).
 
-**Still rejected (no reintroduction without ADR):** Flask · Django · SQLAlchemy · Celery · RQ · Docker · React/Node build · SPA framework · OpenTelemetry · Sentry. asyncio remains rejected outside the web layer.
+**Still rejected (no reintroduction without ADR):** Flask · Django · SQLAlchemy · Celery · RQ · Docker · React/Node build · SPA framework · OpenTelemetry · Sentry. asyncio remains rejected outside the web layer. **External job queue / worker daemon / multi-process worker pool** is also rejected (ADR `010`; `src/weaver/api/jobs.py:8-10` boundary).
+
+**Desktop shell (Sprint N+, ADR `009`):** Tauri lives in `desktop/` as an isolated subtree. It is a packaging shell — not a Python runtime dependency — and adds no entry to `pyproject.toml`. The shell launches FastAPI as a sidecar (`127.0.0.1`, random port, session token) per `docs/SIDECAR_CONTRACT.md`.
 
 **Providers:**
 
@@ -186,7 +225,9 @@ Source: [AI_SLOP_PREVENTION.md](docs/AI_SLOP_PREVENTION.md).
 
 - Build only what the active phase stage (§2.3) lists. Deferred/advanced items get no scaffolding "for later".
 - One PR = one concern. No bundled refactor + feature.
-- Phase B is **read-only QA**: no auto-fix, no provider/LLM calls, no translation mutation, no semantic/vector search. Each stage stops at its gate; design (B1) ships no code.
+- **Sprint G is runtime-only**: no Tauri code, no job persistence (Sprint I), no Project-rename copy pass (Sprint H), no schema migration. Stop at each G-stage gate (G1–G8) for inspection.
+- **Sprint I persistence boundary** (ADR `010`): SQLite-backed job state stays in-process. Do not add Celery / Redis / RQ / external worker / multi-process queue — `src/weaver/api/jobs.py:8-10` remains in force.
+- **Sprint M image/OCR boundary** (ADR `012`): no image-bytes endpoint and no OCR call before ADR `012` Gate A + B are merged.
 
 ### 4.5 Communication
 

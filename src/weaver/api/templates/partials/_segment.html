@@ -1,4 +1,4 @@
-<div class="ws-seg segment-row" id="seg-{{ seg.id }}">
+<div class="ws-seg segment-row" id="seg-{{ seg.id }}"{% if oob_segment %} hx-swap-oob="outerHTML"{% endif %}>
   <div class="ws-src segment-cell segment-cell--source">
     <span class="seg-kind">{{ seg.kind }}</span>
     <p class="seg-source">{{ seg.source_text }}</p>

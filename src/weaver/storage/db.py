@@ -55,9 +55,15 @@ def connect_database(path: Path) -> sqlite3.Connection:
         Open SQLite connection with row access by column name.
 
     Raises:
-        DatabaseError: If the database cannot be opened.
+        DatabaseError: If the database file does not exist or cannot be opened.
     """
 
+    if not path.exists():
+        raise DatabaseError(
+            "Failed to open Weaver database. "
+            f"Likely cause: database file '{path}' does not exist. "
+            "Next command: run `weaver init <input.epub>` to create a project first."
+        )
     connection = _open_database(path)
     try:
         apply_migrations(connection, target_version=SCHEMA_VERSION)
@@ -67,7 +73,7 @@ def connect_database(path: Path) -> sqlite3.Connection:
         connection.close()
         raise DatabaseError(
             "Failed to open Weaver database. "
-            "Likely cause: database file is missing, locked, or malformed. "
+            "Likely cause: database file is locked or malformed. "
             "Next command: run `weaver inspect <project.toml>` with a valid project file."
         ) from exc
     return connection

@@ -178,7 +178,9 @@ def raise_on_glossary_conflicts(connection: sqlite3.Connection, *, project_id: i
     )
 
 
-def sync_glossary_tsv_to_database(project_toml: Path, *, editor: str | None) -> int:
+def sync_glossary_tsv_to_database(
+    project_toml: Path, *, editor: str | None, cwd: Path | None = None
+) -> int:
     """Open glossary TSV in an editor, then sync reviewed rows into SQLite."""
 
     if not editor:
@@ -188,7 +190,7 @@ def sync_glossary_tsv_to_database(project_toml: Path, *, editor: str | None) -> 
             "Next command: set EDITOR, for example `set EDITOR=notepad` on Windows."
         )
 
-    base_dir = Path.cwd()
+    base_dir = cwd or Path.cwd()
     data = load_project_config(project_toml)
     project_config = data["project"]
     glossary_config = data["glossary"]

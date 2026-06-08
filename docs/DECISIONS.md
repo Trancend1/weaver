@@ -14,6 +14,9 @@ Active ADRs only. Active numbering was reset to `001` during the controlled rese
 | [006](decisions/006-novel-volume-chapter-data-model.md) | Novel/Volume/Chapter Data Model | Project=Novel, import=Volume; schema v3 + v2→v3 migration; `init` preserved. |
 | [007](decisions/007-fastapi-ui-stack.md) | FastAPI Cockpit UI Stack | Server-rendered Jinja2 + HTMX, no Node/build, no SPA; no business logic in UI. Pins ADR `005`'s direction for Sprint 11. |
 | [008](decisions/008-translation-qa-architecture-and-severity.md) | Translation QA Architecture & Severity | Phase B QA reuses `weaver.qa.checks` (no parallel system); keeps severity `info\|warning\|critical` (no `error`); scope-aware read-only `services/translation_qa.py`. |
+| [009](decisions/009-htmx-first-fastapi-stable-tauri-sidecar-ready.md) | HTMX-first, FastAPI-stable, Tauri-sidecar-ready | Post-Phase-F roadmap; **supersedes** the npm `@weaver/cli` wrapper plan. Governs Sprints G–O in [weaver_next_plan.md](weaver_next_plan.md). |
+| [010](decisions/010-persistent-job-core-sqlite-in-process.md) | Persistent Job Core | SQLite-backed JobRegistry, in-process only. No Celery/Redis/RQ/external worker (`api/jobs.py:8-10` boundary preserved). Locks before Sprint I. |
+| [011](decisions/011-project-terminology-consolidation.md) | Project Terminology Consolidation | Retire user-facing "Novel" label; schema (`projects`/`volumes`) unchanged. Supersedes ADR `006` label only. Locks before Sprint H. |
 
 ## ADR rules
 

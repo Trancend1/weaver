@@ -1,0 +1,14 @@
+{% if ws.segments %}
+<div class="ws-grid workspace-grid" id="ws-grid"
+     hx-get="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}"
+     hx-trigger="refreshGrid from:body"
+     hx-select="#ws-grid" hx-swap="outerHTML">
+  <div class="ws-head ws-src">Source (JP)</div>
+  <div class="ws-head ws-tx">Translation (EN)</div>
+  {% for seg in ws.segments %}
+    {% include "partials/_segment.html" %}
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty empty-state"><p>This chapter has no segments.</p></div>
+{% endif %}

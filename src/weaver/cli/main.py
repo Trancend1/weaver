@@ -1175,16 +1175,18 @@ def _exit_with_error(error: WeaverError) -> NoReturn:
 def _run_fastapi_cockpit(
     *,
     port: int,
+    host: str,
     books_dir: Path | None,
     open_browser: bool,
     reload: bool,
 ) -> None:
     """Launch the FastAPI cockpit on loopback (shared by `serve` and `serve-api`).
 
-    The app factory derives its project root from the current working directory
-    (``create_api_app`` defaults ``base_dir`` to cwd), so ``books_dir`` is applied
-    via ``chdir`` before Uvicorn imports the factory. Host is fixed to
-    ``127.0.0.1`` and is never user-configurable (security: ADR ``0017``).
+    ``books_dir`` is passed to the factory via ``$WEAVER_BOOKS_DIR`` instead of
+    ``os.chdir`` (Sprint G2) so the sidecar entry point owns no process-global
+    state. ``host`` defaults to ``127.0.0.1``; in ``WEAVER_ENV=desktop`` any
+    other host is refused with sidecar exit code ``64`` (ADR ``0017``,
+    Sprint G5).
     """
 
     try:
@@ -1199,10 +1201,26 @@ def _run_fastapi_cockpit(
         )
         raise AssertionError("unreachable") from exc  # _exit_with_error never returns
 
-    if books_dir is not None:
-        os.chdir(books_dir.resolve())
+    from weaver.services.app_paths import BOOKS_DIR_ENV
+    from weaver.services.runtime_env import current_env
 
-    url = f"http://127.0.0.1:{port}"
+    env_mode = current_env()
+    if env_mode == "desktop" and host != "127.0.0.1":
+        typer.echo(
+            "Refusing to bind a non-loopback host in desktop mode. "
+            "Likely cause: --host was set to something other than 127.0.0.1. "
+            "Next command: omit --host or pass --host 127.0.0.1.",
+            err=True,
+        )
+        raise typer.Exit(code=64)
+
+    if books_dir is not None:
+        os.environ[BOOKS_DIR_ENV] = str(books_dir.resolve())
+
+    os.environ["WEAVER_HOST"] = host
+    os.environ["WEAVER_PORT"] = str(port)
+
+    url = f"http://{host}:{port}"
     console.print(f"Weaver cockpit (FastAPI UI) on {url} (Ctrl+C to stop)")
     console.print(f"If no window opens, paste {url} into your browser.")
     if open_browser:
@@ -1211,13 +1229,30 @@ def _run_fastapi_cockpit(
         from weaver.cli.open_browser import open_in_external_browser
 
         threading.Timer(1.0, lambda: open_in_external_browser(url)).start()
-    uvicorn.run(
-        "weaver.api.app:create_api_app",
-        host="127.0.0.1",
-        port=port,
-        factory=True,
-        reload=reload,
-    )
+    try:
+        uvicorn.run(
+            "weaver.api.app:create_api_app",
+            host=host,
+            port=port,
+            factory=True,
+            reload=reload,
+        )
+    except OSError as exc:
+        # Sidecar contract exit codes (Sprint G7): 65 = port in use,
+        # 66 = data-dir error. Other OSErrors fall through.
+        if "address already in use" in str(exc).lower() or getattr(exc, "errno", None) in (
+            48,
+            98,
+            10048,
+        ):
+            typer.echo(
+                f"Port {port} is already in use. "
+                "Likely cause: another Weaver process is running. "
+                "Next command: pass --port <free-port> or stop the other process.",
+                err=True,
+            )
+            raise typer.Exit(code=65) from exc
+        raise
 
 
 @app.command(
@@ -1233,7 +1268,12 @@ def serve_command(
     port: int = typer.Option(
         8765,
         "--port",
-        help="TCP port to bind on 127.0.0.1.",
+        help="TCP port to bind on the given host (default 127.0.0.1).",
+    ),
+    host: str = typer.Option(
+        "127.0.0.1",
+        "--host",
+        help="Host interface to bind. Desktop mode refuses anything other than 127.0.0.1.",
     ),
     books_dir: Path | None = typer.Option(
         None,
@@ -1255,6 +1295,7 @@ def serve_command(
 
     _run_fastapi_cockpit(
         port=port,
+        host=host,
         books_dir=books_dir,
         open_browser=not no_browser,
         reload=reload,
@@ -1269,7 +1310,12 @@ def serve_api_command(
     port: int = typer.Option(
         8000,
         "--port",
-        help="TCP port to bind on 127.0.0.1.",
+        help="TCP port to bind on the given host (default 127.0.0.1).",
+    ),
+    host: str = typer.Option(
+        "127.0.0.1",
+        "--host",
+        help="Host interface to bind. Desktop mode refuses anything other than 127.0.0.1.",
     ),
     reload: bool = typer.Option(
         False,
@@ -1281,6 +1327,7 @@ def serve_api_command(
 
     _run_fastapi_cockpit(
         port=port,
+        host=host,
         books_dir=None,
         open_browser=False,
         reload=reload,

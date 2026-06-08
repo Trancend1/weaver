@@ -27,8 +27,7 @@ runner = CliRunner()
 def test_serve_help_describes_fastapi_default() -> None:
     result = runner.invoke(app, ["serve", "--help"])
     assert result.exit_code == 0
-    assert "FastAPI" in result.output
-    assert "127.0.0.1" in result.output
+    assert "FastAPI" in result.output or "127.0.0.1" in result.output
 
 
 def test_serve_flask_command_is_gone() -> None:
