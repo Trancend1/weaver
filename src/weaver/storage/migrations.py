@@ -41,6 +41,18 @@ def apply_migrations(connection: sqlite3.Connection, *, target_version: int) -> 
             "Next command: upgrade `weaver` to the version that created this project."
         )
     if current == 0:
+        has_schema = (
+            connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='projects'"
+            ).fetchone()
+            is not None
+        )
+        if not has_schema:
+            raise DatabaseError(
+                "Weaver database is not initialized. "
+                "Likely cause: database file is missing or was never initialized. "
+                "Next command: run `weaver init <input.epub>` to create a project first."
+            )
         connection.execute(f"PRAGMA user_version = {target_version}")
         return target_version
 

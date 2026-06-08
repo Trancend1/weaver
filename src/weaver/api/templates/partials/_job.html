@@ -1,7 +1,8 @@
 <div class="job-panel progress-panel" id="job-panel"
+  data-project-name="{{ name }}" data-chapter-id="{{ job.chapter_id }}" data-job-id="{{ job.id }}" data-job-status="{{ job.status }}"
   {% if job.status == "running" %}
   hx-get="/ui/projects/{{ name }}/jobs/{{ job.id }}"
-  hx-trigger="load delay:1s" hx-target="#job-panel" hx-swap="outerHTML"
+  hx-trigger="load delay:500ms" hx-target="#job-panel" hx-swap="outerHTML"
   {% endif %}>
   <div class="job-head">
     <strong>Translate</strong>

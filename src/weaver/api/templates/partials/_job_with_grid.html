@@ -1,0 +1,5 @@
+{% include "partials/_job.html" %}
+{% for seg in updated_segments %}
+{% set oob_segment = true %}
+{% include "partials/_segment.html" %}
+{% endfor %}

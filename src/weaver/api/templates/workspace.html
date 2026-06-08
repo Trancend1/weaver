@@ -29,26 +29,14 @@
       </form>
     </div>
   </div>
-  <div id="job-panel"></div>
-
   {% set name = ws.project_name %}
   {% set chapter_id = ws.chapter_id %}
-  {% if ws.segments %}
-  {# #ws-grid refreshes itself once a translate job finishes: the terminal job
-     response sends an `HX-Trigger: refreshGrid` header, this listens for it. #}
-  <div class="ws-grid workspace-grid" id="ws-grid"
-       hx-get="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}"
-       hx-trigger="refreshGrid from:body"
-       hx-select="#ws-grid" hx-swap="outerHTML">
-    <div class="ws-head ws-src">Source (JP)</div>
-    <div class="ws-head ws-tx">Translation (EN)</div>
-    {% for seg in ws.segments %}
-      {% include "partials/_segment.html" %}
-    {% endfor %}
-  </div>
+  {% if running_job %}
+  {% with job=running_job, progress=running_job_progress %}{% include "partials/_job.html" %}{% endwith %}
   {% else %}
-  <div class="empty empty-state"><p>This chapter has no segments.</p></div>
+  <div id="job-panel"></div>
   {% endif %}
+  {% include "partials/_workspace_grid.html" %}
 </section>
 
 {# Progressive enhancement (no build, no framework): unsaved-edit guard (W3) +
@@ -60,6 +48,19 @@
   function resizeIn(scope) {
     if (scope && scope.querySelectorAll) scope.querySelectorAll(".seg-input").forEach(grow);
   }
+  function syncJobPanel() {
+    const panel = document.getElementById("job-panel");
+    if (!panel) return;
+    const key = "weaver:translate-job:" + {{ ws.project_name | tojson }} + ":" + {{ ws.chapter_id | tojson }};
+    if (panel.dataset && panel.dataset.jobId) {
+      if (panel.dataset.jobStatus === "running") localStorage.setItem(key, panel.dataset.jobId);
+      else localStorage.removeItem(key);
+      return;
+    }
+    if (localStorage.getItem(key) && window.htmx) {
+      htmx.ajax("GET", "/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/running-job", { target: "#job-panel", swap: "outerHTML" });
+    }
+  }
   document.addEventListener("input", function (e) {
     const t = e.target;
     if (!t.classList || !t.classList.contains("seg-input")) return;
@@ -69,14 +70,16 @@
   });
   document.body.addEventListener("htmx:afterSwap", function (e) {
     const el = e.target;
-    if (el && el.id === "ws-grid") { dirty.clear(); resizeIn(el); return; }
+    if (el && el.id === "ws-grid") { dirty.clear(); resizeIn(el); syncJobPanel(); return; }
     if (el && el.id && el.id.indexOf("seg-") === 0) dirty.delete(el.id);
     resizeIn(el);
+    syncJobPanel();
   });
   window.addEventListener("beforeunload", function (e) {
     if (dirty.size) { e.preventDefault(); e.returnValue = ""; }
   });
   resizeIn(document);
+  syncJobPanel();
 })();
 </script>
 {% endblock %}

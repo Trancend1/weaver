@@ -83,6 +83,7 @@ class TranslationJob:
     queue: queue.Queue[dict[str, Any] | None] = field(default_factory=queue.Queue)
     _cancel: threading.Event = field(default_factory=threading.Event)
     _lock: threading.Lock = field(default_factory=threading.Lock)
+    _updated_segment_ids: list[str] = field(default_factory=list)
     _thread: threading.Thread | None = field(default=None, repr=False)
 
     def request_cancel(self) -> None:
@@ -106,6 +107,12 @@ class TranslationJob:
                 failed=self.progress.failed,
             )
 
+    def drain_updated_segment_ids(self) -> list[str]:
+        with self._lock:
+            segment_ids = list(self._updated_segment_ids)
+            self._updated_segment_ids.clear()
+            return segment_ids
+
     def on_progress(
         self,
         index: int,
@@ -124,6 +131,8 @@ class TranslationJob:
                 self.progress.translated += 1
             else:
                 self.progress.failed += 1
+            if segment.id not in self._updated_segment_ids:
+                self._updated_segment_ids.append(segment.id)
         self.queue.put(
             {
                 "event": "progress",
@@ -574,6 +583,24 @@ class JobRegistry:
 
         with self._lock:
             return self._jobs.get(job_id)
+
+    def find_running(self, *, project_name: str, chapter_id: str) -> TranslationJob | None:
+        """Return the first running job matching project+chapter, or None.
+
+        Used by the workspace view to re-attach a progress panel after page
+        navigation so the user does not accidentally start a second job while
+        one is still running.
+        """
+
+        with self._lock:
+            for job in self._jobs.values():
+                if (
+                    job.project_name == project_name
+                    and job.chapter_id == chapter_id
+                    and job.status == "running"
+                ):
+                    return job
+            return None
 
     def submit_batch(
         self,

@@ -297,14 +297,15 @@ def workspace_view(name: str, chapter_id: str, request: Request) -> HTMLResponse
         return templates.TemplateResponse(
             request, "error.html", {"message": str(exc)}, status_code=422
         )
-    return templates.TemplateResponse(
-        request,
-        "workspace.html",
-        {
-            **workspace_layout(request, name, active_chapter_id=chapter_id),
-            "ws": ws,
-        },
-    )
+    running_job = _jobs(request).find_running(project_name=name, chapter_id=chapter_id)
+    ctx: dict[str, Any] = {
+        **workspace_layout(request, name, active_chapter_id=chapter_id),
+        "ws": ws,
+    }
+    if running_job is not None:
+        ctx["running_job"] = running_job
+        ctx["running_job_progress"] = running_job.snapshot()
+    return templates.TemplateResponse(request, "workspace.html", ctx)
 
 
 def _render_segment(
@@ -388,14 +389,26 @@ def _render_translate_job(request: Request, name: str, job_id: str) -> HTMLRespo
     job = _jobs(request).get(job_id)
     if job is None or job.project_name != name:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found for '{name}'.")
+    updated_segments = []
+    updated_segment_ids = set(job.drain_updated_segment_ids())
+    if updated_segment_ids:
+        try:
+            project_toml = _resolve_project_toml(request, name)
+            ws = chapter_workspace(project_toml, job.chapter_id, cwd=_base_dir(request))
+            updated_segments = [seg for seg in ws.segments if seg.id in updated_segment_ids]
+        except WeaverError:
+            updated_segments = []
     response = templates.TemplateResponse(
-        request, "partials/_job.html", {"job": job, "progress": job.snapshot(), "name": name}
+        request,
+        "partials/_job_with_grid.html",
+        {
+            "job": job,
+            "progress": job.snapshot(),
+            "name": name,
+            "chapter_id": job.chapter_id,
+            "updated_segments": updated_segments,
+        },
     )
-    # When the job finishes, tell the workspace grid to refresh itself once. The
-    # signal rides on a response header (not an hx-trigger in the panel) so the
-    # terminal panel itself stays quiet (no further polling).
-    if job.status in {"done", "cancelled"}:
-        response.headers["HX-Trigger"] = "refreshGrid"
     return response
 
 
@@ -429,6 +442,15 @@ def ui_retranslate(
     except HTTPException as exc:
         return _job_error(request, str(exc.detail), panel_id="job-panel")
     return _render_translate_job(request, name, started.job_id)
+
+
+@router.get("/ui/projects/{name}/chapters/{chapter_id}/running-job", response_class=HTMLResponse)
+def ui_running_chapter_job(name: str, chapter_id: str, request: Request) -> HTMLResponse:
+    """Render the active translate job for a chapter, if one is still running."""
+    running_job = _jobs(request).find_running(project_name=name, chapter_id=chapter_id)
+    if running_job is None:
+        return HTMLResponse('<div id="job-panel"></div>')
+    return _render_translate_job(request, name, running_job.id)
 
 
 @router.get("/ui/projects/{name}/jobs/{job_id}", response_class=HTMLResponse)
