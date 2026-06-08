@@ -32,7 +32,7 @@ def _name(client: TestClient) -> str:
 
 @pytest.mark.parametrize(
     ("path", "nav_label"),
-    [("/ui", "Dashboard"), ("/ui/new", "New novel"), ("/ui/config", "Config")],
+    [("/ui", "Dashboard"), ("/ui/new", "New project"), ("/ui/config", "Config")],
 )
 def test_global_mode_has_no_sidebar(ui_client: TestClient, path: str, nav_label: str) -> None:
     html = ui_client.get(path).text

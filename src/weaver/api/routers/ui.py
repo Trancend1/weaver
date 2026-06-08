@@ -25,7 +25,12 @@ from weaver.api.schemas import ExportRequest
 from weaver.api.templating import templates
 from weaver.api.ui_context import global_layout, project_layout, workspace_layout
 from weaver.core.global_config import load_global_config, resolve_config_value
-from weaver.errors import ChapterNotFoundError, SegmentNotFoundError, WeaverError
+from weaver.errors import (
+    ChapterNotFoundError,
+    SegmentNotFoundError,
+    VolumeNotFoundError,
+    WeaverError,
+)
 from weaver.providers.registry import known_provider_types
 from weaver.services.chapter_workspace import chapter_workspace
 from weaver.services.epub_structure_preview import preview_epub_structure
@@ -36,6 +41,7 @@ from weaver.services.project_tree import project_tree
 from weaver.services.segment_history import segment_translation_history
 from weaver.services.source_browser import list_directory, resolve_source
 from weaver.services.source_intake import resolve_intake_source
+from weaver.services.volume import delete_volume_from_project
 from weaver.services.workspace_edit import save_segment_translation
 
 router = APIRouter(tags=["ui"], include_in_schema=False)
@@ -139,7 +145,7 @@ def project_view(name: str, request: Request) -> HTMLResponse:
             request, "error.html", {"message": dp.error}, status_code=422
         )
     try:
-        tree = project_tree(dp.project_toml, cwd=base)
+        tree = project_tree(dp.project_toml, cwd=base, jobs=_jobs(request))
     except WeaverError as exc:
         return templates.TemplateResponse(
             request, "error.html", {"message": str(exc)}, status_code=422
@@ -171,6 +177,31 @@ def delete_project_submit(name: str, request: Request) -> Response:
             headers={"HX-Reswap": "innerHTML", "HX-Retarget": "#qa-badge-status"},
         )
     return Response(status_code=200, headers={"HX-Redirect": "/ui"})
+
+
+@router.post("/ui/projects/{name}/volumes/{volume_id}/delete", response_class=HTMLResponse)
+def delete_volume_submit(name: str, volume_id: int, request: Request) -> HTMLResponse:
+    """Delete one volume and re-render the project tree (Sprint H3).
+
+    HTMX target is ``#tree`` so the project page swaps the partial in place; on
+    error we retarget to the import-error slot so the tree stays intact.
+    """
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    if dp is None:
+        raise HTTPException(status_code=404, detail=f"No project named {name!r}.")
+    if dp.error:
+        return _import_error(request, dp.error)
+    try:
+        delete_volume_from_project(dp.project_toml, volume_id, cwd=base)
+        tree = project_tree(dp.project_toml, cwd=base, jobs=_jobs(request))
+    except VolumeNotFoundError as exc:
+        return _import_error(request, str(exc))
+    except WeaverError as exc:
+        return _import_error(request, str(exc))
+    return templates.TemplateResponse(request, "partials/_tree.html", {"tree": tree})
+
+
 
 
 # --- create / import (Stage 11B-1) ------------------------------------------
@@ -253,7 +284,7 @@ async def import_volume_submit(
     try:
         source = resolve_intake_source(base, uploaded=uploaded, source_path=source_path)
         import_volume(dp.project_toml, source, cwd=base)
-        tree = project_tree(dp.project_toml, cwd=base)
+        tree = project_tree(dp.project_toml, cwd=base, jobs=_jobs(request))
     except WeaverError as exc:
         return _import_error(request, str(exc))
     return templates.TemplateResponse(request, "partials/_tree.html", {"tree": tree})

@@ -8,7 +8,14 @@
       <div class="vol-head">
         <div class="vol-head__title">
           <span class="vol-title">{{ v.title }}</span>
+          <span class="vol-status badge vol-status--{{ v.status }}"
+                data-volume-status="{{ v.status }}"
+                title="Volume lifecycle: {{ v.status_label }}">{{ v.status_label }}</span>
           <span class="qa-badge-slot" id="qa-badge-vol-{{ v.id }}"></span>
+          <button type="button" class="btn btn--quiet vol-delete"
+                  hx-post="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/delete"
+                  hx-target="#tree" hx-swap="outerHTML"
+                  hx-confirm="Delete volume &quot;{{ v.title }}&quot;? This permanently removes its chapters, translations, and quality history. Glossary and translation memory stay.">Delete volume</button>
         </div>
         <div class="vol-head__meta">
           <span class="meta">{{ v.source_format | upper }} · {{ v.chapter_count }} chapters</span>

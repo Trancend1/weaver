@@ -9,7 +9,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Response, UploadFile
 
 from weaver.api.schemas import (
     BrowseEntryResponse,
@@ -28,16 +28,23 @@ from weaver.api.schemas import (
     VolumeResponse,
     WorkspaceSegmentResponse,
 )
-from weaver.errors import ChapterNotFoundError, SegmentNotFoundError, WeaverError
+from weaver.errors import (
+    ChapterNotFoundError,
+    ProjectNotFoundError,
+    SegmentNotFoundError,
+    VolumeNotFoundError,
+    WeaverError,
+)
 from weaver.services.chapter_workspace import chapter_workspace
 from weaver.services.epub_structure_preview import preview_epub_structure
 from weaver.services.import_source import import_volume
-from weaver.services.project import initialize_project, project_exists
+from weaver.services.project import delete_project, initialize_project, project_exists
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_tree import project_tree
 from weaver.services.segment_history import segment_translation_history
 from weaver.services.source_browser import list_directory, resolve_source
 from weaver.services.source_intake import resolve_intake_source
+from weaver.services.volume import delete_volume_from_project
 from weaver.services.workspace_edit import save_segment_translation
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -45,6 +52,11 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 
 def _base_dir(request: Request) -> Path:
     return request.app.state.base_dir  # type: ignore[no-any-return]
+
+
+def _jobs(request: Request):
+    """Optional in-memory JobRegistry (None outside the live app)."""
+    return getattr(request.app.state, "jobs", None)
 
 
 @router.post("/epub-preview")
@@ -182,7 +194,7 @@ async def create_novel(
 
 @router.get("/{name}/tree", response_model=NovelTreeResponse)
 def get_project_tree(name: str, request: Request) -> NovelTreeResponse:
-    """Return the Novel → Volume → Chapter tree for one project."""
+    """Return the Project → Volume → Chapter tree for one project."""
     base = _base_dir(request)
     dp = find_project(base, name)
     if dp is None:
@@ -191,7 +203,7 @@ def get_project_tree(name: str, request: Request) -> NovelTreeResponse:
         raise HTTPException(status_code=422, detail=dp.error)
 
     try:
-        tree = project_tree(dp.project_toml, cwd=base)
+        tree = project_tree(dp.project_toml, cwd=base, jobs=_jobs(request))
     except WeaverError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -205,6 +217,8 @@ def get_project_tree(name: str, request: Request) -> NovelTreeResponse:
                 volume_order=v.volume_order,
                 chapter_count=v.chapter_count,
                 segment_count=v.segment_count,
+                status=v.status,
+                status_label=v.status_label,
                 chapters=[
                     ChapterResponse(
                         id=c.id,
@@ -404,3 +418,48 @@ async def import_volume_endpoint(
         segment_count=result.segment_count,
         glossary_candidate_count=result.glossary_candidate_count,
     )
+
+
+# --- lifecycle deletes (Sprint H3) -----------------------------------------
+
+
+@router.delete("/{name}", status_code=204)
+def delete_project_endpoint(name: str, request: Request) -> Response:
+    """Permanently delete a project and every artefact under ``.weaver/<name>``.
+
+    The original source file is **not** touched (it lives outside the project
+    directory). Returns 204 on success, 404 when the project is unknown.
+    """
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    if dp is None:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found.")
+    try:
+        delete_project(dp.project_toml)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return Response(status_code=204)
+
+
+@router.delete("/{name}/volumes/{volume_id}", status_code=204)
+def delete_volume_endpoint(name: str, volume_id: int, request: Request) -> Response:
+    """Permanently delete one volume and every row that depends on it.
+
+    Project-scoped data (glossary, characters, translation memory) survives —
+    use ``DELETE /projects/{name}`` to remove the whole project.
+    """
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    if dp is None:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found.")
+    if dp.error:
+        raise HTTPException(status_code=422, detail=dp.error)
+    try:
+        delete_volume_from_project(dp.project_toml, volume_id, cwd=base)
+    except VolumeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return Response(status_code=204)

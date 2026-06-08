@@ -34,7 +34,7 @@ def test_new_page_renders(tmp_path: Path) -> None:
     client = TestClient(create_api_app(tmp_path))
     r = client.get("/ui/new")
     assert r.status_code == 200
-    assert "Create a novel" in r.text
+    assert "Create a project" in r.text
     assert 'hx-get="/ui/browse' in r.text
 
 
@@ -84,7 +84,7 @@ def test_create_no_source_rerenders_with_error(tmp_path: Path) -> None:
     client = TestClient(create_api_app(tmp_path))
     r = client.post("/ui/new", data={})
     assert r.status_code == 400
-    assert "Create a novel" in r.text
+    assert "Create a project" in r.text
     assert "No source selected" in r.text
 
 

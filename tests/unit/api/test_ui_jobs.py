@@ -269,7 +269,7 @@ def test_cancel_unknown_job_404(jobs_client: TestClient) -> None:
 def test_project_page_has_export_controls(jobs_client: TestClient) -> None:
     name = _name(jobs_client)
     page = jobs_client.get(f"/ui/projects/{name}").text
-    assert "Export novel" in page
+    assert "Export project" in page
     for target in ("epub", "txt", "html", "docx"):
         assert f'value="{target}"' in page
 

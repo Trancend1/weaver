@@ -109,6 +109,8 @@ class VolumeResponse(BaseModel):
     chapter_count: int
     segment_count: int
     chapters: list[ChapterResponse]
+    status: str
+    status_label: str
 
 
 class NovelTreeResponse(BaseModel):

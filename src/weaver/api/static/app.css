@@ -611,6 +611,14 @@ progress::-moz-progress-bar { background: var(--color-primary); border-radius: v
 .vol-progress progress { width: 120px; height: 0.5rem; }
 .vol-progress .meta { font-variant-numeric: tabular-nums; }
 
+/* Volume lifecycle status badge (Sprint H2 — derived from segment counts + JobRegistry) */
+.vol-status { font-size: var(--text-xs); font-weight: 700; padding: 2px var(--space-sm); border-radius: var(--radius-sm); text-transform: lowercase; letter-spacing: 0.02em; }
+.vol-status--empty       { background: var(--color-surface); color: var(--color-muted); border: 1px solid var(--color-line); }
+.vol-status--imported    { background: var(--color-surface); color: var(--color-ink); border: 1px solid var(--color-line); }
+.vol-status--in_progress { background: rgba(255, 196, 0, 0.12); color: #8a6300; border: 1px solid rgba(255, 196, 0, 0.4); }
+.vol-status--translated  { background: rgba(40, 160, 90, 0.12); color: #1a6c3c; border: 1px solid rgba(40, 160, 90, 0.4); }
+.vol-status--translating { background: rgba(40, 120, 220, 0.12); color: #134e9e; border: 1px solid rgba(40, 120, 220, 0.4); }
+
 .workspace-panel { padding: var(--space-lg); }
 .workspace-actions { display: grid; gap: var(--space-sm); margin-bottom: var(--space-lg); }
 .workspace-hint { max-width: 86ch; margin: 0; }

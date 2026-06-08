@@ -4,7 +4,7 @@
 <section class="panel c-panel project-panel">
   {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label": tree.project_name}] %}
   {% set page_title = tree.project_name %}
-  {% set page_meta = "Novel tree, import, export, and on-demand quality badges." %}
+  {% set page_meta = "Project tree, import, export, and on-demand quality badges." %}
   {% set page_actions %}<button class="btn btn--danger" type="button"
     hx-post="/ui/projects/{{ tree.project_name }}/delete"
     hx-confirm="Delete &quot;{{ tree.project_name }}&quot;? This permanently removes its translations, history, glossary, and exports. The original source file is not affected."
@@ -52,7 +52,7 @@
 </section>
 
 <section class="panel c-panel">
-  <h2>Export novel</h2>
+  <h2>Export project</h2>
   <p class="meta">One artifact per volume. Each segment uses its latest translation; segments
     you haven't translated yet fall back to the original source text. A quality check runs first —
     export is never blocked.</p>

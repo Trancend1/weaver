@@ -121,6 +121,55 @@ def get_volume(connection: sqlite3.Connection, volume_id: int) -> VolumeRecord:
     return _volume_from_row(row)
 
 
+def delete_volume(connection: sqlite3.Connection, volume_id: int) -> None:
+    """Delete one volume and every row that depends on it (Sprint H3).
+
+    Removes, in dependency order: ``qa_warnings`` → ``translations`` →
+    ``segments`` → ``chapters`` → the ``volume`` row. Project-scoped data
+    (glossary, characters, translation memory) is **not** touched — those live
+    at the project level and survive a single-volume delete.
+
+    The caller is responsible for opening a transaction; this function assumes
+    it runs inside one.
+
+    Args:
+        connection: Open writable SQLite connection.
+        volume_id: Volume row id. A volume that does not exist is a no-op.
+    """
+    chapter_rows = connection.execute(
+        "SELECT id FROM chapters WHERE volume_id = ?", (volume_id,)
+    ).fetchall()
+    chapter_ids = [str(row["id"]) for row in chapter_rows]
+    if chapter_ids:
+        placeholders = ",".join("?" for _ in chapter_ids)
+        # qa_warnings ← translations ← segments are referenced via segment_id.
+        # Resolve the segment ids once so each delete uses a small IN list.
+        segment_rows = connection.execute(
+            f"SELECT id FROM segments WHERE chapter_id IN ({placeholders})",
+            tuple(chapter_ids),
+        ).fetchall()
+        segment_ids = [str(row["id"]) for row in segment_rows]
+        if segment_ids:
+            seg_placeholders = ",".join("?" for _ in segment_ids)
+            connection.execute(
+                f"DELETE FROM qa_warnings WHERE segment_id IN ({seg_placeholders})",
+                tuple(segment_ids),
+            )
+            connection.execute(
+                f"DELETE FROM translations WHERE segment_id IN ({seg_placeholders})",
+                tuple(segment_ids),
+            )
+            connection.execute(
+                f"DELETE FROM segments WHERE id IN ({seg_placeholders})",
+                tuple(segment_ids),
+            )
+        connection.execute(
+            f"DELETE FROM chapters WHERE id IN ({placeholders})",
+            tuple(chapter_ids),
+        )
+    connection.execute("DELETE FROM volumes WHERE id = ?", (volume_id,))
+
+
 def _next_volume_order(connection: sqlite3.Connection, project_id: int) -> int:
     row = connection.execute(
         "SELECT COALESCE(MAX(volume_order) + 1, 0) AS next FROM volumes WHERE project_id = ?",

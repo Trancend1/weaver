@@ -12,6 +12,7 @@ from typing import Any
 
 from fastapi import Request
 
+from weaver.api.jobs import JobRegistry
 from weaver.errors import WeaverError
 from weaver.services.project_discovery import find_project
 from weaver.services.project_tree import project_tree
@@ -19,6 +20,10 @@ from weaver.services.project_tree import project_tree
 
 def _base_dir(request: Request) -> Path:
     return request.app.state.base_dir  # type: ignore[no-any-return]
+
+
+def _jobs(request: Request) -> JobRegistry | None:
+    return getattr(request.app.state, "jobs", None)
 
 
 def global_layout(active_nav: str) -> dict[str, Any]:
@@ -79,7 +84,7 @@ def _project_context(
             sidebar_error = dp.error
         else:
             try:
-                tree = project_tree(dp.project_toml, cwd=base)
+                tree = project_tree(dp.project_toml, cwd=base, jobs=_jobs(request))
             except WeaverError as exc:
                 sidebar_error = str(exc)
     return {
