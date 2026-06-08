@@ -454,7 +454,7 @@ def ui_volume_structure(name: str, volume_id: int, request: Request) -> HTMLResp
         preview = None
     else:
         try:
-            preview = serialize_parsed_epub(parsed)
+            preview = serialize_parsed_epub(parsed, project_name=name, volume_id=volume_id)
         except WeaverError as exc:
             return _import_error(request, str(exc))
     return templates.TemplateResponse(

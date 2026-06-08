@@ -17,6 +17,7 @@ Active ADRs only. Active numbering was reset to `001` during the controlled rese
 | [009](decisions/009-htmx-first-fastapi-stable-tauri-sidecar-ready.md) | HTMX-first, FastAPI-stable, Tauri-sidecar-ready | Post-Phase-F roadmap; **supersedes** the npm `@weaver/cli` wrapper plan. Governs Sprints G–O in [weaver_next_plan.md](weaver_next_plan.md). |
 | [010](decisions/010-persistent-job-core-sqlite-in-process.md) | Persistent Job Core | SQLite-backed JobRegistry, in-process only. No Celery/Redis/RQ/external worker (`api/jobs.py:8-10` boundary preserved). Locks before Sprint I. |
 | [011](decisions/011-project-terminology-consolidation.md) | Project Terminology Consolidation | Retire user-facing "Novel" label; schema (`projects`/`volumes`) unchanged. Supersedes ADR `006` label only. Locks before Sprint H. |
+| [012](decisions/012-image-preview-ocr-security-gate.md) | Image Preview / OCR Security Gate | Allows read-only manifest-backed image preview with MIME/size/path controls; keeps OCR contract-only until explicit future approval. |
 
 ## ADR rules
 

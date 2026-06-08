@@ -33,7 +33,12 @@ def preview_epub_structure(path: Path) -> dict[str, Any]:
     return _preview_dict(parsed)
 
 
-def serialize_parsed_epub(parsed: ParsedEpub) -> dict[str, Any]:
+def serialize_parsed_epub(
+    parsed: ParsedEpub,
+    *,
+    project_name: str | None = None,
+    volume_id: int | None = None,
+) -> dict[str, Any]:
     """Serialize an already-parsed :class:`ParsedEpub` for the preview UI.
 
     Sprint J4 reuses this from the persisted-snapshot path so the EPUB-structure
@@ -41,10 +46,15 @@ def serialize_parsed_epub(parsed: ParsedEpub) -> dict[str, Any]:
     (preview upload) or a stored snapshot row.
     """
 
-    return _preview_dict(parsed)
+    return _preview_dict(parsed, project_name=project_name, volume_id=volume_id)
 
 
-def _preview_dict(parsed: ParsedEpub) -> dict[str, Any]:
+def _preview_dict(
+    parsed: ParsedEpub,
+    *,
+    project_name: str | None = None,
+    volume_id: int | None = None,
+) -> dict[str, Any]:
     severity_counts = _severity_counts(parsed.validation_issues)
     return {
         "source_path": str(parsed.package_path),
@@ -89,7 +99,10 @@ def _preview_dict(parsed: ParsedEpub) -> dict[str, Any]:
             for item in parsed.spine
         ],
         "navigation": [_navigation_dict(item) for item in parsed.navigation],
-        "images": [_image_dict(item) for item in parsed.images],
+        "images": [
+            _image_dict(item, project_name=project_name, volume_id=volume_id)
+            for item in parsed.images
+        ],
         "excerpts": _excerpts(parsed),
         "validation_issues": [_issue_dict(issue) for issue in parsed.validation_issues],
         "validation_by_scope": _validation_by_scope(parsed.validation_issues),
@@ -150,7 +163,22 @@ def _navigation_dict(item: NavigationResource) -> dict[str, Any]:
     }
 
 
-def _image_dict(item: ManifestResource) -> dict[str, Any]:
+def _image_dict(
+    item: ManifestResource,
+    *,
+    project_name: str | None = None,
+    volume_id: int | None = None,
+) -> dict[str, Any]:
+    preview_url = None
+    if (
+        project_name is not None
+        and volume_id is not None
+        and item.manifest_id
+        and item.preview_available
+    ):
+        preview_url = (
+            f"/projects/{project_name}/volumes/{volume_id}/images/{item.manifest_id}/preview"
+        )
     return {
         "manifest_id": item.manifest_id,
         "href": item.href,
@@ -163,6 +191,7 @@ def _image_dict(item: ManifestResource) -> dict[str, Any]:
         "linked_spine_index": item.linked_spine_index,
         "referenced_by": item.referenced_by,
         "preview_available": item.preview_available,
+        "preview_url": preview_url,
     }
 
 

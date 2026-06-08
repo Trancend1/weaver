@@ -9,7 +9,16 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 
 from weaver.api.jobs import ParseResult
 from weaver.api.schemas import (
@@ -44,6 +53,7 @@ from weaver.services.epub_reparse import (
     status_for_volume,
 )
 from weaver.services.epub_structure_preview import preview_epub_structure
+from weaver.services.image_preview import read_image_preview
 from weaver.services.import_source import import_volume
 from weaver.services.project import delete_project, initialize_project, project_name_exists
 from weaver.services.project_discovery import discover_projects, find_project
@@ -554,3 +564,28 @@ def submit_volume_reparse(name: str, volume_id: int, request: Request) -> Repars
     except WeaverError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return ReparseJobResponse(job_id=job.id, volume_id=volume_id)
+
+
+@router.get("/{name}/volumes/{volume_id}/images/{manifest_id}/preview")
+def preview_volume_image(name: str, volume_id: int, manifest_id: str, request: Request) -> Response:
+    """Serve one safe manifest-backed EPUB image preview (ADR 012)."""
+    from weaver.services.project_paths import resolve_database_path
+
+    base, dp = _require_project(request, name)
+    try:
+        result = read_image_preview(
+            resolve_database_path(dp.project_toml, cwd=base),
+            volume_id=volume_id,
+            manifest_id=manifest_id,
+        )
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return Response(
+        content=result.data,
+        media_type=result.media_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "ETag": result.etag,
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
