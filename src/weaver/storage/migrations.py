@@ -308,10 +308,62 @@ def _migrate_to_v6(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_to_v7(connection: sqlite3.Connection) -> None:
+    """EPUB preservation snapshot (schema v7, Sprint J1).
+
+    Six additive tables keyed by ``volume_id`` mirror Phase F's
+    :class:`ParsedEpub`. Each list-shaped concept (manifest / spine / nav /
+    images / validation) lives in its own ``epub_snapshot_*`` table with a
+    ``position`` column so reads come back in original order. Metadata and the
+    preservation context are serialised onto the header row as JSON for fidelity
+    — the contract changes only when ``parser_version`` bumps, at which point
+    the snapshot service marks the row stale.
+
+    No existing data is touched: a fresh table set with no rows. Volume delete
+    (Sprint H3) cleans these tables in dependency order via ``services/volume``.
+    """
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS epub_snapshots (
+          volume_id INTEGER PRIMARY KEY REFERENCES volumes(id),
+          source_hash TEXT NOT NULL,
+          parser_version INTEGER NOT NULL,
+          package_path TEXT NOT NULL,
+          opf_path TEXT,
+          spine_toc TEXT,
+          page_progression_direction TEXT,
+          metadata_json TEXT NOT NULL,
+          preservation_context_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    for table in (
+        "epub_snapshot_manifest",
+        "epub_snapshot_spine",
+        "epub_snapshot_navigation",
+        "epub_snapshot_images",
+        "epub_snapshot_validation",
+    ):
+        connection.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {table} (
+              volume_id INTEGER NOT NULL REFERENCES epub_snapshots(volume_id),
+              position INTEGER NOT NULL,
+              data_json TEXT NOT NULL,
+              PRIMARY KEY (volume_id, position)
+            )
+            """
+        )
+
+
 _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _migrate_to_v2,
     3: _migrate_to_v3,
     4: _migrate_to_v4,
     5: _migrate_to_v5,
     6: _migrate_to_v6,
+    7: _migrate_to_v7,
 }

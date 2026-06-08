@@ -61,7 +61,15 @@ def _remove_zip_member(path: Path, member_name: str) -> None:
 
 
 def _png(width: int, height: int) -> bytes:
-    return b"\x89PNG\r\n\x1a\n" + width.to_bytes(4, "big") + height.to_bytes(4, "big") + b"fake"
+    # Real PNG header so the Sprint J5 image-dim parser sees correct offsets.
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\x0d"
+        + b"IHDR"
+        + width.to_bytes(4, "big")
+        + height.to_bytes(4, "big")
+        + b"fake"
+    )
 
 
 def _replace_zip_member(path: Path, member_name: str, content: bytes) -> None:

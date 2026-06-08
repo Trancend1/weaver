@@ -610,7 +610,17 @@ def test_parse_epub_structure_reports_empty_toc(tmp_path: Path) -> None:
 
 
 def _png(width: int, height: int) -> bytes:
-    return b"\x89PNG\r\n\x1a\n" + width.to_bytes(4, "big") + height.to_bytes(4, "big") + b"fake"
+    # Real PNG header: signature (8B) + IHDR chunk length (4B) + tag (4B) +
+    # width (4B) + height (4B). Phase F's image-dim parser reads from these
+    # standard offsets (Sprint J5 PARSER_VERSION = 2).
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\x0d"
+        + b"IHDR"
+        + width.to_bytes(4, "big")
+        + height.to_bytes(4, "big")
+        + b"fake"
+    )
 
 
 def _write_image_epub(path: Path, *, missing_cover: bool = False) -> None:

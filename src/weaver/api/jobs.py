@@ -48,6 +48,7 @@ from weaver.services.export_book import (
 from weaver.services.job_store import (
     JOB_KIND_BATCH,
     JOB_KIND_EXPORT,
+    JOB_KIND_PARSE,
     JOB_KIND_TRANSLATE,
     append_event,
     db_path_for,
@@ -826,6 +827,122 @@ def _export_result_data(result: ExportResult) -> dict[str, Any]:
     }
 
 
+# --- parse jobs (Sprint J3 — reparse-as-Job, ADR 010-adjacent) -------------
+
+
+@dataclass
+class ParseResult:
+    """Outcome of a successful EPUB reparse."""
+
+    volume_id: int
+    source_hash: str
+    parser_version: int
+    manifest_count: int
+    spine_count: int
+    nav_count: int
+    image_count: int
+    validation_count: int
+
+
+ParseJobRunner = Callable[[ShouldCancel], ParseResult]
+
+
+@dataclass
+class ParseProgress:
+    """Single-unit progress envelope for a parse job (one volume = one unit)."""
+
+    current: int = 0
+    total: int = 1
+
+
+@dataclass
+class ParseJob:
+    """One background EPUB reparse run, its progress, and terminal state.
+
+    Sibling of :class:`TranslationJob` / :class:`BatchJob` / :class:`ExportJob`:
+    same state machine (``running`` → ``done`` | ``failed`` | ``cancelled``),
+    same cancel flag + SSE queue + stream-end sentinel. A reparse is logically
+    one unit of work (one volume), so ``ParseProgress`` carries just current/total.
+    """
+
+    id: str
+    project_name: str
+    volume_id: int
+    runner: ParseJobRunner
+    status: str = "running"
+    result: ParseResult | None = None
+    error: str | None = None
+    progress: ParseProgress = field(default_factory=ParseProgress)
+    queue: queue.Queue[dict[str, Any] | None] = field(default_factory=queue.Queue)
+    storage: JobStorage | None = None
+    _cancel: threading.Event = field(default_factory=threading.Event)
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+    _thread: threading.Thread | None = field(default=None, repr=False)
+
+    def request_cancel(self) -> None:
+        self._cancel.set()
+
+    def should_cancel(self) -> bool:
+        return self._cancel.is_set()
+
+    def snapshot(self) -> ParseProgress:
+        with self._lock:
+            return ParseProgress(current=self.progress.current, total=self.progress.total)
+
+    def run(self) -> None:
+        try:
+            self.result = self.runner(self.should_cancel)
+        except Exception as exc:  # noqa: BLE001 — web boundary; surfaced, not swallowed
+            self.status = "failed"
+            self.error = str(exc)
+            data = {"message": str(exc)}
+            if self.storage is not None:
+                self.storage.finish(status="failed", result=None, error_summary=str(exc))
+            event_id = self.storage.append_event(event="error", data=data) if self.storage else None
+            envelope: dict[str, Any] = {"event": "error", "data": data}
+            if event_id is not None:
+                envelope["id"] = event_id
+            self.queue.put(envelope)
+        else:
+            result = self.result
+            assert result is not None
+            self.status = "cancelled" if self.should_cancel() else "done"
+            with self._lock:
+                self.progress.current = 1
+            data = {
+                "volume_id": result.volume_id,
+                "source_hash": result.source_hash,
+                "parser_version": result.parser_version,
+                "manifest_count": result.manifest_count,
+                "spine_count": result.spine_count,
+                "nav_count": result.nav_count,
+                "image_count": result.image_count,
+                "validation_count": result.validation_count,
+                "cancelled": self.status == "cancelled",
+            }
+            if self.storage is not None:
+                self.storage.flush_progress(
+                    done_units=1,
+                    failed_units=0,
+                    total_units=1,
+                    force=True,
+                )
+                self.storage.finish(status=self.status, result=data, error_summary=None)
+            event_id = (
+                self.storage.append_event(event=self.status, data=data) if self.storage else None
+            )
+            envelope = {"event": self.status, "data": data}
+            if event_id is not None:
+                envelope["id"] = event_id
+            self.queue.put(envelope)
+        finally:
+            self.queue.put(_STREAM_END)
+
+    def wait(self, timeout: float | None = None) -> None:
+        if self._thread is not None:
+            self._thread.join(timeout)
+
+
 class JobRegistry:
     """Thread-safe registry of background translate jobs, keyed by id.
 
@@ -845,6 +962,7 @@ class JobRegistry:
         self._jobs: dict[str, TranslationJob] = {}
         self._batch_jobs: dict[str, BatchJob] = {}
         self._export_jobs: dict[str, ExportJob] = {}
+        self._parse_jobs: dict[str, ParseJob] = {}
         self._base_dir = base_dir
 
     @property
@@ -1054,6 +1172,62 @@ class JobRegistry:
 
         with self._lock:
             return self._export_jobs.get(job_id)
+
+    def submit_parse(
+        self,
+        *,
+        project_name: str,
+        volume_id: int,
+        runner: ParseJobRunner,
+    ) -> ParseJob:
+        """Register an EPUB-reparse job and start its worker thread (Sprint J3).
+
+        Args:
+            project_name: Owning project (``.weaver/<name>`` directory name).
+            volume_id: Volume row id whose source EPUB will be reparsed into
+                the preservation snapshot.
+            runner: Closure that performs the parse and returns its
+                :class:`ParseResult`.
+
+        Returns:
+            The created :class:`ParseJob` (already running).
+        """
+
+        job_id = uuid.uuid4().hex
+        storage = self._storage_for(project_name, job_id)
+        storage.insert(
+            kind=JOB_KIND_PARSE,
+            project_name=project_name,
+            scope="volume",
+            scope_id=str(volume_id),
+            chapter_id=None,
+            mode=None,
+            target=None,
+            total_units=1,
+        )
+        job = ParseJob(
+            id=job_id,
+            project_name=project_name,
+            volume_id=volume_id,
+            runner=runner,
+            storage=storage,
+        )
+        thread = threading.Thread(
+            target=job.run,
+            name=f"weaver-parse-{job.id}",
+            daemon=True,
+        )
+        job._thread = thread
+        with self._lock:
+            self._parse_jobs[job.id] = job
+        thread.start()
+        return job
+
+    def get_parse(self, job_id: str) -> ParseJob | None:
+        """Return the parse job with ``job_id``, or None when unknown."""
+
+        with self._lock:
+            return self._parse_jobs.get(job_id)
 
 
 def format_sse(event: dict[str, Any]) -> str:
