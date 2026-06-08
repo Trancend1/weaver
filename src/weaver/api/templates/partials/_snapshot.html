@@ -1,0 +1,26 @@
+{# Sprint J4 — volume EPUB snapshot status card (HTMX swap target). #}
+<div class="vol-snapshot snapshot-card snapshot-card--{{ status.state }}"
+     id="snapshot-vol-{{ volume_id }}">
+  <span class="badge snapshot-state snapshot-state--{{ status.state }}"
+        title="EPUB preservation snapshot — Sprint J">{{ status.state }}</span>
+  {% if status.state == "reparsing" and active_job_id %}
+    <span class="meta">Reparsing in
+      <a href="/ui/projects/{{ project_name }}/jobs/{{ active_job_id }}/detail">job {{ active_job_id[:8] }}</a></span>
+    <button type="button" class="btn btn--quiet"
+            hx-get="/ui/projects/{{ project_name }}/volumes/{{ volume_id }}/snapshot"
+            hx-target="#snapshot-vol-{{ volume_id }}" hx-swap="outerHTML"
+            hx-trigger="every 1s">Refresh</button>
+  {% else %}
+    {% if status.updated_at %}<span class="meta">updated {{ status.updated_at }}</span>{% endif %}
+    {% if status.parser_version is not none %}<span class="meta">parser v{{ status.parser_version }}</span>{% endif %}
+    <button type="button" class="btn btn--quiet"
+            hx-get="/ui/projects/{{ project_name }}/volumes/{{ volume_id }}/snapshot"
+            hx-target="#snapshot-vol-{{ volume_id }}" hx-swap="outerHTML">Inspect EPUB</button>
+    <button type="button" class="btn btn--quiet"
+            hx-post="/ui/projects/{{ project_name }}/volumes/{{ volume_id }}/reparse"
+            hx-target="#snapshot-vol-{{ volume_id }}" hx-swap="outerHTML"
+            hx-confirm="Reparse the source EPUB? Refreshes the preservation snapshot.">Reparse EPUB</button>
+    <a class="btn btn--quiet"
+       href="/ui/projects/{{ project_name }}/volumes/{{ volume_id }}/structure">View structure</a>
+  {% endif %}
+</div>

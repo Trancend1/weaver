@@ -10,7 +10,7 @@ from pathlib import Path
 from weaver.errors import DatabaseError
 from weaver.storage.migrations import apply_migrations
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 

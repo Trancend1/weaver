@@ -179,3 +179,56 @@ CREATE TABLE IF NOT EXISTS job_progress_snapshots (
   total_units INTEGER NOT NULL,
   PRIMARY KEY (job_id, snapshot_at)
 );
+
+-- Sprint J (ADR 010-adjacent) — preservation snapshot of Phase F ParsedEpub.
+-- Six additive tables keyed by volume_id. The snapshot is invalidated when
+-- either the source EPUB hash or the parser version changes; readers walk
+-- these tables instead of re-parsing the archive.
+CREATE TABLE IF NOT EXISTS epub_snapshots (
+  volume_id INTEGER PRIMARY KEY REFERENCES volumes(id),
+  source_hash TEXT NOT NULL,
+  parser_version INTEGER NOT NULL,
+  package_path TEXT NOT NULL,
+  opf_path TEXT,
+  spine_toc TEXT,
+  page_progression_direction TEXT,
+  metadata_json TEXT NOT NULL,
+  preservation_context_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS epub_snapshot_manifest (
+  volume_id INTEGER NOT NULL REFERENCES epub_snapshots(volume_id),
+  position INTEGER NOT NULL,
+  data_json TEXT NOT NULL,
+  PRIMARY KEY (volume_id, position)
+);
+
+CREATE TABLE IF NOT EXISTS epub_snapshot_spine (
+  volume_id INTEGER NOT NULL REFERENCES epub_snapshots(volume_id),
+  position INTEGER NOT NULL,
+  data_json TEXT NOT NULL,
+  PRIMARY KEY (volume_id, position)
+);
+
+CREATE TABLE IF NOT EXISTS epub_snapshot_navigation (
+  volume_id INTEGER NOT NULL REFERENCES epub_snapshots(volume_id),
+  position INTEGER NOT NULL,
+  data_json TEXT NOT NULL,
+  PRIMARY KEY (volume_id, position)
+);
+
+CREATE TABLE IF NOT EXISTS epub_snapshot_images (
+  volume_id INTEGER NOT NULL REFERENCES epub_snapshots(volume_id),
+  position INTEGER NOT NULL,
+  data_json TEXT NOT NULL,
+  PRIMARY KEY (volume_id, position)
+);
+
+CREATE TABLE IF NOT EXISTS epub_snapshot_validation (
+  volume_id INTEGER NOT NULL REFERENCES epub_snapshots(volume_id),
+  position INTEGER NOT NULL,
+  data_json TEXT NOT NULL,
+  PRIMARY KEY (volume_id, position)
+);

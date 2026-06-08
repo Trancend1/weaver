@@ -33,6 +33,17 @@ def preview_epub_structure(path: Path) -> dict[str, Any]:
     return _preview_dict(parsed)
 
 
+def serialize_parsed_epub(parsed: ParsedEpub) -> dict[str, Any]:
+    """Serialize an already-parsed :class:`ParsedEpub` for the preview UI.
+
+    Sprint J4 reuses this from the persisted-snapshot path so the EPUB-structure
+    page renders the same shape whether the source was an on-demand parse
+    (preview upload) or a stored snapshot row.
+    """
+
+    return _preview_dict(parsed)
+
+
 def _preview_dict(parsed: ParsedEpub) -> dict[str, Any]:
     severity_counts = _severity_counts(parsed.validation_issues)
     return {

@@ -167,6 +167,17 @@ def delete_volume(connection: sqlite3.Connection, volume_id: int) -> None:
             f"DELETE FROM chapters WHERE id IN ({placeholders})",
             tuple(chapter_ids),
         )
+    # Sprint J2 — preservation snapshot rows (Phase F ParsedEpub mirror) belong
+    # to the volume, never to project-scoped data, so they go with the volume.
+    for snapshot_table in (
+        "epub_snapshot_validation",
+        "epub_snapshot_images",
+        "epub_snapshot_navigation",
+        "epub_snapshot_spine",
+        "epub_snapshot_manifest",
+        "epub_snapshots",
+    ):
+        connection.execute(f"DELETE FROM {snapshot_table} WHERE volume_id = ?", (volume_id,))
     connection.execute("DELETE FROM volumes WHERE id = ?", (volume_id,))
 
 

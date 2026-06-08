@@ -282,6 +282,95 @@ def inspect_project_command(
 
 
 @app.command(
+    "epub-inspect",
+    epilog=(
+        "Examples:\n"
+        "  weaver epub-inspect .weaver/myproj/project.toml --volume 1\n"
+        "  weaver epub-inspect .weaver/myproj/project.toml --reparse\n"
+        "  weaver epub-inspect .weaver/myproj/project.toml --json"
+    ),
+)
+def epub_inspect_command(
+    project_toml: Path,
+    volume_id: int = typer.Option(
+        1,
+        "--volume",
+        "-V",
+        help="Volume id within the project. Defaults to 1 (single-volume projects).",
+    ),
+    reparse: bool = typer.Option(
+        False,
+        "--reparse",
+        help="Run a synchronous reparse before reporting, refreshing the snapshot.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help="Emit the full snapshot as JSON instead of the human-readable summary.",
+    ),
+) -> None:
+    """Inspect a volume's persisted EPUB preservation snapshot (Sprint J6)."""
+
+    import json as _json
+    from contextlib import closing
+
+    from weaver.services.epub_reparse import reparse_volume, status_for_volume
+    from weaver.services.epub_snapshot import read_snapshot
+    from weaver.services.epub_structure_preview import serialize_parsed_epub
+    from weaver.services.project_paths import resolve_database_path
+
+    cwd = Path.cwd()
+    try:
+        if reparse:
+            reparse_volume(project_toml, volume_id, cwd=cwd)
+        status = status_for_volume(project_toml, volume_id, cwd=cwd)
+        db_path = resolve_database_path(project_toml, cwd=cwd)
+        parsed = read_snapshot(db_path, volume_id)
+    except WeaverError as exc:
+        _exit_with_error(exc)
+
+    _ = closing  # silence unused
+    if json_output:
+        payload = serialize_parsed_epub(parsed) if parsed is not None else {}
+        payload["snapshot_status"] = {
+            "state": status.state,
+            "source_hash": status.source_hash,
+            "parser_version": status.parser_version,
+            "created_at": status.created_at,
+            "updated_at": status.updated_at,
+        }
+        typer.echo(_json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+
+    if parsed is None:
+        typer.echo(f"No snapshot for volume {volume_id}. Rerun with --reparse to build one.")
+        raise typer.Exit(code=0)
+
+    summary = Table(title=f"EPUB snapshot: volume {volume_id} ({status.state})")
+    summary.add_column("Field")
+    summary.add_column("Value")
+    summary.add_row("Title", parsed.metadata.title or "—")
+    summary.add_row("Creator", parsed.metadata.creator or "—")
+    summary.add_row("Language", parsed.metadata.language or "—")
+    summary.add_row("Identifier", parsed.metadata.identifier or "—")
+    summary.add_row("Manifest items", str(len(parsed.manifest)))
+    summary.add_row("Spine items", str(len(parsed.spine)))
+    summary.add_row("Navigation entries", str(len(parsed.navigation)))
+    summary.add_row("Images", str(len(parsed.images)))
+    summary.add_row("Validation issues", str(len(parsed.validation_issues)))
+    summary.add_row("Parser version", str(status.parser_version) if status.parser_version else "—")
+    summary.add_row("Source hash", (status.source_hash or "—")[:16])
+    summary.add_row("Updated", status.updated_at or "—")
+    console.print(summary)
+    if status.state == "stale":
+        typer.echo(
+            "Snapshot is STALE — source EPUB or parser changed since the last reparse.",
+            err=True,
+        )
+
+
+@app.command(
     "delete",
     epilog=(
         "Examples:\n"

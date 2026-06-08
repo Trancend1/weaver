@@ -46,6 +46,11 @@ from weaver.readers.html_blocks import (
 DOCUMENT_MEDIA_TYPES = {"application/xhtml+xml", "text/html"}
 IMAGE_MEDIA_TYPES = {"image/jpeg", "image/png", "image/webp", "image/svg+xml"}
 
+# Sprint J5 (ADR 010-adjacent): increment whenever ``parse_epub_structure`` or
+# any helper it owns changes the shape of :class:`ParsedEpub`. The Sprint J
+# preservation snapshot table keys on this value to invalidate stale rows.
+PARSER_VERSION = 2
+
 
 def parse_epub_structure(path: Path) -> ParsedEpub:
     """Parse EPUB package metadata and structure without changing import behavior.
@@ -657,16 +662,186 @@ def _iter_image_hrefs(root: ElementTree.Element) -> Iterable[str]:
 
 
 def _image_dimensions(path: Path, item: ManifestResource) -> tuple[int | None, int | None]:
-    if item.media_type != "image/png" or not item.exists_in_archive:
+    """Decode width/height from the first few KiB of the image payload.
+
+    Dependency-free; no PIL, no Pillow, no native libs. Supports PNG, JPEG,
+    WebP (VP8/VP8L/VP8X), and SVG (viewBox-first, width/height fallback).
+    Other media types return ``(None, None)``.
+    """
+    if not item.is_image or not item.exists_in_archive:
         return None, None
     try:
         with ZipFile(path, "r") as archive:
-            data = archive.read(item.resolved_path)[:24]
+            # 64 KiB is enough for every container header we read; SVG XML may
+            # carry a long preamble (DOCTYPE, comments) before the <svg> tag.
+            data = archive.read(item.resolved_path)[:65536]
     except (OSError, KeyError):
         return None, None
-    if len(data) >= 16 and data.startswith(b"\x89PNG\r\n\x1a\n"):
-        return int.from_bytes(data[8:12], "big"), int.from_bytes(data[12:16], "big")
+    if not data:
+        return None, None
+    media = item.media_type
+    if media == "image/png":
+        return _decode_png_dimensions(data)
+    if media in {"image/jpeg", "image/jpg", "image/pjpeg"}:
+        return _decode_jpeg_dimensions(data)
+    if media == "image/webp":
+        return _decode_webp_dimensions(data)
+    if media in {"image/svg+xml", "image/svg"}:
+        return _decode_svg_dimensions(data)
     return None, None
+
+
+def _decode_png_dimensions(data: bytes) -> tuple[int | None, int | None]:
+    if len(data) >= 24 and data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+    return None, None
+
+
+def _decode_jpeg_dimensions(data: bytes) -> tuple[int | None, int | None]:
+    # JPEG SOI is 0xFFD8; SOFn markers (0xFFC0..0xFFCF, except DHT/DAC/SOS) carry
+    # height (2B) + width (2B) at offset 5 inside the segment.
+    if len(data) < 4 or data[0] != 0xFF or data[1] != 0xD8:
+        return None, None
+    pos = 2
+    n = len(data)
+    sof_markers = {
+        0xC0,
+        0xC1,
+        0xC2,
+        0xC3,
+        0xC5,
+        0xC6,
+        0xC7,
+        0xC9,
+        0xCA,
+        0xCB,
+        0xCD,
+        0xCE,
+        0xCF,
+    }
+    while pos + 9 < n:
+        if data[pos] != 0xFF:
+            return None, None
+        # Skip fill bytes (0xFF padding) between segments.
+        while pos < n and data[pos] == 0xFF:
+            pos += 1
+        if pos >= n:
+            return None, None
+        marker = data[pos]
+        pos += 1
+        # Marker has no length payload — bail.
+        if marker in {0xD8, 0xD9}:
+            return None, None
+        if pos + 1 >= n:
+            return None, None
+        segment_length = int.from_bytes(data[pos : pos + 2], "big")
+        if segment_length < 2:
+            return None, None
+        if marker in sof_markers:
+            if pos + 7 >= n:
+                return None, None
+            height = int.from_bytes(data[pos + 3 : pos + 5], "big")
+            width = int.from_bytes(data[pos + 5 : pos + 7], "big")
+            return width or None, height or None
+        pos += segment_length
+    return None, None
+
+
+def _decode_webp_dimensions(data: bytes) -> tuple[int | None, int | None]:
+    # RIFF container: "RIFF" + 4B size + "WEBP" + chunk header.
+    if len(data) < 20 or not data.startswith(b"RIFF") or data[8:12] != b"WEBP":
+        return None, None
+    chunk = data[12:16]
+    payload = data[20:]
+    if chunk == b"VP8 ":
+        # Lossy: 0x9D012A signature then width/height as 14-bit LE values.
+        if len(payload) >= 10 and payload[3:6] == b"\x9d\x01\x2a":
+            width = int.from_bytes(payload[6:8], "little") & 0x3FFF
+            height = int.from_bytes(payload[8:10], "little") & 0x3FFF
+            return width or None, height or None
+        return None, None
+    if chunk == b"VP8L":
+        # Lossless: 0x2F signature, then 14-bit width-1 and 14-bit height-1
+        # packed across 4 LE bytes.
+        if len(payload) >= 5 and payload[0] == 0x2F:
+            b0, b1, b2, b3 = payload[1], payload[2], payload[3], payload[4]
+            width = ((b1 & 0x3F) << 8 | b0) + 1
+            height = (((b3 & 0x0F) << 10) | (b2 << 2) | ((b1 & 0xC0) >> 6)) + 1
+            return width or None, height or None
+        return None, None
+    # Extended: width and height are 24-bit LE values stored as N-1.
+    if chunk == b"VP8X" and len(payload) >= 10:
+        width = int.from_bytes(payload[4:7], "little") + 1
+        height = int.from_bytes(payload[7:10], "little") + 1
+        return width or None, height or None
+    return None, None
+
+
+def _decode_svg_dimensions(data: bytes) -> tuple[int | None, int | None]:
+    # SVGs are XML; parse the first <svg ...> tag's viewBox + width/height.
+    try:
+        text = data.decode("utf-8", errors="replace")
+    except UnicodeDecodeError:
+        return None, None
+    start = text.find("<svg")
+    if start == -1:
+        return None, None
+    end = text.find(">", start)
+    if end == -1:
+        return None, None
+    tag = text[start : end + 1]
+    width = _svg_dimension(tag, "width")
+    height = _svg_dimension(tag, "height")
+    if width is None or height is None:
+        view_box = _svg_view_box(tag)
+        if view_box is not None:
+            _, _, vb_w, vb_h = view_box
+            if width is None:
+                width = vb_w
+            if height is None:
+                height = vb_h
+    return width, height
+
+
+def _svg_dimension(tag: str, name: str) -> int | None:
+    import re
+
+    match = re.search(rf"\b{name}\s*=\s*[\"']([^\"']+)[\"']", tag)
+    if match is None:
+        return None
+    raw = match.group(1).strip()
+    if not raw or raw.endswith("%"):
+        return None
+    digits = ""
+    for ch in raw:
+        if ch.isdigit() or ch == ".":
+            digits += ch
+        else:
+            break
+    if not digits:
+        return None
+    try:
+        return int(round(float(digits))) or None
+    except ValueError:
+        return None
+
+
+def _svg_view_box(tag: str) -> tuple[int, int, int, int] | None:
+    import re
+
+    match = re.search(r"viewBox\s*=\s*[\"']([^\"']+)[\"']", tag)
+    if match is None:
+        return None
+    parts = match.group(1).replace(",", " ").split()
+    if len(parts) != 4:
+        return None
+    try:
+        values = [int(round(float(part))) for part in parts]
+    except ValueError:
+        return None
+    if values[2] <= 0 or values[3] <= 0:
+        return None
+    return values[0], values[1], values[2], values[3]
 
 
 def _spine_ids_from_book(book: EpubBook) -> set[str]:

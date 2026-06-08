@@ -31,6 +31,7 @@ from weaver.storage.db import connect_database, transaction
 JOB_KIND_TRANSLATE = "translate"
 JOB_KIND_BATCH = "batch"
 JOB_KIND_EXPORT = "export"
+JOB_KIND_PARSE = "parse"
 
 VALID_STATUSES: tuple[str, ...] = (
     "queued",

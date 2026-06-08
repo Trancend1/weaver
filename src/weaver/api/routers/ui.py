@@ -324,6 +324,144 @@ def delete_volume_submit(name: str, volume_id: int, request: Request) -> HTMLRes
     return templates.TemplateResponse(request, "partials/_tree.html", {"tree": tree})
 
 
+# --- snapshot (Sprint J4 — EPUB preservation snapshot) ---------------------
+
+
+@router.get("/ui/projects/{name}/volumes/{volume_id}/snapshot", response_class=HTMLResponse)
+def ui_volume_snapshot_status(name: str, volume_id: int, request: Request) -> HTMLResponse:
+    """Inspect snapshot freshness for one volume; HTMX swap-in replacement."""
+    from weaver.errors import VolumeNotFoundError as _VNF
+    from weaver.services.epub_reparse import status_for_volume
+
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    if dp is None:
+        raise HTTPException(status_code=404, detail=f"No project named {name!r}.")
+    if dp.error:
+        return _import_error(request, dp.error)
+    try:
+        status = status_for_volume(dp.project_toml, volume_id, cwd=base)
+    except _VNF as exc:
+        return _import_error(request, str(exc))
+    except WeaverError as exc:
+        return _import_error(request, str(exc))
+    return templates.TemplateResponse(
+        request,
+        "partials/_snapshot.html",
+        {
+            "project_name": name,
+            "volume_id": volume_id,
+            "status": status,
+            "active_job_id": None,
+        },
+    )
+
+
+@router.post("/ui/projects/{name}/volumes/{volume_id}/reparse", response_class=HTMLResponse)
+def ui_volume_reparse(name: str, volume_id: int, request: Request) -> HTMLResponse:
+    """Submit a Sprint I parse job and swap a "running" snapshot card in place."""
+    from weaver.services.epub_reparse import reparse_volume
+
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    if dp is None:
+        raise HTTPException(status_code=404, detail=f"No project named {name!r}.")
+    if dp.error:
+        return _import_error(request, dp.error)
+
+    jobs = _jobs(request)
+    project_toml = dp.project_toml
+
+    def runner(should_cancel):  # noqa: ARG001 — single-unit parse
+        from weaver.api.jobs import ParseResult
+        from weaver.services.epub_snapshot import read_snapshot
+        from weaver.services.project_paths import resolve_database_path
+
+        status = reparse_volume(project_toml, volume_id, cwd=base)
+        db_path = resolve_database_path(project_toml, cwd=base)
+        parsed = read_snapshot(db_path, volume_id)
+        return ParseResult(
+            volume_id=volume_id,
+            source_hash=status.source_hash or "",
+            parser_version=status.parser_version or 0,
+            manifest_count=len(parsed.manifest) if parsed else 0,
+            spine_count=len(parsed.spine) if parsed else 0,
+            nav_count=len(parsed.navigation) if parsed else 0,
+            image_count=len(parsed.images) if parsed else 0,
+            validation_count=len(parsed.validation_issues) if parsed else 0,
+        )
+
+    try:
+        job = jobs.submit_parse(project_name=name, volume_id=volume_id, runner=runner)
+    except WeaverError as exc:
+        return _import_error(request, str(exc))
+    from weaver.services.epub_snapshot import SnapshotStatus
+
+    return templates.TemplateResponse(
+        request,
+        "partials/_snapshot.html",
+        {
+            "project_name": name,
+            "volume_id": volume_id,
+            "status": SnapshotStatus(
+                volume_id=volume_id,
+                state="reparsing",
+                source_hash=None,
+                parser_version=None,
+                created_at=None,
+                updated_at=None,
+            ),
+            "active_job_id": job.id,
+        },
+    )
+
+
+@router.get("/ui/projects/{name}/volumes/{volume_id}/structure", response_class=HTMLResponse)
+def ui_volume_structure(name: str, volume_id: int, request: Request) -> HTMLResponse:
+    """Render the persisted snapshot for a volume as a Phase F preview page.
+
+    Reuses the existing Phase F ``epub_preview.html`` shell so the structure
+    surface is one page, not two. Falls back to "missing snapshot" when the
+    volume has never been parsed.
+    """
+    from weaver.services.epub_reparse import status_for_volume
+    from weaver.services.epub_snapshot import read_snapshot
+    from weaver.services.epub_structure_preview import serialize_parsed_epub
+    from weaver.services.project_paths import resolve_database_path
+
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    if dp is None:
+        raise HTTPException(status_code=404, detail=f"No project named {name!r}.")
+    if dp.error:
+        return _import_error(request, dp.error)
+    db_path = resolve_database_path(dp.project_toml, cwd=base)
+    parsed = read_snapshot(db_path, volume_id)
+    try:
+        status = status_for_volume(dp.project_toml, volume_id, cwd=base)
+    except WeaverError as exc:
+        return _import_error(request, str(exc))
+    preview: dict[str, Any] | None
+    if parsed is None:
+        preview = None
+    else:
+        try:
+            preview = serialize_parsed_epub(parsed)
+        except WeaverError as exc:
+            return _import_error(request, str(exc))
+    return templates.TemplateResponse(
+        request,
+        "epub_preview.html",
+        {
+            **project_layout(request, name, active_nav="project"),
+            "source_path": f"volume:{volume_id}",
+            "preview": preview,
+            "snapshot_status": status,
+            "error": None if parsed is not None else "Snapshot missing — click Reparse EPUB.",
+        },
+    )
+
+
 # --- create / import (Stage 11B-1) ------------------------------------------
 
 
