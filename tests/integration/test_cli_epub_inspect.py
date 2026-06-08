@@ -29,9 +29,14 @@ def initialised_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
 def test_epub_inspect_help() -> None:
     result = runner.invoke(app, ["epub-inspect", "--help"])
     assert result.exit_code == 0
-    assert "epub-inspect" in result.output.lower() or "snapshot" in result.output.lower()
-    assert "--reparse" in result.output
-    assert "--json" in result.output
+    # Typer/Rich wraps the help table at terminal width, so the literal
+    # ``--reparse`` / ``--json`` tokens can land split across lines on a
+    # narrow CI tty. Match the dash-less option names so the assertion is
+    # immune to wrapping.
+    output = result.output.lower()
+    assert "epub-inspect" in output or "snapshot" in output
+    assert "reparse" in output
+    assert "json" in output
 
 
 def test_epub_inspect_reports_missing_when_never_reparsed(
