@@ -2,14 +2,20 @@
 
 The FastAPI cockpit is the only web surface (ADR 004; Flask removed in Sprint
 13B). This module wires routers and consumes shared services only.
+
+Sprint G2: ``base_dir`` resolves from (in priority order) the explicit factory
+arg, ``$WEAVER_BOOKS_DIR``, then ``Path.cwd()``. The app-data root resolves via
+``services.app_paths.resolve_app_paths`` and is attached to ``app.state``.
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from weaver import __version__
 from weaver.api.jobs import JobRegistry
@@ -21,6 +27,7 @@ from weaver.api.routers.glossary import router as glossary_router
 from weaver.api.routers.glossary_review import router as glossary_review_router
 from weaver.api.routers.projects import router as projects_router
 from weaver.api.routers.qa import router as qa_router
+from weaver.api.routers.runtime import router as runtime_router
 from weaver.api.routers.system import router as system_router
 from weaver.api.routers.translate import router as translate_router
 from weaver.api.routers.translation_memory import router as translation_memory_router
@@ -29,26 +36,91 @@ from weaver.api.routers.ui_admin import router as ui_admin_router
 from weaver.api.routers.ui_qa import router as ui_qa_router
 from weaver.api.templating import mount_static
 from weaver.core.secret_store import apply_secrets_to_env
+from weaver.services.app_paths import BOOKS_DIR_ENV, resolve_app_paths
+from weaver.services.logging_setup import install_logging, log_runtime_event
+from weaver.services.runtime_env import (
+    current_env,
+    docs_enabled,
+    session_token,
+)
+
+SESSION_HEADER = "X-Weaver-Session"
+_PUBLIC_PATHS = frozenset({"/healthz", "/health", "/version", "/static"})
 
 
 def create_api_app(base_dir: Path | None = None) -> FastAPI:
     """Build and configure the FastAPI cockpit application.
 
     Args:
-        base_dir: Root directory to scan for projects. Defaults to cwd.
+        base_dir: Root directory to scan for projects. When ``None``, falls
+            back to ``$WEAVER_BOOKS_DIR`` then ``Path.cwd()``. The env-var
+            fallback lets ``weaver serve`` pass the books-dir through Uvicorn's
+            ``factory=True`` invocation without ``os.chdir`` side effects.
     """
     # Load API keys from the local secret store into the environment (shell env
     # wins) so configured providers can authenticate. Keys are never logged.
     apply_secrets_to_env()
 
+    env_mode = current_env()
+    show_docs = docs_enabled()
+    docs_url = "/docs" if show_docs else None
+    redoc_url = "/redoc" if show_docs else None
+
     app = FastAPI(
         title="Weaver Cockpit API",
         summary="Local API for the Weaver JP->EN light-novel translation cockpit.",
         version=__version__,
+        docs_url=docs_url,
+        redoc_url=redoc_url,
+        openapi_url="/openapi.json" if show_docs else None,
     )
-    app.state.base_dir = (base_dir or Path.cwd()).resolve()
+    if base_dir is None:
+        env_books_dir = os.environ.get(BOOKS_DIR_ENV, "").strip()
+        base_dir = Path(env_books_dir) if env_books_dir else Path.cwd()
+    app.state.base_dir = base_dir.resolve()
+    app.state.app_paths = resolve_app_paths()
     app.state.jobs = JobRegistry()
+    app.state.env_mode = env_mode
+
+    # Test mode skips the file-handler install so the test suite does not
+    # write to the user's real app-data directory. Set WEAVER_ENV=test to
+    # opt out, or WEAVER_DATA_DIR to redirect.
+    if env_mode != "test":
+        install_logging(app.state.app_paths)
+        log_runtime_event(
+            "runtime.start",
+            env=env_mode,
+            base_dir=str(app.state.base_dir),
+            app_data_dir=str(app.state.app_paths.root),
+            version=__version__,
+        )
+
+    if env_mode == "desktop":
+        # Same-origin only. The shell webview shares scheme+host+port with the
+        # sidecar, so cross-origin requests are by definition off-platform.
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[],
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=[SESSION_HEADER, "Content-Type", "HX-Request", "HX-Target"],
+        )
+
+    expected_token = session_token()
+    if expected_token is not None:
+
+        @app.middleware("http")
+        async def _enforce_session_token(request: Request, call_next):  # type: ignore[no-untyped-def]
+            path = request.url.path
+            if any(path == p or path.startswith(p + "/") for p in _PUBLIC_PATHS):
+                return await call_next(request)
+            received = request.headers.get(SESSION_HEADER)
+            if received != expected_token:
+                return JSONResponse(status_code=401, content={"detail": "Invalid session token."})
+            return await call_next(request)
+
     app.include_router(system_router)
+    app.include_router(runtime_router)
     app.include_router(projects_router)
     app.include_router(translate_router)
     app.include_router(batch_router)

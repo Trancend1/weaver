@@ -23,11 +23,39 @@ class HealthResponse(BaseModel):
     status: str
 
 
+class HealthZResponse(BaseModel):
+    """Sidecar-contract liveness payload (Sprint G3).
+
+    Distinct from ``/health`` so the existing CLI/soak contract (status="ok")
+    stays bit-identical while ``/healthz`` carries the sidecar timestamp the
+    shell needs for boot-poll deadlines.
+    """
+
+    ok: bool
+    ts: str
+
+
 class VersionResponse(BaseModel):
     """Application identity and version payload."""
 
     name: str
     version: str
+
+
+class RuntimeStatusResponse(BaseModel):
+    """Runtime introspection payload (Sprint G3).
+
+    Used by the Tauri sidecar's post-handshake status check and by ``weaver
+    doctor`` to confirm where the running cockpit thinks it is. Reports paths
+    only — never secrets, never tokens, never API keys.
+    """
+
+    env: str
+    host: str | None
+    port: int | None
+    app_data_dir: str
+    logs_dir: str
+    books_dir: str
 
 
 # ---------------------------------------------------------------------------
