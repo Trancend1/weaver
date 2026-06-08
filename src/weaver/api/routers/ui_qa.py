@@ -57,7 +57,7 @@ def novel_qa_page(
         report,
         severity,
         category,
-        "Novel",
+        "Project",
         f"/ui/projects/{name}/qa",
         layout="project",
     )

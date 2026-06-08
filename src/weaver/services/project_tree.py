@@ -1,7 +1,9 @@
-"""Read-only Novel -> Volume -> Chapter tree for the cockpit project page.
+"""Read-only Project -> Volume -> Chapter tree for the cockpit project page.
 
 Builds a display model from the project database: each volume with its chapters
 and per-chapter segment/translation counts. Read-only; never mutates state.
+Volume lifecycle status is derived live (Sprint H2) — see
+``services/volume_lifecycle.py``.
 """
 
 from __future__ import annotations
@@ -11,8 +13,10 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
+from weaver.api.jobs import JobRegistry
 from weaver.core.config import load_project_config
 from weaver.services.project_paths import resolve_database_path
+from weaver.services.volume_lifecycle import VolumeStatus, derive_volume_status
 from weaver.storage.db import connect_readonly_database
 from weaver.storage.volumes import VolumeRecord, list_volumes
 
@@ -44,22 +48,32 @@ class VolumeView:
     chapter_count: int
     segment_count: int
     chapters: list[ChapterView]
+    status: VolumeStatus
+    status_label: str
 
 
 @dataclass(frozen=True)
 class NovelTree:
-    """A novel's volumes in reading order."""
+    """A project's volumes in reading order."""
 
     project_name: str
     volumes: list[VolumeView]
 
 
-def project_tree(project_toml: Path, *, cwd: Path | None = None) -> NovelTree:
-    """Build the Novel -> Volume -> Chapter tree for one project.
+def project_tree(
+    project_toml: Path,
+    *,
+    cwd: Path | None = None,
+    jobs: JobRegistry | None = None,
+) -> NovelTree:
+    """Build the Project -> Volume -> Chapter tree for one project.
 
     Args:
         project_toml: Path to the project's ``project.toml``.
         cwd: Working directory used to resolve project-relative paths.
+        jobs: Optional in-memory JobRegistry. When provided, volumes whose
+            chapters have a running translate job are reported with the
+            ``translating`` status overlay (Sprint H2).
 
     Returns:
         A NovelTree with each volume's chapters and counts.
@@ -72,12 +86,19 @@ def project_tree(project_toml: Path, *, cwd: Path | None = None) -> NovelTree:
     with closing(connect_readonly_database(db_path)) as connection:
         project_id = _single_project_id(connection)
         volumes = [
-            _volume_view(connection, volume) for volume in list_volumes(connection, project_id)
+            _volume_view(connection, volume, project_name=project_name, jobs=jobs)
+            for volume in list_volumes(connection, project_id)
         ]
     return NovelTree(project_name=project_name, volumes=volumes)
 
 
-def _volume_view(connection: sqlite3.Connection, volume: VolumeRecord) -> VolumeView:
+def _volume_view(
+    connection: sqlite3.Connection,
+    volume: VolumeRecord,
+    *,
+    project_name: str,
+    jobs: JobRegistry | None,
+) -> VolumeView:
     rows = connection.execute(
         """
         SELECT c.id AS id,
@@ -103,14 +124,25 @@ def _volume_view(connection: sqlite3.Connection, volume: VolumeRecord) -> Volume
         )
         for row in rows
     ]
+    segment_count = sum(chapter.segment_count for chapter in chapters)
+    done_count = sum(chapter.done_count for chapter in chapters)
+    status_view = derive_volume_status(
+        segment_count=segment_count,
+        done_count=done_count,
+        chapter_ids=[chapter.id for chapter in chapters],
+        project_name=project_name,
+        jobs=jobs,
+    )
     return VolumeView(
         id=volume.id,
         title=volume.title,
         source_format=volume.source_format,
         volume_order=volume.volume_order,
         chapter_count=len(chapters),
-        segment_count=sum(chapter.segment_count for chapter in chapters),
+        segment_count=segment_count,
         chapters=chapters,
+        status=status_view.status,
+        status_label=status_view.label,
     )
 
 

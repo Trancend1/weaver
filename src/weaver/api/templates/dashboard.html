@@ -2,7 +2,7 @@
 {% block title %}Dashboard · Weaver{% endblock %}
 {% block content %}
 <section class="dashboard">
-  {% set page_actions %}<a class="btn btn--primary" href="/ui/new">+ New novel</a>{% endset %}
+  {% set page_actions %}<a class="btn btn--primary" href="/ui/new">+ New project</a>{% endset %}
   {% set page_meta %}{{ projects|length }} project{{ "" if projects|length == 1 else "s" }} in <code>{{ books_dir }}</code> · defaults <code>{{ default_provider }}</code> / <code>{{ default_model }}</code>{% endset %}
   {% set page_title = "Projects" %}
   {% include "partials/_page_header.html" %}
@@ -39,7 +39,7 @@
   </div>
   {% else %}
   {% set empty_title = "No projects found" %}
-  {% set empty_hint = 'Import a source (TXT, EPUB, or HTML) with <a href="/ui/new">+ New novel</a> above, or run <code>weaver init &lt;source&gt;</code> from the CLI.' %}
+  {% set empty_hint = 'Import a source (TXT, EPUB, or HTML) with <a href="/ui/new">+ New project</a> above, or run <code>weaver init &lt;source&gt;</code> from the CLI.' %}
   {% include "partials/_empty_state.html" %}
   {% endif %}
 </section>

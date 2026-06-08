@@ -25,6 +25,7 @@ from weaver.api.routers.config import router as config_router
 from weaver.api.routers.export import router as export_router
 from weaver.api.routers.glossary import router as glossary_router
 from weaver.api.routers.glossary_review import router as glossary_review_router
+from weaver.api.routers.jobs import router as jobs_router
 from weaver.api.routers.projects import router as projects_router
 from weaver.api.routers.qa import router as qa_router
 from weaver.api.routers.runtime import router as runtime_router
@@ -37,6 +38,7 @@ from weaver.api.routers.ui_qa import router as ui_qa_router
 from weaver.api.templating import mount_static
 from weaver.core.secret_store import apply_secrets_to_env
 from weaver.services.app_paths import BOOKS_DIR_ENV, resolve_app_paths
+from weaver.services.job_store import recover_all_projects
 from weaver.services.logging_setup import install_logging, log_runtime_event
 from weaver.services.runtime_env import (
     current_env,
@@ -79,8 +81,19 @@ def create_api_app(base_dir: Path | None = None) -> FastAPI:
         base_dir = Path(env_books_dir) if env_books_dir else Path.cwd()
     app.state.base_dir = base_dir.resolve()
     app.state.app_paths = resolve_app_paths()
-    app.state.jobs = JobRegistry()
+    app.state.jobs = JobRegistry(base_dir=app.state.base_dir)
     app.state.env_mode = env_mode
+
+    # Cold-start recovery (Sprint I3, ADR 010): mark every `running` job in any
+    # project DB as `failed` with a stable reason. Single-process invariant means
+    # a previous worker thread cannot be revived. Idempotent.
+    recovered = recover_all_projects(app.state.base_dir)
+    if recovered:
+        log_runtime_event(
+            "jobs.cold_start_recovered",
+            base_dir=str(app.state.base_dir),
+            projects=recovered,
+        )
 
     # Test mode skips the file-handler install so the test suite does not
     # write to the user's real app-data directory. Set WEAVER_ENV=test to
@@ -122,6 +135,7 @@ def create_api_app(base_dir: Path | None = None) -> FastAPI:
     app.include_router(system_router)
     app.include_router(runtime_router)
     app.include_router(projects_router)
+    app.include_router(jobs_router)
     app.include_router(translate_router)
     app.include_router(batch_router)
     app.include_router(export_router)

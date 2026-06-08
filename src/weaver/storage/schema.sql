@@ -127,7 +127,55 @@ CREATE TABLE IF NOT EXISTS qa_warnings (
 CREATE TABLE IF NOT EXISTS job_events (
   id INTEGER PRIMARY KEY,
   project_id INTEGER REFERENCES projects(id),
+  job_id TEXT,
   event TEXT NOT NULL,
   data_json TEXT,
   created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_job_events_job ON job_events(job_id, id);
+
+-- Sprint I (ADR 010) — SQLite-backed JobRegistry, single-process, in-thread.
+-- One row per submitted background job (translate/batch/export plus future
+-- parse/ocr scopes reserved by status). Status state machine:
+--   queued | running | done | failed | cancelled
+-- Transitional states `processed` and `finalizing` are reserved for J/M.
+CREATE TABLE IF NOT EXISTS jobs (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  project_name TEXT NOT NULL,
+  scope TEXT,
+  scope_id TEXT,
+  chapter_id TEXT,
+  status TEXT NOT NULL CHECK (status IN (
+    'queued',
+    'running',
+    'done',
+    'failed',
+    'cancelled',
+    'processed',
+    'finalizing'
+  )),
+  mode TEXT,
+  target TEXT,
+  total_units INTEGER NOT NULL DEFAULT 0,
+  done_units INTEGER NOT NULL DEFAULT 0,
+  failed_units INTEGER NOT NULL DEFAULT 0,
+  skipped_units INTEGER NOT NULL DEFAULT 0,
+  current_label TEXT,
+  result_json TEXT,
+  error_summary TEXT,
+  started_at TEXT NOT NULL,
+  finished_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_jobs_project_status ON jobs(project_name, status);
+CREATE INDEX IF NOT EXISTS idx_jobs_kind_status ON jobs(kind, status);
+
+CREATE TABLE IF NOT EXISTS job_progress_snapshots (
+  job_id TEXT REFERENCES jobs(id),
+  snapshot_at TEXT NOT NULL,
+  done_units INTEGER NOT NULL,
+  total_units INTEGER NOT NULL,
+  PRIMARY KEY (job_id, snapshot_at)
 );

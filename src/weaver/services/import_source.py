@@ -1,6 +1,6 @@
-"""Import an additional source file as a Volume in an existing novel.
+"""Import an additional source file as a Volume in an existing project.
 
-A novel (project) can hold several volumes. This service adds one volume from a
+A project can hold several volumes. This service adds one volume from a
 source file to a project that already exists on disk, reusing the same reader,
 segment-sync, and glossary-extraction pipeline as ``initialize_project``.
 
@@ -19,6 +19,7 @@ from weaver.core.ir import scope_document_to_volume
 from weaver.errors import WeaverError
 from weaver.readers import detect_format, read_source
 from weaver.services.glossary import extract_and_store_project_glossary
+from weaver.services.logging_setup import log_runtime_event
 from weaver.storage.db import connect_database, transaction
 from weaver.storage.segments import sync_document_segments
 from weaver.storage.volumes import create_volume
@@ -99,6 +100,15 @@ def import_volume(
             )
         connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
+    log_runtime_event(
+        "volume.imported",
+        project=project_toml.parent.name,
+        volume_id=volume_id,
+        title=volume_title,
+        chapters=chapter_count,
+        segments=segment_count,
+        format=str(source_format),
+    )
     return VolumeResult(
         volume_id=volume_id,
         volume_title=volume_title,
@@ -112,7 +122,7 @@ def _single_project_id(connection: sqlite3.Connection, project_toml: Path) -> in
     row = connection.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
     if row is None:
         raise WeaverError(
-            f"No novel found in {project_toml}. "
+            f"No project found in {project_toml}. "
             "Likely cause: the project database has no project row. "
             "Next command: recreate the project with `weaver init <input.epub>`."
         )

@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}New novel · Weaver{% endblock %}
+{% block title %}New project · Weaver{% endblock %}
 {% block content %}
 <section class="panel c-panel">
-  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label":"new novel"}] %}
-  {% set page_title = "Create a novel" %}
+  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label":"new project"}] %}
+  {% set page_title = "Create a project" %}
   {% set page_meta = "Upload a source file or pick one from the books dir below. The project name comes from the source filename." %}
   {% include "partials/_page_header.html" %}
 
@@ -25,7 +25,7 @@
       </select>
     </label>
     <label>Template <input name="template" placeholder="(default)"></label>
-    <button type="submit">Create novel</button>
+    <button type="submit">Create project</button>
   </form>
 
   <h2>Browse sources</h2>

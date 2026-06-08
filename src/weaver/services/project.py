@@ -18,6 +18,7 @@ from weaver.errors import ConfigError, ProjectNotFoundError, ProviderError, Weav
 from weaver.providers import ProviderStatus, build_provider
 from weaver.readers import detect_format, read_source
 from weaver.services.glossary import extract_and_store_project_glossary
+from weaver.services.logging_setup import log_runtime_event
 from weaver.storage.db import (
     SCHEMA_VERSION,
     connect_readonly_database,
@@ -110,6 +111,7 @@ def delete_project(project_toml: Path) -> None:
             "Next command: run `weaver inspect` to list known projects."
         )
     shutil.rmtree(project_dir)
+    log_runtime_event("project.deleted", project=project_dir.name)
 
 
 DEFAULT_PROVIDER = "deepseek"
@@ -215,6 +217,14 @@ def initialize_project(
         output_dir=_posix_relative(output_dir, base_dir),
         provider_type=provider_type,
         template_overrides=template_overrides,
+    )
+    log_runtime_event(
+        "project.created",
+        project=project_name,
+        chapters=chapter_count,
+        segments=segment_count,
+        glossary_candidates=glossary_result.candidate_count,
+        provider=provider_type,
     )
     return InitResult(
         project_name=project_name,

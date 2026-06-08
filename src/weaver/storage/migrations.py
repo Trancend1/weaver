@@ -216,9 +216,102 @@ def _migrate_to_v5(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_to_v6(connection: sqlite3.Connection) -> None:
+    """Persistent job core (schema v6, Sprint I, ADR 010).
+
+    Adds the ``jobs`` and ``job_progress_snapshots`` tables and extends the
+    pre-existing ``job_events`` table with a nullable ``job_id`` column.
+    Existing ``job_events`` rows backfill to ``job_id = NULL``. The SQLite
+    layer remains the **durability** layer for the in-process JobRegistry;
+    no external worker, no multi-process queue (CLAUDE.md §3, ADR 010).
+
+    Tolerant of databases that pre-date ``job_events`` (legacy v1/v2 paths
+    that the migration tests stand up by hand): the table is created on
+    demand so the v6 ALTER never targets a missing table.
+    """
+
+    tables = {
+        str(row["name"])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    if "job_events" not in tables:
+        connection.execute(
+            """
+            CREATE TABLE job_events (
+              id INTEGER PRIMARY KEY,
+              project_id INTEGER REFERENCES projects(id),
+              job_id TEXT,
+              event TEXT NOT NULL,
+              data_json TEXT,
+              created_at TEXT NOT NULL
+            )
+            """
+        )
+    else:
+        job_events_columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(job_events)").fetchall()
+        }
+        if "job_id" not in job_events_columns:
+            connection.execute("ALTER TABLE job_events ADD COLUMN job_id TEXT")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_job_events_job ON job_events(job_id, id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS jobs (
+          id TEXT PRIMARY KEY,
+          kind TEXT NOT NULL,
+          project_name TEXT NOT NULL,
+          scope TEXT,
+          scope_id TEXT,
+          chapter_id TEXT,
+          status TEXT NOT NULL CHECK (status IN (
+            'queued',
+            'running',
+            'done',
+            'failed',
+            'cancelled',
+            'processed',
+            'finalizing'
+          )),
+          mode TEXT,
+          target TEXT,
+          total_units INTEGER NOT NULL DEFAULT 0,
+          done_units INTEGER NOT NULL DEFAULT 0,
+          failed_units INTEGER NOT NULL DEFAULT 0,
+          skipped_units INTEGER NOT NULL DEFAULT 0,
+          current_label TEXT,
+          result_json TEXT,
+          error_summary TEXT,
+          started_at TEXT NOT NULL,
+          finished_at TEXT
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_jobs_project_status ON jobs(project_name, status)"
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_jobs_kind_status ON jobs(kind, status)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS job_progress_snapshots (
+          job_id TEXT REFERENCES jobs(id),
+          snapshot_at TEXT NOT NULL,
+          done_units INTEGER NOT NULL,
+          total_units INTEGER NOT NULL,
+          PRIMARY KEY (job_id, snapshot_at)
+        )
+        """
+    )
+
+
 _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _migrate_to_v2,
     3: _migrate_to_v3,
     4: _migrate_to_v4,
     5: _migrate_to_v5,
+    6: _migrate_to_v6,
 }

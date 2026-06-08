@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Jobs · {{ project_name }} · Weaver{% endblock %}
+{% block content %}
+<section class="panel c-panel">
+  {% set page_crumbs = [
+    {"href":"/ui", "label":"Dashboard"},
+    {"href":"/ui/projects/" ~ project_name, "label": project_name},
+    {"href": none, "label": "Jobs"}
+  ] %}
+  {% set page_title = "Jobs" %}
+  {% set page_meta = "Persistent job history for this project. Newest first. Recovered = process restart marked the job failed (Sprint I cold-start)." %}
+  {% include "partials/_page_header.html" %}
+
+  {% if error %}<div class="error error-state" role="alert">{{ error }}</div>{% endif %}
+
+  {% if jobs %}
+  <table class="jobs-table">
+    <thead>
+      <tr>
+        <th>Kind</th>
+        <th>Status</th>
+        <th>Scope</th>
+        <th>Progress</th>
+        <th>Started</th>
+        <th>Finished</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for j in jobs %}
+      <tr class="jobs-row jobs-row--{{ j.status }}">
+        <td>{{ j.kind }}</td>
+        <td><span class="badge job-status job-status--{{ j.status }}">{{ j.status }}</span></td>
+        <td class="meta">{{ j.scope or "—" }}{% if j.scope_id %} · {{ j.scope_id }}{% endif %}</td>
+        <td class="meta">{{ j.done_units }}/{{ j.total_units or "?" }}{% if j.failed_units %} · {{ j.failed_units }} failed{% endif %}</td>
+        <td class="meta">{{ j.started_at }}</td>
+        <td class="meta">{{ j.finished_at or "—" }}</td>
+        <td><a href="/ui/projects/{{ project_name }}/jobs/{{ j.id }}/detail">Detail</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {% set empty_title = "No jobs yet" %}
+  {% set empty_hint = "Translate a chapter, run a batch, or export to see job history here." %}
+  {% include "partials/_empty_state.html" %}
+  {% endif %}
+</section>
+{% endblock %}

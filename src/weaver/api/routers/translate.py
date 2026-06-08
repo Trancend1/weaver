@@ -17,7 +17,13 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from weaver.api.jobs import JobRegistry, TranslationJob, format_sse
+from weaver.api.jobs import (
+    JobRegistry,
+    TranslationJob,
+    format_sse,
+    parse_last_event_id,
+    replay_persisted_events,
+)
 from weaver.api.schemas import (
     ChapterRetranslateRequest,
     ChapterTranslateRequest,
@@ -253,17 +259,35 @@ def cancel_translation_job(
 def stream_translation_job(name: str, job_id: str, request: Request) -> StreamingResponse:
     """Stream a job's progress as Server-Sent Events until it finishes.
 
-    Single-consumer: events are drained from the job's queue, so one client reads
-    one stream (sufficient for the local cockpit). A late subscriber still sees the
-    buffered progress events followed by the terminal event.
+    Single-consumer for the live tail: events are drained from the job's queue,
+    so one client reads one stream. Reconnecting clients pass ``Last-Event-Id``
+    (header or ``?last_event_id=`` query) and receive every persisted event
+    strictly newer than that id before the live tail resumes (Sprint I4 / ADR
+    010). A finished job's full event log is served from SQLite alone.
     """
     job = _require_job(request, name, job_id)
+    last_event_id = parse_last_event_id(
+        request.headers.get("Last-Event-Id") or request.query_params.get("last_event_id")
+    )
+    db_path = job.storage.db_path if job.storage is not None else None
+    terminal_at_open = job.status in {"done", "failed", "cancelled"}
 
     def stream() -> Iterator[str]:
+        seen: set[int] = set()
+        for envelope in replay_persisted_events(db_path, job_id, after_id=last_event_id):
+            seen.add(int(envelope["id"]))
+            yield format_sse(envelope)
+        if terminal_at_open:
+            # The job already finished. The queue's stream-end sentinel has
+            # almost certainly been drained by an earlier subscriber; replay
+            # alone is the authoritative event log (Sprint I4 / ADR 010).
+            return
         while True:
             event = job.queue.get()
             if event is None:  # stream-end sentinel
                 break
+            if isinstance(event.get("id"), int) and event["id"] in seen:
+                continue
             yield format_sse(event)
 
     return StreamingResponse(
