@@ -35,7 +35,8 @@ def test_new_page_renders(tmp_path: Path) -> None:
     r = client.get("/ui/new")
     assert r.status_code == 200
     assert "Create a project" in r.text
-    assert 'hx-get="/ui/browse' in r.text
+    assert 'name="project_name"' in r.text
+    assert 'hx-get="/ui/browse' not in r.text
 
 
 def test_browse_fragment_lists_sources(tmp_path: Path) -> None:
@@ -80,19 +81,28 @@ def test_create_via_browsed_path_redirects(tmp_path: Path) -> None:
     assert r.headers["location"] == f"/ui/projects/{epub.stem}"
 
 
-def test_create_no_source_rerenders_with_error(tmp_path: Path) -> None:
+def test_create_no_name_rerenders_with_error(tmp_path: Path) -> None:
     client = TestClient(create_api_app(tmp_path))
     r = client.post("/ui/new", data={})
     assert r.status_code == 400
     assert "Create a project" in r.text
-    assert "No source selected" in r.text
+    assert "Project name is required" in r.text
+
+
+def test_create_empty_project_redirects_to_empty_state(tmp_path: Path) -> None:
+    client = TestClient(create_api_app(tmp_path))
+    r = client.post("/ui/new", data={"project_name": "demo"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/ui/projects/demo"
+    page = client.get("/ui/projects/demo")
+    assert page.status_code == 200
+    assert "No volumes yet" in page.text
+    assert "Import first volume" in page.text
 
 
 def test_create_duplicate_rerenders_with_error(tmp_path: Path) -> None:
     client, name = _with_project(tmp_path)
-    epub = _fixture_epub()
-    data = {"file": (epub.name, BytesIO(epub.read_bytes()), "application/epub+zip")}
-    r = client.post("/ui/new", files=data)
+    r = client.post("/ui/new", data={"project_name": name})
     assert r.status_code == 400
     assert "already exists" in r.text
 

@@ -87,7 +87,33 @@ def test_create_from_browsed_path(tmp_path: Path) -> None:
     assert r.json()["project_name"] == epub.stem
 
 
-def test_create_no_source_is_422(tmp_path: Path) -> None:
+def test_create_empty_project(tmp_path: Path) -> None:
+    client = TestClient(create_api_app(tmp_path))
+    r = client.post("/projects/create", data={"project_name": "demo"})
+    assert r.status_code == 201
+    body = r.json()
+    assert body["project_name"] == "demo"
+    assert body["chapter_count"] == 0
+    assert body["segment_count"] == 0
+    tree = client.get("/projects/demo/tree").json()
+    assert tree["project_name"] == "demo"
+    assert tree["volumes"] == []
+
+
+def test_import_first_volume_into_empty_project(tmp_path: Path) -> None:
+    epub = _fixture_epub()
+    client = TestClient(create_api_app(tmp_path))
+    assert client.post("/projects/create", data={"project_name": "demo"}).status_code == 201
+
+    data = {"file": (epub.name, BytesIO(epub.read_bytes()), "application/epub+zip")}
+    r = client.post("/projects/demo/import", files=data)
+    assert r.status_code == 201
+    assert r.json()["volume_title"]
+    tree = client.get("/projects/demo/tree").json()
+    assert len(tree["volumes"]) == 1
+
+
+def test_create_no_name_or_source_is_422(tmp_path: Path) -> None:
     client = TestClient(create_api_app(tmp_path))
     assert client.post("/projects/create").status_code == 422
 

@@ -43,7 +43,7 @@ from weaver.services.job_store import (
     list_events_after,
     list_jobs_for_project,
 )
-from weaver.services.project import delete_project, initialize_project, project_exists
+from weaver.services.project import delete_project, initialize_project, project_name_exists
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_tree import project_tree
 from weaver.services.segment_history import segment_translation_history
@@ -493,8 +493,9 @@ async def create_project_submit(
     source_path: str | None = Form(None),
     provider: str | None = Form(None),
     template: str | None = Form(None),
+    project_name: str | None = Form(None),
 ) -> HTMLResponse | RedirectResponse:
-    """Create a novel from an uploaded/browsed source, then go to its view.
+    """Create a project, optionally importing an uploaded/browsed first volume.
 
     Reuses the same services as ``POST /projects/create`` (no logic here). On
     failure the form is re-rendered with the error; on success → 303 to the
@@ -503,11 +504,20 @@ async def create_project_submit(
     base = _base_dir(request)
     uploaded = (file.filename, await file.read()) if file is not None and file.filename else None
     try:
-        source = resolve_intake_source(base, uploaded=uploaded, source_path=source_path)
-        if project_exists(source, cwd=base):
-            raise WeaverError(f"A project named {source.stem!r} already exists.")
+        source = None
+        if uploaded is not None or source_path:
+            source = resolve_intake_source(base, uploaded=uploaded, source_path=source_path)
+        name = (project_name or "").strip() or (source.stem if source is not None else "")
+        if not name:
+            raise WeaverError("Project name is required.")
+        if project_name_exists(name, cwd=base):
+            raise WeaverError(f"A project named {name!r} already exists.")
         result = initialize_project(
-            source, cwd=base, template=template or None, provider=provider or None
+            source,
+            cwd=base,
+            template=template or None,
+            provider=provider or None,
+            project_name=name,
         )
     except WeaverError as exc:
         return templates.TemplateResponse(

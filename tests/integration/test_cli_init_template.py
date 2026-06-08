@@ -45,3 +45,16 @@ def test_init_with_unknown_template_fails(tmp_path, monkeypatch) -> None:
     result = runner.invoke(app, ["init", str(FIXTURE_EPUB), "--from-template", "nonexistent"])
     assert result.exit_code != 0
     assert "Unknown template" in result.output
+
+
+def test_init_with_project_name_creates_empty_project(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(app, ["init", "demo-project"])
+    assert result.exit_code == 0, result.output
+    assert "Creating empty project demo-project" in result.output
+    assert "weaver import" in result.output
+
+    project_toml = tmp_path / ".weaver" / "demo-project" / "project.toml"
+    data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+    assert data["project"]["source_file"] == ""

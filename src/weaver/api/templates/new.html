@@ -4,18 +4,15 @@
 <section class="panel c-panel">
   {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label":"new project"}] %}
   {% set page_title = "Create a project" %}
-  {% set page_meta = "Upload a source file or pick one from the books dir below. The project name comes from the source filename." %}
+  {% set page_meta = "Enter a project name. You can import source files (EPUB/TXT/HTML) later." %}
   {% include "partials/_page_header.html" %}
 
   {% if error %}<div class="error error-state" role="alert">{{ error }}</div>{% endif %}
 
-  <form method="post" action="/ui/new" enctype="multipart/form-data" class="stack form-stack">
-    <label>Upload source
-      <input type="file" name="file" accept=".epub,.txt,.html,.htm">
+  <form method="post" action="/ui/new" class="stack form-stack">
+    <label>Project name
+      <input type="text" name="project_name" placeholder="My Novel Project" required>
     </label>
-    <div class="field">Browsed source: <span id="selected_source" class="meta">(none)</span>
-      <input type="hidden" name="source_path" id="source_path">
-    </div>
     <label>Provider
       <select name="provider">
         <option value="">(default)</option>
@@ -28,9 +25,5 @@
     <button type="submit">Create project</button>
   </form>
 
-  <h2>Browse sources</h2>
-  <div id="browser" hx-get="/ui/browse?dir=" hx-trigger="load" hx-swap="innerHTML">
-    <span class="meta">loading…</span>
-  </div>
 </section>
 {% endblock %}
