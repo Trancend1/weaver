@@ -19,9 +19,8 @@ from typing import Any
 from xml.sax.saxutils import escape
 
 from ebooklib import epub
-from ebooklib.epub import EpubException
 
-from weaver.errors import EpubWriteError
+from weaver.renderers._atomic import atomic_write_epub
 from weaver.renderers.rendered_document import RenderChapter, block_to_html
 
 _XHTML_TEMPLATE = (
@@ -95,14 +94,7 @@ def synthesize_epub(
     book.spine = spine
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        epub.write_epub(str(output_path), book)
-    except (OSError, EpubException) as exc:
-        raise EpubWriteError(
-            f"Failed to write synthesized EPUB to '{output_path}'. "
-            "Likely cause: target directory is not writable or disk is full. "
-            "Next command: check filesystem permissions or free space."
-        ) from exc
+    atomic_write_epub(output_path, book)
 
     return EpubSynthesisResult(
         output_path=output_path,

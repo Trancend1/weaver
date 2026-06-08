@@ -30,5 +30,35 @@
   {% if job.result.bundle_path %}
   <p class="meta">Bundle: <code>{{ job.result.bundle_path }}</code></p>
   {% endif %}
+  {% if job.result.fidelity_reports %}
+  <details class="fidelity-reports">
+    <summary>EPUB fidelity ({{ job.result.fidelity_reports|length }} volume(s))</summary>
+    {% for fr in job.result.fidelity_reports %}
+    <div class="fidelity-report">
+      <p class="meta">
+        <strong>{{ fr.source_path }}</strong> →
+        {% if fr.critical_count > 0 %}<span class="badge c-badge bad">{{ fr.critical_count }} critical</span>{% endif %}
+        {% if fr.warning_count > 0 %}<span class="badge c-badge warn">{{ fr.warning_count }} warnings</span>{% endif %}
+        {% if fr.critical_count == 0 and fr.warning_count == 0 %}<span class="badge c-badge ok">passed</span>{% endif %}
+      </p>
+      {% if fr.passed_checks %}
+      <ul class="fidelity-checks fidelity-checks--passed plain-list">
+        {% for c in fr.passed_checks %}<li><span class="badge c-badge ok">passed</span> {{ c.message }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% if fr.warnings %}
+      <ul class="fidelity-checks fidelity-checks--warnings plain-list">
+        {% for c in fr.warnings %}<li><span class="badge c-badge warn">warning</span> {{ c.message }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% if fr.critical_gaps %}
+      <ul class="fidelity-checks fidelity-checks--critical plain-list">
+        {% for c in fr.critical_gaps %}<li><span class="badge c-badge bad">critical</span> {{ c.message }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </details>
+  {% endif %}
   {% endif %}
 </div>

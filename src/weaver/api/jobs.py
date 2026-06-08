@@ -40,6 +40,7 @@ from weaver.services.batch_translate import (
     BatchProgressSnapshot,
     BatchTranslationResult,
 )
+from weaver.services.epub_export_fidelity import report_to_dict
 from weaver.services.export_book import (
     ExportProgressCallback,
     ExportProgressSnapshot,
@@ -792,7 +793,7 @@ def _export_progress_data(snapshot: ExportProgressSnapshot) -> dict[str, Any]:
 
 
 def _export_result_data(result: ExportResult) -> dict[str, Any]:
-    return {
+    data: dict[str, Any] = {
         "target": result.target,
         "scope": result.scope,
         "scope_id": result.scope_id,
@@ -825,6 +826,9 @@ def _export_result_data(result: ExportResult) -> dict[str, Any]:
             for artifact in result.artifacts
         ],
     }
+    if result.fidelity_reports:
+        data["fidelity_reports"] = [report_to_dict(r) for r in result.fidelity_reports]
+    return data
 
 
 # --- parse jobs (Sprint J3 — reparse-as-Job, ADR 010-adjacent) -------------

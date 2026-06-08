@@ -29,11 +29,13 @@ from weaver.api.jobs import (
 from weaver.api.schemas import (
     ExportArtifactResponse,
     ExportFallbackByStatusResponse,
+    ExportFidelityReportResponse,
     ExportJobProgressResponse,
     ExportJobResponse,
     ExportJobResultResponse,
     ExportJobStatusResponse,
     ExportRequest,
+    FidelityCheckResponse,
 )
 from weaver.errors import ChapterNotFoundError, VolumeNotFoundError, WeaverError
 from weaver.services.export_book import ExportPlan, prepare_export, run_export
@@ -235,6 +237,21 @@ def _export_status(job: ExportJob) -> ExportJobStatusResponse:
                     ),
                 )
                 for a in r.artifacts
+            ],
+            fidelity_reports=[
+                ExportFidelityReportResponse(
+                    source_path=str(fr.source_path),
+                    exported_path=str(fr.exported_path),
+                    source_counts=fr.source_counts,
+                    exported_counts=fr.exported_counts,
+                    passed_checks=[FidelityCheckResponse(**c.__dict__) for c in fr.passed_checks],
+                    warnings=[FidelityCheckResponse(**c.__dict__) for c in fr.warnings],
+                    critical_gaps=[FidelityCheckResponse(**c.__dict__) for c in fr.critical_gaps],
+                    missing_resources=fr.missing_resources,
+                    warning_count=fr.warning_count,
+                    critical_count=fr.critical_count,
+                )
+                for fr in r.fidelity_reports
             ],
         )
     return ExportJobStatusResponse(

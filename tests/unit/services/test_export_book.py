@@ -860,3 +860,63 @@ def test_bundle_skipped_when_no_artifacts(tmp_path: Path) -> None:
 
     assert result.artifacts == ()
     assert result.bundle_path is None
+
+
+def test_epub_export_generates_fidelity_reports(tmp_path: Path) -> None:
+    """EPUB-sourced volumes produce fidelity reports on EPUB export (Sprint K4)."""
+    project_toml, db_path = _init(tmp_path)
+    with closing(initialize_database(db_path)) as conn, transaction(conn):
+        project_id = create_project(
+            conn,
+            name="demo",
+            source_path=str(FIXTURE_EPUB),
+            source_lang="ja",
+            target_lang="en",
+        )
+        _add_epub_volume(conn, project_id=project_id, translate_first_n=0)
+
+    result = export_novel(project_toml)
+
+    assert len(result.fidelity_reports) == 1
+    report = result.fidelity_reports[0]
+    assert report.source_path == FIXTURE_EPUB
+    assert report.exported_path.exists()
+    assert len(report.source_counts) > 0
+    assert len(report.exported_counts) > 0
+    assert len(report.passed_checks) >= 1
+
+    # Non-EPUB target does not produce fidelity reports.
+    txt_result = export_novel(project_toml, target="txt")
+    assert len(txt_result.fidelity_reports) == 0
+
+
+def test_atomic_epub_write_does_not_leak_partials(tmp_path: Path) -> None:
+    """EPUB renderer writes atomically; failure leaves no partial file (Sprint K3)."""
+    from ebooklib import epub
+
+    from weaver.renderers._atomic import atomic_write_epub
+
+    book = epub.EpubBook()
+    book.set_identifier("urn:uuid:atomic")
+    book.set_title("Atomic")
+    book.set_language("en")
+
+    output = tmp_path / "out.epub"
+    atomic_write_epub(output, book)
+
+    assert output.exists()
+    partials = list(tmp_path.glob("*.partial"))
+    assert len(partials) == 0
+
+
+def test_atomic_text_write_does_not_leak_partials(tmp_path: Path) -> None:
+    """Text renderer writes atomically; failure leaves no partial file (Sprint K3)."""
+    from weaver.renderers._atomic import atomic_write_text
+
+    output = tmp_path / "out.txt"
+    atomic_write_text(output, "hello world")
+
+    assert output.exists()
+    assert output.read_text(encoding="utf-8") == "hello world"
+    partials = list(tmp_path.glob("*.partial"))
+    assert len(partials) == 0

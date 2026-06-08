@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from weaver.errors import ExportError
+from weaver.renderers._atomic import atomic_write_text
 from weaver.renderers.rendered_document import RenderChapter
 
 
@@ -56,7 +57,7 @@ def render_txt(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        output_path.write_text(content, encoding="utf-8")
+        atomic_write_text(output_path, content)
     except OSError as exc:
         raise ExportError(
             f"Failed to write TXT export to '{output_path}'. "

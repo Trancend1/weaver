@@ -1,6 +1,6 @@
 # Weaver Next Roadmap — HTMX-first, FastAPI-stable, Tauri-sidecar-ready
 
-> **Status:** Active forward-looking roadmap (Phase F shipped on `feat/epub-metadata-parse`).
+> **Status:** Active forward-looking roadmap (Sprint L in progress — Candidate Review + Character Text Draft).
 > **Supersedes:** the "Phase Final — npm `@weaver/cli` wrapper" entry in `CLAUDE.md §2.1`.
 > npm wrapper is **deferred legacy** — not a parallel track; revisiting it requires a new ADR.
 > **Governs:** Sprint G through Sprint O (the post-Phase-F sequence).
@@ -14,8 +14,8 @@ Current state:
 
 ```text
 HTMX-first         = done
-FastAPI-stable     = partial   (no health/version, dev-path assumptions, in-process jobs only)
-Tauri-sidecar-ready = not started
+FastAPI-stable     = done   (G: health/version, app-data paths, modes, structured logs)
+Tauri-sidecar-ready = partial  (I: persistent jobs, J+K: snapshot+export fidelity)
 ```
 
 Locked direction:
@@ -54,12 +54,12 @@ Five hard rules carried into every sprint below:
 Execution order is dependency-driven, not calendar-driven:
 
 ```text
-Sprint G  Runtime Contract
-  → Sprint H  Project / Volume UX & Lifecycle (rename Novel → Project; ADR 011)
-    → Sprint I  Persistent Job Core (SQLite-backed in-process; ADR 010)
-      → Sprint J  EPUB Preservation Snapshot (persist Phase F ParsedEpub)
-        → Sprint K  Export Fidelity Wiring (consume Phase F + snapshot)
-          → Sprint L  Candidate Review + Character Text Draft
+Sprint G  Runtime Contract                                              ✅
+  → Sprint H  Project / Volume UX & Lifecycle (rename Novel → Project) ✅
+    → Sprint I  Persistent Job Core (SQLite-backed in-process)         ✅
+      → Sprint J  EPUB Preservation Snapshot (persist Phase F)         ✅
+        → Sprint K  Export Fidelity Wiring (consume Phase F + snap)    ✅
+          → Sprint L  Candidate Review + Character Text Draft          ⏳ active
             → Sprint M  Image Preview / OCR Gate (ADR 012, then optional impl)
               → Sprint N  Tauri Shell Alpha
                 → Sprint O  Production Desktop Packaging
@@ -401,7 +401,7 @@ SQLite is the **durability layer**, not a queue. Workers remain `threading.Threa
 
 ---
 
-### Sprint K — Export Fidelity Integration
+### Sprint K — Export Fidelity Integration ✅
 
 **Goal.** Wire export to the preservation snapshot so output stays faithful to the source EPUB's structure, with pre-export advisory + post-export report + a regression gate.
 
@@ -686,30 +686,21 @@ These hold across every sprint and the §2.2 phase gate:
 
 ## 6. Next Sprint Recommendation
 
-**Active sprint after Phase F:** `Sprint G — FastAPI Stability & Tauri-Ready Runtime Foundation`.
+**Active sprint:** `Sprint L — Candidate Review + Character Text Draft`.
 
-Not:
-
-```text
-Sprint G — Tauri Migration
-Sprint G — NiceGUI Migration
-Sprint G — Full Desktop Rewrite
-Sprint G — npm `@weaver/cli` Wrapper           (deferred legacy; see §0)
-```
-
-Sprint G removes the blockers every later sprint depends on. Sprint H may start only after the G8 gate passes.
+Sprints G–K are complete. Sprint L may not start until the K5 gate passes. Sprint M may not start until the L5 gate passes.
 
 ---
 
 ## 7. Final Roadmap Sequence
 
 ```text
-Sprint G — FastAPI Stability & Tauri-Ready Runtime Foundation       (ADR 009)
-Sprint H — Project & Volume Lifecycle Contract (Novel → Project)    (ADR 011)
-Sprint I — Persistent Job Core & Realtime Contract                  (ADR 010)
-Sprint J — EPUB Preservation Snapshot & Parser Hardening            (extends Phase F)
-Sprint K — Export Fidelity Integration                              (consumes J)
-Sprint L — Candidate Review + Character Text Draft
+Sprint G — FastAPI Stability & Tauri-Ready Runtime Foundation       (ADR 009) ✅
+Sprint H — Project & Volume Lifecycle Contract (Novel → Project)    (ADR 011) ✅
+Sprint I — Persistent Job Core & Realtime Contract                  (ADR 010) ✅
+Sprint J — EPUB Preservation Snapshot & Parser Hardening            (extends Phase F) ✅
+Sprint K — Export Fidelity Integration                              (consumes J) ✅
+Sprint L — Candidate Review + Character Text Draft                  ⏳ active
 Sprint M — Image Preview & OCR / Vision Gate                        (ADR 012, then optional impl)
 Sprint N — Tauri Shell Alpha                                        (consumes G + I + K)
 Sprint O — Production Desktop Packaging

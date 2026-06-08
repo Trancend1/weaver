@@ -49,6 +49,47 @@
     <summary>Result</summary>
     <pre>{{ result | tojson(indent=2) }}</pre>
   </details>
+  {% if result.get("fidelity_reports") %}
+  <section class="fidelity-reports">
+    <h2>EPUB fidelity reports</h2>
+    {% for fr in result["fidelity_reports"] %}
+    <div class="fidelity-report">
+      <p class="meta">{{ fr.source_path }} →
+        {% if fr.critical_count > 0 %}<span class="badge c-badge bad">{{ fr.critical_count }} critical</span>{% endif %}
+        {% if fr.warning_count > 0 %}<span class="badge c-badge warn">{{ fr.warning_count }} warnings</span>{% endif %}
+        {% if fr.critical_count == 0 and fr.warning_count == 0 %}<span class="badge c-badge ok">passed</span>{% endif %}
+      </p>
+      <dl>
+        <dt>Source</dt><dd class="meta">{{ fr.source_counts.manifest }} manifest · {{ fr.source_counts.spine }} spine · {{ fr.source_counts.images }} images · {{ fr.source_counts.css }} CSS · {{ fr.source_counts.fonts }} fonts</dd>
+        <dt>Export</dt><dd class="meta">{{ fr.exported_counts.manifest }} manifest · {{ fr.exported_counts.spine }} spine · {{ fr.exported_counts.images }} images · {{ fr.exported_counts.css }} CSS · {{ fr.exported_counts.fonts }} fonts</dd>
+      </dl>
+      {% if fr.passed_checks %}
+      <ul class="fidelity-checks fidelity-checks--passed plain-list">
+        {% for c in fr.passed_checks %}<li><span class="badge c-badge ok">passed</span> {{ c.message }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% if fr.warnings %}
+      <ul class="fidelity-checks fidelity-checks--warnings plain-list">
+        {% for c in fr.warnings %}<li><span class="badge c-badge warn">warning</span> {{ c.message }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% if fr.critical_gaps %}
+      <ul class="fidelity-checks fidelity-checks--critical plain-list">
+        {% for c in fr.critical_gaps %}<li><span class="badge c-badge bad">critical</span> {{ c.message }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% if fr.missing_resources %}
+      <details class="missing-resources">
+        <summary>{{ fr.missing_resources|length }} missing resource(s)</summary>
+        <ul class="plain-list">
+          {% for href in fr.missing_resources %}<li class="meta"><code>{{ href }}</code></li>{% endfor %}
+        </ul>
+      </details>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
   {% endif %}
 
   <h2>Event log</h2>
