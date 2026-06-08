@@ -45,7 +45,7 @@ from weaver.services.epub_reparse import (
 )
 from weaver.services.epub_structure_preview import preview_epub_structure
 from weaver.services.import_source import import_volume
-from weaver.services.project import delete_project, initialize_project, project_exists
+from weaver.services.project import delete_project, initialize_project, project_name_exists
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_tree import project_tree
 from weaver.services.segment_history import segment_translation_history
@@ -164,30 +164,35 @@ async def create_novel(
     ),
     provider: str | None = Form(None, description="Provider type for the generated config."),
     template: str | None = Form(None, description="Template preset for the generated config."),
+    project_name: str | None = Form(None, description="Project name/title."),
 ) -> CreateNovelResponse:
-    """Create a new novel project from an uploaded or browsed source file.
-
-    Exactly one source is required: an uploaded ``file`` (preferred) or a browsed
-    ``source_path``. The project name derives from the source filename stem.
-    Creating over an existing project of the same name is refused (409).
-    Sourceless creation is unsupported — the source defines the project name and
-    initial volume.
-    """
+    """Create a project, optionally importing an uploaded/browsed first volume."""
     base = _base_dir(request)
     uploaded = (file.filename, await file.read()) if file is not None and file.filename else None
 
     try:
-        source = resolve_intake_source(base, uploaded=uploaded, source_path=source_path)
-        if project_exists(source, cwd=base):
+        source = None
+        if uploaded is not None or source_path:
+            source = resolve_intake_source(base, uploaded=uploaded, source_path=source_path)
+        name = (project_name or "").strip() or (source.stem if source is not None else "")
+        if not name:
+            raise HTTPException(status_code=422, detail="Project name is required.")
+        if project_name_exists(name, cwd=base):
             raise HTTPException(
                 status_code=409,
                 detail=(
-                    f"A project named {source.stem!r} already exists. "
-                    "Likely cause: this source was already created. "
+                    f"A project named {name!r} already exists. "
+                    "Likely cause: this project was already created. "
                     "Next command: open the existing project or import as a volume."
                 ),
             )
-        result = initialize_project(source, cwd=base, template=template, provider=provider)
+        result = initialize_project(
+            source,
+            cwd=base,
+            template=template,
+            provider=provider,
+            project_name=name,
+        )
     except WeaverError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

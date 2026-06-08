@@ -142,6 +142,8 @@ def _resolve_path(path_value: str, cwd: Path, project_toml_dir: Path) -> Path:
     path = Path(path_value)
     if path.is_absolute():
         return path
+    if path.parts and path.parts[0] == ".weaver":
+        return cwd / path
     cwd_path = cwd / path
     if cwd_path.exists():
         return cwd_path

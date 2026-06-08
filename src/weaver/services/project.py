@@ -12,12 +12,10 @@ from pathlib import Path
 from typing import Any
 
 from weaver.core.config import load_project_config
-from weaver.core.ir import scope_document_to_volume
 from weaver.core.templates import get_template
 from weaver.errors import ConfigError, ProjectNotFoundError, ProviderError, WeaverError
 from weaver.providers import ProviderStatus, build_provider
-from weaver.readers import detect_format, read_source
-from weaver.services.glossary import extract_and_store_project_glossary
+from weaver.services.import_source import import_volume
 from weaver.services.logging_setup import log_runtime_event
 from weaver.storage.db import (
     SCHEMA_VERSION,
@@ -26,8 +24,6 @@ from weaver.storage.db import (
     transaction,
 )
 from weaver.storage.projects import create_project
-from weaver.storage.segments import sync_document_segments
-from weaver.storage.volumes import create_volume
 
 
 @dataclass(frozen=True)
@@ -81,6 +77,14 @@ def project_exists(source_epub: Path, *, cwd: Path | None = None) -> bool:
     return project_toml.exists()
 
 
+def project_name_exists(project_name: str, *, cwd: Path | None = None) -> bool:
+    """Check whether a Weaver project already exists for a project name."""
+
+    base_dir = cwd or Path.cwd()
+    project_toml = base_dir / ".weaver" / project_name / "project.toml"
+    return project_toml.exists()
+
+
 def delete_project(project_toml: Path) -> None:
     """Permanently delete a Weaver project's ``.weaver/<name>`` directory.
 
@@ -125,16 +129,17 @@ OLLAMA_BASE_URL = "http://localhost:11434"
 
 
 def initialize_project(
-    source_epub: Path,
+    source_epub: Path | None = None,
     *,
     cwd: Path | None = None,
     template: str | None = None,
     provider: str | None = None,
+    project_name: str | None = None,
 ) -> InitResult:
-    """Create project state for a source EPUB.
+    """Create project state, optionally importing an initial source as a volume.
 
     Args:
-        source_epub: Input EPUB path.
+        source_epub: Optional input source path for backward-compatible first-volume import.
         cwd: Working directory used for generated project paths.
         template: Optional template preset name (``light-novel``,
             ``web-novel``, ``aozora-classic``). Overrides ``[glossary]``
@@ -161,79 +166,73 @@ def initialize_project(
         )
 
     base_dir = cwd or Path.cwd()
-    source_epub = source_epub.resolve()
-    project_name = source_epub.stem
-    project_dir = base_dir / ".weaver" / project_name
+    source_path = source_epub.resolve() if source_epub is not None else None
+    resolved_project_name = project_name or (source_path.stem if source_path is not None else None)
+    if not resolved_project_name:
+        raise ConfigError(
+            "Project name is required. "
+            "Likely cause: empty project creation needs a title. "
+            "Next command: run `weaver init <project-name>` or choose a project name "
+            "in the cockpit."
+        )
+    project_dir = base_dir / ".weaver" / resolved_project_name
     output_dir = project_dir / "output"
     candidate_path = project_dir / "glossary_candidates.tsv"
     db_path = project_dir / "weaver.db"
     project_toml = project_dir / "project.toml"
 
-    source_format = detect_format(source_epub)
-    document = read_source(source_epub)
     project_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
-    chapter_count = len(document.chapters)
-    segment_count = sum(len(chapter.blocks) for chapter in document.chapters)
 
     with closing(initialize_database(db_path)) as connection:
         with transaction(connection):
-            project_id = create_project(
+            create_project(
                 connection,
-                name=project_name,
-                source_path=str(source_epub),
-                source_lang=document.metadata.language,
+                name=resolved_project_name,
+                source_path=str(source_path) if source_path is not None else "",
+                source_lang="ja",
                 target_lang="en",
-            )
-            volume_id = create_volume(
-                connection,
-                project_id=project_id,
-                title=document.metadata.title or project_name,
-                source_path=str(source_epub),
-                source_format=source_format,
-                volume_order=0,
-            )
-            sync_document_segments(
-                connection,
-                project_id=project_id,
-                volume_id=volume_id,
-                document=scope_document_to_volume(document, volume_id),
-            )
-            glossary_result = extract_and_store_project_glossary(
-                connection=connection,
-                project_id=project_id,
-                document=document,
-                candidate_path=candidate_path,
             )
         connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     template_overrides = get_template(template) if template else None
     _write_project_toml(
         project_toml,
-        project_name=project_name,
-        source_file=str(source_epub),
+        project_name=resolved_project_name,
+        source_file=str(source_path) if source_path is not None else "",
         project_dir=_posix_relative(project_dir, base_dir),
         database_path=_posix_relative(db_path, base_dir),
         output_dir=_posix_relative(output_dir, base_dir),
         provider_type=provider_type,
         template_overrides=template_overrides,
     )
+    if source_path is not None:
+        volume_result = import_volume(project_toml, source_path, cwd=base_dir)
+        chapter_count = volume_result.chapter_count
+        segment_count = volume_result.segment_count
+        glossary_candidate_count = volume_result.glossary_candidate_count
+        glossary_candidate_path = candidate_path
+    else:
+        chapter_count = 0
+        segment_count = 0
+        glossary_candidate_count = 0
+        glossary_candidate_path = candidate_path
     log_runtime_event(
         "project.created",
-        project=project_name,
+        project=resolved_project_name,
         chapters=chapter_count,
         segments=segment_count,
-        glossary_candidates=glossary_result.candidate_count,
+        glossary_candidates=glossary_candidate_count,
         provider=provider_type,
     )
     return InitResult(
-        project_name=project_name,
+        project_name=resolved_project_name,
         project_toml=project_toml,
         database_path=db_path,
         chapter_count=chapter_count,
         segment_count=segment_count,
-        glossary_candidate_count=glossary_result.candidate_count,
-        glossary_candidate_path=glossary_result.candidate_path,
+        glossary_candidate_count=glossary_candidate_count,
+        glossary_candidate_path=glossary_candidate_path,
     )
 
 
