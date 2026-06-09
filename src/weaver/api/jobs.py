@@ -362,7 +362,6 @@ class TranslationJob:
         try:
             self.result = self.runner(self.should_cancel, self.on_progress)
         except Exception as exc:  # noqa: BLE001 - web boundary; surfaced, not swallowed
-            self.status = "failed"
             self.error = str(exc)
             terminal_data = {"message": str(exc)}
             if self.storage is not None:
@@ -377,12 +376,13 @@ class TranslationJob:
                 if self.storage
                 else None
             )
+            self.status = "failed"
             envelope: dict[str, Any] = {"event": "error", "data": terminal_data}
             if event_id is not None:
                 envelope["id"] = event_id
             self.queue.put(envelope)
         else:
-            self.status = "cancelled" if self.should_cancel() else "done"
+            terminal_status = "cancelled" if self.should_cancel() else "done"
             result = self.result
             terminal_data = {
                 "selected": result.selected,
@@ -402,13 +402,16 @@ class TranslationJob:
                     total_units=self.progress.total,
                     force=True,
                 )
-                self.storage.finish(status=self.status, result=terminal_data, error_summary=None)
+                self.storage.finish(
+                    status=terminal_status, result=terminal_data, error_summary=None
+                )
             event_id = (
-                self.storage.append_event(event=self.status, data=terminal_data)
+                self.storage.append_event(event=terminal_status, data=terminal_data)
                 if self.storage
                 else None
             )
-            envelope = {"event": self.status, "data": terminal_data}
+            self.status = terminal_status
+            envelope = {"event": terminal_status, "data": terminal_data}
             if event_id is not None:
                 envelope["id"] = event_id
             self.queue.put(envelope)
