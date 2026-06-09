@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Weaver</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: grid;
+        place-items: center;
+        font-family: system-ui, "Segoe UI", sans-serif;
+        background: #0e1116;
+        color: #e6e9ef;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .panel { text-align: center; }
+      .spinner {
+        width: 34px;
+        height: 34px;
+        margin: 0 auto 18px;
+        border: 3px solid #2a3140;
+        border-top-color: #6ea8fe;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) {
+        .spinner { animation: none; border-top-color: #6ea8fe; }
+      }
+      .title { font-size: 15px; font-weight: 600; letter-spacing: 0.2px; }
+      .sub { margin-top: 6px; font-size: 12px; color: #8a93a3; }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <div class="spinner" aria-hidden="true"></div>
+      <div class="title">Starting Weaver…</div>
+      <div class="sub">Launching the local cockpit</div>
+    </div>
+  </body>
+</html>

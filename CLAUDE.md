@@ -2,7 +2,7 @@
 
 Offline-capable, glossary-aware **JP→EN** light-novel translation workbench with a **CLI** and local **web cockpit** (web-cockpit-first development). **Not:** SaaS, consumer product, hosted service, complex SPA.
 
-> **Status (2026-06-09):** v0.7.0 stable · Sprints A–M complete · **Active: Sprint N** (Tauri Shell Alpha) · strict next **N → P → O → Q** — `N → O` is **forbidden**; **WV-001 + WV-002 gate Sprint O** · Last gate: **1043 tests / 4 skipped**, pyright 0 (CI), ruff + format clean, clean wheel build · Roadmap of record: [.docs/audit/ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md); Sprint P execution: [.docs/audit/SPRINT_P_EXECUTION.md](.docs/audit/SPRINT_P_EXECUTION.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
+> **Status (2026-06-09):** v0.7.0 stable · Sprints A–M complete · **Active: Sprint N** (Tauri Shell Alpha — 🟡 `desktop/` scaffold complete, build/runtime validation pending Rust+MSVC toolchain) · strict next **N → P → O → Q** — `N → O` is **forbidden**; **WV-001 + WV-002 gate Sprint O** · Last gate: **1043 tests / 4 skipped**, pyright 0 (CI), ruff + format clean, clean wheel build · Roadmap of record: [.docs/audit/ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md); Sprint P execution: [.docs/audit/SPRINT_P_EXECUTION.md](.docs/audit/SPRINT_P_EXECUTION.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
 
 ---
 
@@ -93,8 +93,8 @@ Before starting any phase or stage:
 
 **Sprint N — in scope (packaging-only, no UI rewrite):**
 - Minimal Tauri workspace in `desktop/` (isolated subtree, not a Python dependency).
-- Sidecar lifecycle: start `weaver serve --env desktop --host 127.0.0.1 --port 0` → poll `/healthz` → open WebView → send `X-Weaver-Session` → graceful shutdown (SIGTERM→5s→SIGKILL).
-- Pipe sidecar logs to `logs_dir/runtime.log`; crash screen on backend-start failure.
+- Sidecar lifecycle: start `weaver serve --host 127.0.0.1 --port <free> --no-browser` with `WEAVER_ENV=desktop` (env var — there is no `--env` flag) → poll `/healthz` → open WebView → inject `X-Weaver-Session` on every request → graceful shutdown (Windows: `taskkill /T`→5s→`/F`).
+- Cockpit writes its own `logs_dir/runtime.log`; host tees the sidecar console to `logs_dir/sidecar.console.log` (a second writer on the cockpit's rotating `runtime.log` is unsafe on Windows). Crash screen on backend-start failure.
 - `WEAVER_ENV=desktop` security baseline already in place from Sprint G.
 
 **Sprint P — Workflow Coherence (queued; the audit's P0/P1 fixes):**
@@ -117,12 +117,14 @@ Before starting any phase or stage:
 
 **Sprint N exit criteria** (Tauri shell alpha):
 
-- [ ] N1 — Double-click launch starts backend + UI within 5 s on the maintainer's machine.
-- [ ] N2 — `/healthz` polled before the window opens.
-- [ ] N3 — Window close kills the sidecar; no orphan `weaver` process in the OS process list.
-- [ ] N4 — Backend failure surfaces a readable crash screen; sidecar logs land in `logs_dir/runtime.log`.
-- [ ] N5 — No external browser dependency; **template diff = 0** vs Sprint M end (no UI rewrite).
-- [ ] N6 — Gate green: full suite, pyright 0, ruff + format clean, clean wheel build.
+> **Gate N status: 🟡 PARTIAL — scaffold complete, runtime validation pending Rust+MSVC toolchain.** Code path is written in `desktop/`; N1–N4 cannot be verified until the toolchain is installed and `cargo tauri dev` runs.
+
+- [ ] N1 — Double-click launch starts backend + UI within 5 s on the maintainer's machine. *(pending toolchain)*
+- [ ] N2 — `/healthz` polled before the window opens. *(coded: `desktop/src/lib.rs` `boot` polls before `open_cockpit`; pending runtime proof)*
+- [ ] N3 — Window close kills the sidecar; no orphan `weaver` process in the OS process list. *(coded: `Sidecar::shutdown` taskkill `/T`→`/F`; pending runtime proof)*
+- [ ] N4 — Backend failure surfaces a readable crash screen; cockpit `runtime.log` + host `sidecar.console.log` land in `logs_dir`. *(coded: `show_crash` + `spawn_tee`; pending runtime proof)*
+- [x] N5 — No external browser dependency; **template diff = 0** vs Sprint M end (no UI rewrite). *(verified: 0 `src/weaver` changes; WebView only.)*
+- [x] N6 — Gate green: full suite **1043 / 4 skipped**. *(pyright/ruff/wheel re-run at PR time; no Python touched.)*
 
 **Sprint P exit criteria** (Workflow Coherence) — full task-level breakdown, build order, reuse map, and per-item acceptance in [.docs/audit/SPRINT_P_EXECUTION.md](.docs/audit/SPRINT_P_EXECUTION.md); per-issue acceptance in [.docs/audit/ISSUE_BACKLOG.md](.docs/audit/ISSUE_BACKLOG.md). Final gate: suite/pyright/ruff/wheel + migrations forward+idempotent + no new dependency.
 
@@ -154,7 +156,7 @@ Deep detail per entry lives in git history and linked docs.
 | Sprint L — Candidate Review | — | 1017 / 4 | ✅ Schema + apply + list UI (generation UI → Sprint P) |
 | Sprint M — Image / OCR Gate | `feat/image-ocr-security` (PR #29) | 1043 / 4 | ✅ Preview gate (ADR `012`); OCR contract only |
 | Council Audit + replan | [.docs/audit/](.docs/audit/) | — | ✅ Audit + roadmap (strict N → P → O → Q) |
-| **Sprint N — Tauri Shell Alpha** | `desktop/` | — | ⬜ Active |
+| **Sprint N — Tauri Shell Alpha** | `desktop/` | 1043 / 4 | 🟡 Scaffold complete; build/runtime validation pending Rust+MSVC toolchain (N1–N4 unverified; N5 template-diff=0 ✓, N6 suite green ✓) |
 | Sprint P — Workflow Coherence | [SPRINT_P_EXECUTION](.docs/audit/SPRINT_P_EXECUTION.md) | — | ⬜ Next (after N) |
 | Sprint O — Production Desktop | — | — | ⬜ Blocked: O-gate WV-001 + WV-002 |
 | Sprint Q — Workspace v2 | [ROADMAP_REPLAN](.docs/audit/ROADMAP_REPLAN.md) | — | ⬜ Post-O (high-level only) |

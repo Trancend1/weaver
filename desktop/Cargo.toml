@@ -1,0 +1,60 @@
+[package]
+name = "weaver-desktop"
+version = "0.1.0"
+description = "Weaver desktop shell — Tauri host that runs the FastAPI cockpit as a sidecar."
+authors = ["Weaver maintainers"]
+edition = "2021"
+rust-version = "1.77"
+publish = false
+
+# Sprint N (Tauri Shell Alpha). Packaging-only host: it launches `weaver serve`
+# on loopback, polls /healthz, opens the cockpit in a WebView, injects the
+# session token on every request, and shuts the sidecar down cleanly. No UI
+# rewrite, no installer/signing/auto-update, no JS<->Rust command bridge.
+#
+# This crate lives in an isolated subtree (desktop/) and is NOT a Python
+# dependency. See ../docs/SIDECAR_CONTRACT.md for the runtime contract it binds.
+
+[lib]
+name = "weaver_desktop_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Tiny blocking HTTP client used only for the loopback /healthz boot poll.
+# No TLS feature — the sidecar is plain HTTP on 127.0.0.1.
+ureq = { version = "2", default-features = false }
+# CSPRNG for the X-Weaver-Session token.
+getrandom = "0.2"
+
+# Windows-only: native WebView2 request interception to attach X-Weaver-Session
+# to EVERY request (top-level navigation + HTMX/XHR + subresources).
+#
+# UNVERIFIED VERSION PIN: webview2-com / windows MUST match the exact versions
+# Tauri 2 resolves, or `PlatformWebview::controller()` types will not line up.
+# Before the first build run `cargo tree -p webview2-com -p windows` and pin to
+# whatever `tauri`/`wry` pulled in. The numbers below are a plausible starting
+# point for Tauri 2.x and are expected to be adjusted at first compile.
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.33"
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_WinRT",
+] }
+
+[features]
+# Production bundles enable Tauri's custom-protocol asset server. Dev does not.
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
