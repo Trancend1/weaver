@@ -41,7 +41,7 @@ def _wait_terminal(client: TestClient, name: str, job_id: str, *, tries: int = 2
     raise AssertionError(msg)
 
 
-def test_snapshot_status_reports_missing_before_first_reparse(
+def test_snapshot_status_is_fresh_after_first_import(
     client_with_projects: TestClient,
 ) -> None:
     name = _project(client_with_projects)
@@ -49,8 +49,8 @@ def test_snapshot_status_reports_missing_before_first_reparse(
 
     body = client_with_projects.get(f"/projects/{name}/volumes/{volume_id}/snapshot").json()
     assert body["volume_id"] == volume_id
-    assert body["state"] == "missing"
-    assert body["source_hash"] is None
+    assert body["state"] == "fresh"
+    assert body["source_hash"]
 
 
 def test_reparse_endpoint_submits_persistent_parse_job(
@@ -89,10 +89,11 @@ def test_snapshot_status_404_for_unknown_volume(client_with_projects: TestClient
 def test_ui_tree_renders_snapshot_controls(client_with_projects: TestClient) -> None:
     name = _project(client_with_projects)
     page = client_with_projects.get(f"/ui/projects/{name}").text
-    assert "Inspect EPUB" in page
-    assert "Reparse EPUB" in page
-    assert "View structure" in page
+    assert "Preview EPUB" in page
+    assert "Inspect status" in page
+    assert "Full structure page" in page
     assert "snapshot-vol-" in page
+    assert "Reparse EPUB" not in page
 
 
 def test_ui_snapshot_partial_swap(client_with_projects: TestClient) -> None:
@@ -100,7 +101,7 @@ def test_ui_snapshot_partial_swap(client_with_projects: TestClient) -> None:
     volume_id = _volume(client_with_projects, name)
     page = client_with_projects.get(f"/ui/projects/{name}/volumes/{volume_id}/snapshot").text
     assert "snapshot-card" in page
-    assert "missing" in page
+    assert "fresh" in page
 
 
 def test_ui_reparse_returns_running_card_with_job_link(
@@ -120,6 +121,18 @@ def test_ui_structure_page_falls_back_when_snapshot_missing(
     volume_id = _volume(client_with_projects, name)
     page = client_with_projects.get(f"/ui/projects/{name}/volumes/{volume_id}/structure").text
     assert "Snapshot missing" in page or "Reparse" in page
+
+
+def test_ui_snapshot_partial_hides_reparse_for_fresh_snapshot(
+    client_with_projects: TestClient,
+) -> None:
+    name = _project(client_with_projects)
+    volume_id = _volume(client_with_projects, name)
+
+    page = client_with_projects.get(f"/ui/projects/{name}/volumes/{volume_id}/snapshot").text
+
+    assert "snapshot-state--fresh" in page
+    assert "Reparse EPUB" not in page
 
 
 def test_ui_structure_page_renders_after_reparse(

@@ -47,10 +47,10 @@ def test_reparse_volume_writes_fresh_snapshot(project_with_volume) -> None:
     assert parsed.metadata.title  # round-trip preserved
 
 
-def test_status_reports_missing_when_never_reparsed(project_with_volume) -> None:
+def test_status_reports_fresh_after_initial_import(project_with_volume) -> None:
     tmp_path, project_toml, _name, _db_path, volume_id = project_with_volume
     status = status_for_volume(project_toml, volume_id, cwd=tmp_path)
-    assert status.state == "missing"
+    assert status.state == "fresh"
 
 
 def test_reparse_volume_rejects_unknown_volume(project_with_volume) -> None:

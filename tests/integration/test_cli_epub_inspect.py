@@ -39,12 +39,13 @@ def test_epub_inspect_help() -> None:
     assert "json" in output
 
 
-def test_epub_inspect_reports_missing_when_never_reparsed(
+def test_epub_inspect_reports_fresh_after_initial_import(
     initialised_project: Path,
 ) -> None:
     result = runner.invoke(app, ["epub-inspect", str(initialised_project), "--volume", "1"])
     assert result.exit_code == 0
-    assert "No snapshot" in result.output
+    assert "EPUB snapshot" in result.output
+    assert "fresh" in result.output
 
 
 def test_epub_inspect_reparses_then_summarises(initialised_project: Path) -> None:
