@@ -216,6 +216,17 @@ def glossary_candidate_action(
 ) -> HTMLResponse:
     """Approve / edit / reject one candidate, then re-render the candidate list."""
     base = _base_dir(request)
+    if action == "translate":
+        return _candidates_fragment(
+            request,
+            name,
+            offset=offset,
+            find=find,
+            error=(
+                "AI glossary target translation is not wired yet. "
+                "No candidate was approved or applied."
+            ),
+        )
     try:
         act_on_candidate(
             _project_toml(request, name),
