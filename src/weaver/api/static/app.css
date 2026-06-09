@@ -816,3 +816,45 @@ textarea:focus-visible,
 .epub-excerpt { border: 1px solid var(--color-line-soft); border-radius: var(--radius-md); padding: var(--space-sm) var(--space-md); margin: var(--space-sm) 0; background: var(--color-canvas); }
 .epub-excerpt__head { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: baseline; margin-bottom: var(--space-xs); }
 .epub-excerpt p { margin: 0; color: var(--color-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--space-lg);
+  background: rgb(15 23 42 / 0.48);
+}
+.modal-panel {
+  width: min(960px, 100%);
+  max-height: min(90vh, 920px);
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  background: var(--color-canvas);
+  box-shadow: 0 24px 70px rgb(15 23 42 / 0.24);
+}
+.modal-panel--wide { width: min(1180px, 100%); }
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-line-soft);
+}
+.modal-actions {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-line-soft);
+}
+.preview-frame {
+  width: 100%;
+  height: min(64vh, 720px);
+  border: 0;
+  background: var(--color-page);
+}
+@media (max-width: 640px) {
+  .modal-backdrop { padding: var(--space-xs); }
+  .modal-head { align-items: flex-start; flex-direction: column; }
+  .preview-frame { height: 68vh; }
+}

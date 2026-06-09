@@ -16,17 +16,35 @@
 
 {% block content %}
 <section class="panel">
+  {% if volume_preview %}
+  <p class="crumbs"><a href="/ui/projects/{{ project_name }}#volume-{{ volume_id }}">Back to project</a> / <span>EPUB preview</span></p>
+  {% else %}
   <p class="crumbs"><a href="/ui">Dashboard</a> / <span>EPUB preview</span></p>
+  {% endif %}
   <h1>EPUB structure preview</h1>
   <p class="meta">Read-only inspection of metadata, reading order, navigation, images, and
     validation readiness. Nothing is imported, translated, or saved.</p>
 
+  {% if volume_preview %}
+  <div class="workflow-note">
+    <strong>Volume snapshot</strong>
+    <span>This structure comes from imported volume {{ volume_id }}. Reparse the volume from the project page to refresh the persisted EPUB snapshot.</span>
+  </div>
+  <div class="toolbar-row modal-actions" aria-label="Volume preview actions">
+    <a class="btn btn--quiet" href="/ui/projects/{{ project_name }}#volume-{{ volume_id }}">Back to volume</a>
+    {% if snapshot_status and snapshot_status.state != "fresh" %}
+    <a class="btn btn--primary" href="/ui/projects/{{ project_name }}#volume-{{ volume_id }}">Next: inspect / reparse</a>
+    {% endif %}
+  </div>
+  <p class="meta">Source reference: <code>{{ source_path }}</code></p>
+  {% else %}
   <form method="get" action="/ui/epub-preview" class="inline-form">
     <label for="source_path">Sandbox source path</label>
     <input id="source_path" name="source_path" value="{{ source_path }}"
       placeholder="relative/path/to/book.epub" />
     <button type="submit">Preview</button>
   </form>
+  {% endif %}
 
   {% if error %}
   <p class="error" role="alert">{{ error }}</p>
@@ -167,7 +185,7 @@
           <td class="cell-clip"><code>{{ image.href }}</code></td>
           <td>
             {% if image.preview_url %}
-            <a class="btn btn--quiet" href="{{ image.preview_url }}" target="_blank" rel="noopener">Preview image</a>
+            <a class="btn btn--quiet" href="{{ image.preview_url }}" target="_blank" rel="noopener" title="Open the extracted image preview in a new tab">Preview image</a>
             {% elif image.preview_available %}
             <span class="meta">preview metadata only</span>
             {% else %}

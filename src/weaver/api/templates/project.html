@@ -27,9 +27,11 @@
   {% include "partials/_tree.html" %}
 </section>
 
-<section class="panel c-panel">
-  <h2>Import a volume</h2>
-  <p class="meta">Add another source (.epub/.txt/.html) as a new volume. The tree above refreshes on success.</p>
+<div id="modal-root"></div>
+
+<section class="panel c-panel" id="import-volume">
+  <h2>Import volume</h2>
+  <p class="meta">A Project is the workspace. Each EPUB/TXT/HTML file you add becomes a Volume inside it.</p>
 
   <div class="error" id="import_error" hidden></div>
 

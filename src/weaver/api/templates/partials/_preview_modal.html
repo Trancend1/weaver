@@ -1,0 +1,27 @@
+<div class="modal-backdrop" id="preview-modal" role="dialog" aria-modal="true" aria-labelledby="preview-modal-title">
+  <section class="modal-panel modal-panel--wide">
+    <header class="modal-head">
+      <div>
+        <p class="crumbs"><a href="/ui/projects/{{ name }}#volume-{{ volume_id }}">Project</a> / {{ volume_title or "Volume " ~ volume_id }}</p>
+        <h2 id="preview-modal-title">EPUB structure preview</h2>
+        <p class="meta">Snapshot status: <strong>{{ snapshot_status.state }}</strong>. Inspect EPUB structure and images without leaving the project workflow.</p>
+      </div>
+      <button type="button" class="btn btn--quiet" hx-get="/ui/empty" hx-target="#modal-root" hx-swap="innerHTML" aria-label="Close preview">Close</button>
+    </header>
+    <div class="modal-actions toolbar-row" aria-label="Preview navigation">
+      <a class="btn btn--quiet" href="/ui/projects/{{ name }}#volume-{{ volume_id }}">Back to volume</a>
+      <a class="btn btn--quiet" href="/ui/projects/{{ name }}/volumes/{{ volume_id }}/structure">Open full page</a>
+      {% if snapshot_status.state != "fresh" %}
+      <button type="button" class="btn btn--primary"
+              hx-post="/ui/projects/{{ name }}/volumes/{{ volume_id }}/reparse"
+              hx-target="#snapshot-vol-{{ volume_id }}" hx-swap="outerHTML"
+              hx-confirm="Reparse this source EPUB and refresh the snapshot?">Next: reparse snapshot</button>
+      {% elif first_chapter %}
+      <a class="btn btn--primary" href="/ui/projects/{{ name }}/chapters/{{ first_chapter.id }}">Next: open workspace</a>
+      {% else %}
+      <a class="btn btn--primary" href="/ui/projects/{{ name }}#import-volume">Next: import volume</a>
+      {% endif %}
+    </div>
+    <iframe class="preview-frame" src="/ui/projects/{{ name }}/volumes/{{ volume_id }}/structure" title="EPUB structure preview for volume {{ volume_id }}"></iframe>
+  </section>
+</div>
