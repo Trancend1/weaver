@@ -195,7 +195,7 @@ pip install 'weaver[all]'     # all of the above
 the browser. `serve` runs the **FastAPI cockpit** (UI + JSON API); `weaver
 serve-api` runs the same FastAPI app headless.
 It binds **`127.0.0.1` only** (no remote access, no authentication —
-see [docs/COCKPIT_WORKFLOW.md](docs/COCKPIT_WORKFLOW.md) and ADR `004`), defaults to port `8765`, and discovers every project under
+see [docs/WEB_WORKFLOW.md](docs/WEB_WORKFLOW.md) and ADR `004`), defaults to port `8765`, and discovers every project under
 `--books-dir` (default: current directory) so you never type a project path.
 API keys are read from environment variables only — never entered, written to
 disk, or rendered in the UI.

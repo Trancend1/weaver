@@ -88,7 +88,7 @@ def run_dashboard(project_toml: Path, *, no_color: bool = False) -> None:
         def action_refresh(self) -> None:
             self._load()
 
-        def action_quit(self) -> None:
+        async def action_quit(self) -> None:
             self.exit()
 
     WeaverDashboardApp(project_toml).run()

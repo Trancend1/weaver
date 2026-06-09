@@ -194,6 +194,6 @@ Adding a new contract guarantee requires both updating this document **and** lan
 ## 10. Cross-references
 
 - [CLAUDE.md §1](../CLAUDE.md) — doc map.
-- [`docs/SPRINT_G_RUNTIME_AUDIT.md`](SPRINT_G_RUNTIME_AUDIT.md) — the read-only audit that motivated each Sprint G stage.
-- [`docs/weaver_next_plan.md`](weaver_next_plan.md) Sprint N — describes how the Tauri shell will *consume* this contract.
+- The read-only Sprint G runtime audit that motivated each stage is in **git history**.
+- [.docs/audit/ROADMAP_REPLAN.md](../.docs/audit/ROADMAP_REPLAN.md) Sprint N — describes how the Tauri shell will *consume* this contract.
 - ADR [`009`](decisions/009-htmx-first-fastapi-stable-tauri-sidecar-ready.md), [`010`](decisions/010-persistent-job-core-sqlite-in-process.md), [`011`](decisions/011-project-terminology-consolidation.md).

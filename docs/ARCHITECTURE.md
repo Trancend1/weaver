@@ -63,7 +63,7 @@ Per-project on-disk layout:
 └── output/{markdown,epub}/
 ```
 
-## Not yet in the model (MVP gaps → ADR 003 / MVP_SCOPE.md)
+## Not yet in the model (MVP gaps → ADR 003; live gap list: [.docs/audit/ISSUE_BACKLOG.md](../.docs/audit/ISSUE_BACKLOG.md))
 
 - **Merged-omnibus single EPUB for novel scope** — per-volume EPUB/TXT/HTML/DOCX export (`services/export_book.py`) + a combined **ZIP bundle** (`services/export_bundle.py`) + FastAPI export endpoints + the export UI all ship; merging a novel's volumes into one EPUB is deferred.
 
@@ -92,3 +92,14 @@ production import/export path:
 - OCR/vision extraction is not implemented; future OCR must be adapter-based and
   separately approved if it adds dependencies, providers, credentials, or image
   output behavior.
+
+## Cockpit UI conventions
+
+The server-rendered cockpit (`api/`) follows a small set of fixed conventions (absorbed from the former `DESIGN_NOTES.md`). Forward UI work (Sprint P) must hold these:
+
+- **Stack constraints:** Jinja2 + HTMX, no SPA/client framework/build step; no web fonts (system UI stack only); no backend logic in templates (routes call `services/*`, templates only present); motion ≤140 ms with `prefers-reduced-motion` honored.
+- **Design tokens — single source:** `api/static/app.css` `:root` (color/type-scale/spacing/radius/shadow/layout/z-index). No magic numbers in templates.
+- **Layout modes (URL-dispatched in `api/ui_context.py`):** `global` (`/ui`, `/ui/new`, `/ui/config` — topbar only), `project` (project/glossary/characters/memory/quality — topbar + 264px sidebar), `workspace` (chapter editor — topbar + 56px icon rail). (The audit's [PAGE_LAYOUT_BLUEPRINT](../.docs/audit/PAGE_LAYOUT_BLUEPRINT.md) targets a unified global Workspace sidebar in Sprint P+.)
+- **Do not rename/remove these HTMX hooks** (swaps + UI tests depend on them): `#tree`, `#ws-grid`, `#job-panel`, `#export-panel`, `#browser`, `#selected_source`, `#source_path`, `#qa-badge-status`, `#qa-issues`, `id="seg-{id}"`, and the `qa-badge-vol-*` / `qa-badge-ch-*` slots.
+- **States & a11y:** hover / `:active` / `:focus-visible` / `:disabled` defined; empty (`_empty_state.html`), error (`.error role="alert"`), loading (HTMX indicator + native `<progress>`); no toasts/`alert()`; semantic HTML; `aria-current` on active nav; breadcrumb via `_page_header.html` on every page incl. 404/error.
+- **UI copy/structure is pinned by tests:** `tests/unit/api/test_ui_shell.py`, `test_ui_layout.py`, `test_ui_qa.py`, `test_ui_delete.py`. Update them when intentionally changing user-facing strings or layout markers.
