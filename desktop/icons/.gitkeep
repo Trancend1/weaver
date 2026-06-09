@@ -1,0 +1,6 @@
+# Tauri bundle icons go here. Generate them before the first packaged build:
+#
+#   cargo tauri icon path/to/weaver-logo.png
+#
+# Dev runs (`cargo tauri dev`) do not require these files; `tauri build`
+# (Sprint O) does. `bundle.active` is false in tauri.conf.json until then.

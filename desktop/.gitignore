@@ -1,0 +1,12 @@
+# Rust / Cargo
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Tauri generated
+/gen/
+
+# The repo-root .gitignore ignores `dist/`, but desktop/dist holds the Tauri
+# frontendDist assets (loading + crash screens) that MUST be committed.
+!dist/
+!dist/**
