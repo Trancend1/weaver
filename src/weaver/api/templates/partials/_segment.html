@@ -29,10 +29,16 @@
         <button type="button" class="link-btn"
                 hx-get="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/history"
                 hx-target="#seg-{{ seg.id }}-history" hx-swap="innerHTML">History</button>
+        <button type="button" class="link-btn"
+                hx-post="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/candidates/generate"
+                hx-target="#seg-{{ seg.id }}-candidates" hx-swap="innerHTML"
+                hx-indicator="#seg-{{ seg.id }}-gen-loader" hx-disabled-elt="this">Generate candidate</button>
         <a class="link-btn" href="/ui/projects/{{ name }}/candidates?chapter_id={{ chapter_id }}&segment_id={{ seg.id }}">Review candidates</a>
         <span class="htmx-indicator calm-loader calm-loader--small" role="status">Saving</span>
+        <span class="htmx-indicator calm-loader calm-loader--small" id="seg-{{ seg.id }}-gen-loader" role="status">Generating…</span>
       </div>
     </form>
     <div class="seg-history" id="seg-{{ seg.id }}-history"></div>
+    <div class="seg-candidates" id="seg-{{ seg.id }}-candidates"></div>
   </div>
 </div>

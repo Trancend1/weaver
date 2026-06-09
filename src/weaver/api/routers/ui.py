@@ -13,6 +13,7 @@ ships on ``weaver serve-api`` alongside the JSON API (Flask removed in Sprint 13
 from __future__ import annotations
 
 from contextlib import closing
+from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -996,6 +997,44 @@ def ui_candidate_apply(name: str, candidate_id: str, request: Request) -> HTMLRe
     with suppress(HTTPException):
         apply_candidate_endpoint(name, candidate_id, request)
     return ui_candidates_rerender_card(request, name, candidate_id)
+
+
+@router.post(
+    "/ui/projects/{name}/chapters/{chapter_id}/segments/{segment_id}/candidates/generate",
+    response_class=HTMLResponse,
+)
+def ui_candidate_generate(
+    name: str, chapter_id: str, segment_id: str, request: Request
+) -> HTMLResponse:
+    """Generate one AI candidate for a segment (HTMX); render the new card.
+
+    Thin adapter over ``generate_candidate``: the service stores a ``pending``
+    candidate grounded in glossary/character/chapter context and **never**
+    mutates the live translation. A provider call that fails mid-translate is
+    captured by the service as an empty candidate (rendered as a failed card);
+    an unavailable provider or a bad segment raises a ``WeaverError``, which we
+    surface as a safe inline fragment — never a 500.
+    """
+    from weaver.services.candidate_generation import generate_candidate
+
+    project_toml = _resolve_project_toml(request, name)
+    try:
+        record = generate_candidate(
+            project_toml,
+            chapter_id,
+            segment_id,
+            cwd=_base_dir(request),
+        )
+    except WeaverError as exc:
+        return HTMLResponse(
+            f'<div class="error" role="alert">Could not generate a candidate: '
+            f"{escape(str(exc))}</div>"
+        )
+    return templates.TemplateResponse(
+        request,
+        "partials/_candidates_list.html",
+        {"candidates": [_candidate_to_ui_json(record)], "total_count": 1, "name": name},
+    )
 
 
 def ui_candidates_rerender_card(request: Request, name: str, candidate_id: str) -> HTMLResponse:
