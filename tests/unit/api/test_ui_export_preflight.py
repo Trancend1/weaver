@@ -88,7 +88,7 @@ def test_preflight_clean_state(client: TestClient) -> None:
     assert 'id="export-panel"' in body
     # the action still posts to the real export route
     assert 'hx-post="/ui/projects/clean/export"' in body
-    assert ">Export<" in body  # clean → plain "Export"
+    assert "Export clean artifact" in body
 
 
 def test_preflight_warning_state(client: TestClient) -> None:
@@ -100,7 +100,7 @@ def test_preflight_warning_state(client: TestClient) -> None:
     assert "failed / stale" in body
     assert "Review the quality report" in body
     assert "/ui/projects/issues/qa" in body
-    assert "Export anyway" in body
+    assert "Export with advisories" in body
     assert 'hx-post="/ui/projects/issues/export"' in body
 
 
