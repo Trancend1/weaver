@@ -1124,6 +1124,37 @@ def ui_drafts_list(name: str, request: Request) -> HTMLResponse:
     )
 
 
+@router.post("/ui/projects/{name}/drafts/generate", response_class=HTMLResponse)
+def ui_draft_generate(name: str, request: Request, chapter_id: str = Form(...)) -> HTMLResponse:
+    """Generate a character-page draft for a chapter (HTMX); render the card.
+
+    Thin adapter over ``generate_character_draft`` (deterministic XHTML text
+    extraction — no OCR, no provider call). Renders the new draft card, a calm
+    "no character content" notice when the chapter has none, or a safe inline
+    error fragment — never a 500. Non-destructive: a new ``draft`` row is added;
+    existing reviewed drafts are untouched.
+    """
+    from weaver.services.character_draft import generate_character_draft
+
+    project_toml = _resolve_project_toml(request, name)
+    try:
+        draft = generate_character_draft(project_toml, chapter_id, cwd=_base_dir(request))
+    except WeaverError as exc:
+        return HTMLResponse(
+            f'<div class="error" role="alert">Could not generate a draft: {escape(str(exc))}</div>'
+        )
+    if draft is None:
+        return HTMLResponse(
+            '<div class="empty empty-state" role="status">No character page content '
+            "detected in this chapter.</div>"
+        )
+    return templates.TemplateResponse(
+        request,
+        "partials/_drafts_list.html",
+        {"drafts": [_draft_to_ui_json(draft)], "total_count": 1, "name": name},
+    )
+
+
 @router.post("/ui/projects/{name}/drafts/{draft_id}/approve", response_class=HTMLResponse)
 def ui_draft_approve(name: str, draft_id: str, request: Request) -> HTMLResponse:
     """Approve a character draft (HTMX). Re-renders the draft card."""
