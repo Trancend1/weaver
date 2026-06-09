@@ -62,7 +62,7 @@ weaver secrets rm MY_API_KEY
 
 At startup `apply_secrets_to_env()` loads the store and sets any key **not already present** in the environment; providers read `os.environ` unchanged. Override the store path with `WEAVER_SECRETS_PATH` (tests/alt setups). In the cockpit, the provider form's key field writes only to the secret store.
 
-Config can also be managed over the FastAPI cockpit: `GET/PATCH /config` (provider/model, project + global scope) and `POST/DELETE /config/secrets/{env_name}` (store keyed by env-var name). Key **values** are accepted only by the secrets `POST` and are **never returned** by any endpoint — responses carry key *presence* and stored *names* only. See [COCKPIT_WORKFLOW.md](COCKPIT_WORKFLOW.md) → "FastAPI provider/secret config API". CLI `secrets` is unchanged.
+Config can also be managed over the FastAPI cockpit: `GET/PATCH /config` (provider/model, project + global scope) and `POST/DELETE /config/secrets/{env_name}` (store keyed by env-var name). Key **values** are accepted only by the secrets `POST` and are **never returned** by any endpoint — responses carry key *presence* and stored *names* only. See [WEB_WORKFLOW.md](WEB_WORKFLOW.md) → "FastAPI provider/secret config API". CLI `secrets` is unchanged.
 
 ## Adding a provider type
 

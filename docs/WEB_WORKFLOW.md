@@ -323,5 +323,5 @@ Project-scoped data that feeds the prompt and reuse layer. Each router is a thin
 - No long-running translation inside a request handler — it runs behind the job/progress boundary (`job_manager`).
 - The FastAPI migration must preserve every behavior above and keep Pydantic at the boundary only.
 
-## Not yet in the cockpit (MVP gaps → [MVP_SCOPE.md](MVP_SCOPE.md))
+## Not yet in the cockpit (live gap list → [.docs/audit/ISSUE_BACKLOG.md](../.docs/audit/ISSUE_BACKLOG.md))
 Novel/Volume/Chapter navigation, TXT/HTML import, two-column workspace with auto-save/revisions, character DB UI, translation-memory UI, batch monitor **UI** (the batch API exists — Sprint 7). A *merged-omnibus* single EPUB (one EPUB spanning all volumes) is deferred; EPUB/TXT/HTML/DOCX per-volume export and a combined **ZIP bundle** both ship.

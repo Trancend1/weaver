@@ -1,6 +1,6 @@
 # Maintenance
 
-How to keep the repo clean, validated, and reviewable. Coding rules: [ENGINEERING_STANDARDS.md](ENGINEERING_STANDARDS.md). Boundaries: [ADR 002](decisions/002-cli-web-boundary-and-maintenance-structure.md).
+How to keep the repo clean, validated, and reviewable. Coding rules: [CLAUDE.md §4.2](../CLAUDE.md). Boundaries: [ADR 002](decisions/002-cli-web-boundary-and-maintenance-structure.md).
 
 ## Cleanup rules
 - Inventory before delete; classify (active / legacy / dead / generated) before touching.
@@ -12,7 +12,7 @@ How to keep the repo clean, validated, and reviewable. Coding rules: [ENGINEERIN
 ## Docs update rules
 - Docs are the spec; code follows docs. If code contradicts a doc, fix the doc or ask — don't silently diverge.
 - Active docs must match the current codebase. Mark unbuilt features **(planned)**; never describe an MVP gap as if it exists.
-- When you add/move/remove a doc, update [docs/README.md](README.md), [DECISIONS.md](DECISIONS.md), and the [CLAUDE.md §1](../CLAUDE.md) map. No dangling links.
+- When you add/move/remove a doc, update [DECISIONS.md](DECISIONS.md) and the [CLAUDE.md §1](../CLAUDE.md) doc map. No dangling links.
 - New architectural decision → new ADR that supersedes the old one explicitly.
 
 ## Testing rules

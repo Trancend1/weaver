@@ -108,7 +108,7 @@ Local-only logging:
 
 - Logs written to `.weaver/<project>/logs/weaver-{date}.log`.
 - Rotation: daily file; retention 30 days.
-- Log levels per `ENGINEERING_STANDARDS.md`.
+- Log levels per [CLAUDE.md §4.2](../CLAUDE.md).
 - No outbound log transmission. No Sentry, no telemetry by default.
 - Optional anonymous telemetry post-MVP-1 with explicit opt-in.
 
@@ -323,7 +323,7 @@ Scenarios where users hit unexpected costs:
 
 - Pre-release: run `pip-audit`, `safety` on dependencies.
 - Quarterly: review of CVEs in dependency tree.
-- On any contribution that touches I/O: explicit security review per PR checklist in `ENGINEERING_STANDARDS.md`.
+- On any contribution that touches I/O: explicit security review per the PR checklist in [CLAUDE.md §4.2](../CLAUDE.md).
 
 ## Things Not Worth Doing Yet
 
