@@ -4,6 +4,7 @@
     {% if report is not none %}<span class="badge c-badge {{ badge_class }}">{{ badge_label }}</span>{% endif %}
     <span class="meta">target: {{ target }}{% if bundle %} · bundle ZIP{% endif %}</span>
   </div>
+  <p class="meta export-confidence">Fidelity confidence comes from EPUB snapshot status plus QA advisories. Export only writes after this explicit confirmation.</p>
 
   {% if snapshot_advisories %}
   <div class="snapshot-advisories">
@@ -41,6 +42,7 @@
         hx-target="#export-panel" hx-swap="outerHTML" class="inline-form form-row">
     <input type="hidden" name="target" value="{{ target }}">
     <input type="hidden" name="bundle" value="{{ 'true' if bundle else 'false' }}">
-    <button type="submit">{% if report is not none and report.total_issues == 0 %}Export{% else %}Export anyway{% endif %}</button>
+    <button type="submit">{% if report is not none and report.total_issues == 0 %}Export clean artifact{% else %}Export with advisories{% endif %}</button>
+    <span class="htmx-indicator calm-loader calm-loader--small" role="status">Writing export</span>
   </form>
 </div>

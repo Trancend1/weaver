@@ -12,6 +12,7 @@
 {% set _path = request.url.path if request else "" %}
 {% set _mode = layout_mode|default("global") %}
 <body class="layout layout--{{ _mode }}">
+  <a class="skip-link" href="#content">Skip to content</a>
   <header class="topbar">
     <a class="brand" href="/ui" aria-label="Weaver home">
       <span class="brand__mark" aria-hidden="true">{{ icon("brand") }}</span>

@@ -2,19 +2,50 @@
 {% block title %}{{ ws.chapter_title or "Chapter" }} · {{ ws.project_name }} · Weaver{% endblock %}
 {% block content %}
 <section class="panel c-panel workspace-panel">
-  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ ws.project_name, "label": ws.project_name}, {"href": none, "label": ws.volume_title}, {"href": none, "label": ws.chapter_title or "Chapter"}] %}
+  {% set counts = namespace(manual=0, pending=0, failed=0, stale=0, reusable=0) %}
+  {% for seg in ws.segments %}
+    {% if seg.status == "manual" %}{% set counts.manual = counts.manual + 1 %}{% endif %}
+    {% if seg.status == "pending" %}{% set counts.pending = counts.pending + 1 %}{% endif %}
+    {% if seg.status == "failed" %}{% set counts.failed = counts.failed + 1 %}{% endif %}
+    {% if seg.status == "stale" %}{% set counts.stale = counts.stale + 1 %}{% endif %}
+    {% if seg.status in ("reused", "tm", "memory") %}{% set counts.reusable = counts.reusable + 1 %}{% endif %}
+  {% endfor %}
+  {% set workflow_done = ws.translated_count + counts.manual %}
+  {% set progress_pct = (workflow_done * 100 / ws.segment_count) if ws.segment_count else 0 %}
+  {% set page_crumbs = [{"href":"/ui/projects/" ~ ws.project_name, "label": ws.project_name}, {"href": none, "label": ws.volume_title}, {"href": none, "label": ws.chapter_title or "Chapter"}] %}
   {% set page_title = ws.chapter_title or "Chapter" %}
-  {% set page_meta %}{{ ws.segment_count }} segments · {{ ws.translated_count }} translated · <a href="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/qa">Quality report</a>{% endset %}
+  {% set page_meta %}{{ ws.segment_count }} segments · {{ workflow_done }} ready · {{ counts.pending }} pending{% endset %}
+  {% set page_actions %}
+    <a class="btn btn--secondary" href="/ui/projects/{{ ws.project_name }}">Back to project</a>
+    <a class="btn btn--secondary" href="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/qa">Chapter QA</a>
+    <a class="btn btn--secondary" href="/ui/projects/{{ ws.project_name }}/candidates">Candidates</a>
+    <a class="btn btn--secondary" href="/ui/projects/{{ ws.project_name }}/export/preflight">Export / preflight</a>
+  {% endset %}
   {% include "partials/_page_header.html" %}
 
+  <div class="workspace-progress" aria-label="Chapter progress">
+    <div class="workspace-progress__bar"><span style="width: {{ '%.1f'|format(progress_pct) }}%"></span></div>
+    <p>{{ '%.0f'|format(progress_pct) }}% ready · manual edits are protected unless force retranslate is chosen.</p>
+  </div>
+
+  <div class="workspace-summary" aria-label="Workspace status summary">
+    <span><b>{{ ws.segment_count }}</b>Total</span>
+    <span><b>{{ ws.translated_count }}</b>AI translated</span>
+    <span><b>{{ counts.manual }}</b>Manual</span>
+    <span><b>{{ counts.pending }}</b>Pending</span>
+    <span><b>{{ counts.failed + counts.stale }}</b>Failed/stale</span>
+  </div>
+
   <div class="workspace-actions">
-    <p class="hint workspace-hint"><strong>Translate</strong> fills in untranslated segments only.
-      <strong>Retranslate</strong> re-runs existing segments under the chosen safety mode —
-      manual edits stay protected unless you pick <em>force</em>.</p>
+    <div class="workflow-note">
+      <strong>Translation mode guide</strong>
+      <span><b>Translate</b> fills empty segments. <b>Retranslate</b> can refresh machine text while protecting manual edits unless you choose force.</span>
+    </div>
     <div class="job-controls">
       <form hx-post="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/translate"
             hx-target="#job-panel" hx-swap="outerHTML" class="inline-form form-row">
-        <button type="submit">Translate untranslated</button>
+        <button type="submit">Translate untranslated / empty segments</button>
+        <span class="htmx-indicator calm-loader" role="status">Starting translation</span>
       </form>
       <form hx-post="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/retranslate"
             hx-target="#job-panel" hx-swap="outerHTML" class="inline-form form-row">
@@ -25,9 +56,20 @@
             <option value="force_selected">force (overwrite manual)</option>
           </select>
         </label>
-        <button type="submit">Run</button>
+        <button type="submit">Run retranslate</button>
+        <span class="htmx-indicator calm-loader" role="status">Preparing job</span>
       </form>
     </div>
+  </div>
+  <div class="workspace-tools" aria-label="Workspace utilities">
+    <button type="button" data-ws-filter="all">Show all</button>
+    <button type="button" data-ws-filter="pending">Pending</button>
+    <button type="button" data-ws-filter="manual">Manual</button>
+    <button type="button" data-ws-filter="failed,stale">Failed/stale</button>
+    <button type="button" data-ws-jump="pending">Next untranslated</button>
+    <button type="button" data-ws-jump="failed,stale">Next failed/stale</button>
+    <button type="button" data-ws-collapse="translated">Collapse translated</button>
+    <span class="shortcut-hint">Shortcuts: Alt+J next pending · Ctrl/⌘+S save focused segment</span>
   </div>
   {% set name = ws.project_name %}
   {% set chapter_id = ws.chapter_id %}
@@ -61,12 +103,55 @@
       htmx.ajax("GET", "/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/running-job", { target: "#job-panel", swap: "outerHTML" });
     }
   }
+  function rows() { return Array.from(document.querySelectorAll(".ws-seg")); }
+  function statusList(value) { return (value || "").split(",").map(s => s.trim()).filter(Boolean); }
+  function setFilter(value) {
+    const wanted = statusList(value);
+    rows().forEach(function (seg) {
+      const show = value === "all" || wanted.includes(seg.dataset.status);
+      seg.classList.toggle("is-filter-hidden", !show);
+    });
+  }
+  function jumpTo(value) {
+    const wanted = statusList(value);
+    const match = rows().find(seg => wanted.includes(seg.dataset.status) && !seg.classList.contains("is-filter-hidden"));
+    if (!match) return;
+    match.scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    const input = match.querySelector("textarea, button, a");
+    if (input) input.focus({ preventScroll: true });
+  }
+  function saveFocused() {
+    const input = document.activeElement && document.activeElement.closest ? document.activeElement.closest(".segment-form") : null;
+    if (input && input.requestSubmit) input.requestSubmit();
+  }
   document.addEventListener("input", function (e) {
     const t = e.target;
     if (!t.classList || !t.classList.contains("seg-input")) return;
     const seg = t.closest(".ws-seg");
     if (seg) { (t.value !== t.defaultValue) ? dirty.add(seg.id) : dirty.delete(seg.id); }
     grow(t);
+  });
+  document.addEventListener("click", function (e) {
+    const button = e.target.closest("button");
+    if (!button) return;
+    if (button.dataset.wsFilter) setFilter(button.dataset.wsFilter);
+    if (button.dataset.wsJump) jumpTo(button.dataset.wsJump);
+    if (button.dataset.wsCollapse) document.body.classList.toggle("ws-collapse-translated");
+    if (button.dataset.copyTarget) {
+      const target = document.querySelector(button.dataset.copyTarget);
+      if (target && navigator.clipboard) navigator.clipboard.writeText(target.value || target.textContent || "");
+    }
+    if (button.dataset.clearTarget) {
+      const target = document.querySelector(button.dataset.clearTarget);
+      if (target && target.value !== target.defaultValue && confirm("Clear unsaved translation text for this segment?")) {
+        target.value = target.defaultValue;
+        target.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.altKey && e.key.toLowerCase() === "j") { e.preventDefault(); jumpTo("pending"); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); saveFocused(); }
   });
   document.body.addEventListener("htmx:afterSwap", function (e) {
     const el = e.target;

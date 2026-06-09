@@ -1,22 +1,36 @@
-<div class="ws-seg segment-row" id="seg-{{ seg.id }}"{% if oob_segment %} hx-swap-oob="outerHTML"{% endif %}>
+{% set source_id = "seg-" ~ seg.id ~ "-source" %}
+{% set input_id = "seg-" ~ seg.id ~ "-translation" %}
+{% set status_label = "Manual source of truth" if seg.status == "manual" else "Provider translation" if seg.status == "translated" else "Needs translation" if seg.status == "pending" else "Needs attention" if seg.status in ("failed", "stale") else "Translation memory reuse" if seg.status in ("reused", "tm", "memory") else seg.status %}
+<div class="ws-seg segment-row segment-row--{{ seg.status }}" id="seg-{{ seg.id }}" data-status="{{ seg.status }}"{% if oob_segment %} hx-swap-oob="outerHTML"{% endif %}>
   <div class="ws-src segment-cell segment-cell--source">
-    <span class="seg-kind">{{ seg.kind }}</span>
-    <p class="seg-source">{{ seg.source_text }}</p>
+    <div class="seg-topline">
+      <span class="seg-kind">{{ seg.kind }}</span>
+      <span class="seg-order">#{{ seg.block_order }}</span>
+    </div>
+    <p class="seg-source" id="{{ source_id }}" lang="ja">{{ seg.source_text }}</p>
+    <button type="button" class="link-btn seg-copy" data-copy-target="#{{ source_id }}">Copy source</button>
   </div>
   <div class="ws-tx segment-cell segment-cell--translation">
     <form hx-post="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}"
           hx-target="#seg-{{ seg.id }}" hx-swap="outerHTML" class="segment-form">
-      <textarea name="translated_text" rows="3" class="seg-input" aria-label="Translation for segment {{ seg.id }}">{{ seg.translated_text or "" }}</textarea>
+      <div class="seg-statusline">
+        {% set _badge = 'ok' if seg.status in ('manual', 'translated') else 'bad' if seg.status in ('failed', 'stale') else 'info' if seg.status in ('reused', 'tm', 'memory') else '' %}
+        <span class="badge c-badge seg-status seg-status--{{ seg.status }} {{ _badge }}">{{ seg.status }}</span>
+        <span class="seg-protection">{{ status_label }}{% if seg.status == "manual" %}; protected from normal retranslate{% endif %}</span>
+      </div>
+      <label class="sr-only" for="{{ input_id }}">English translation for segment {{ seg.id }}</label>
+      <textarea id="{{ input_id }}" name="translated_text" rows="3" class="seg-input" aria-describedby="seg-{{ seg.id }}-state">{{ seg.translated_text or "" }}</textarea>
       <div class="seg-bar toolbar-row">
-        <button type="submit">Save</button>
-        {% set _badge = 'ok' if seg.status in ('manual', 'translated') else 'bad' if seg.status in ('failed', 'stale') else '' %}
-        <span class="badge c-badge {{ _badge }}">{{ seg.status }}</span>
-        {% if saved %}<span class="saved-note" role="status">Saved ✓</span>{% endif %}
+        <button type="submit">Save manual edit</button>
+        <button type="button" class="link-btn" data-copy-target="#{{ input_id }}">Copy translation</button>
+        <button type="button" class="link-btn danger-link" data-clear-target="#{{ input_id }}">Clear unsaved</button>
+        {% if saved %}<span class="saved-note" id="seg-{{ seg.id }}-state" role="status">Saved</span>{% else %}<span class="meta" id="seg-{{ seg.id }}-state">Unsaved changes stay local until saved.</span>{% endif %}
         {% if error %}<span class="error" role="alert">{{ error }}</span>{% endif %}
         <button type="button" class="link-btn"
                 hx-get="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/history"
                 hx-target="#seg-{{ seg.id }}-history" hx-swap="innerHTML">History</button>
-        <span class="htmx-indicator meta">…</span>
+        <a class="link-btn" href="/ui/projects/{{ name }}/candidates?chapter_id={{ chapter_id }}&segment_id={{ seg.id }}">Review candidates</a>
+        <span class="htmx-indicator calm-loader calm-loader--small" role="status">Saving</span>
       </div>
     </form>
     <div class="seg-history" id="seg-{{ seg.id }}-history"></div>

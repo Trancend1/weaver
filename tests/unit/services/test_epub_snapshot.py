@@ -18,7 +18,7 @@ from weaver.services.epub_snapshot import (
 from weaver.services.project import initialize_project
 from weaver.services.project_paths import resolve_database_path
 from weaver.services.volume import delete_volume_from_project
-from weaver.storage.db import connect_database
+from weaver.storage.db import connect_database, transaction
 
 
 @pytest.fixture
@@ -73,6 +73,9 @@ def test_status_reports_missing_then_fresh_then_stale(project_with_volume) -> No
     _, _, db_path, volume_id, epub_path = project_with_volume
     parsed = parse_epub_structure(epub_path)
     source_hash = compute_source_hash(epub_path)
+
+    with closing(connect_database(db_path)) as connection, transaction(connection):
+        delete_snapshot(connection, volume_id)
 
     missing = snapshot_status(db_path, volume_id=volume_id, expected_source_hash=source_hash)
     assert missing.state == "missing"

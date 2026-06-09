@@ -6,6 +6,10 @@
   {% set page_title = "Quality report · " ~ scope_label %}
   {% set page_meta %}{% if report.scope == "chapter" %}<a href="/ui/projects/{{ name }}/chapters/{{ report.scope_id }}">← Back to workspace</a>{% else %}Read-only checks run before export. Nothing here changes your translations.{% endif %}{% endset %}
   {% include "partials/_page_header.html" %}
+  <div class="workflow-note workflow-note--qa">
+    <strong>Review order</strong>
+    <span>Start with Errors, then Warnings, then Info. QA is advisory; export remains an explicit choice.</span>
+  </div>
   {% include "partials/_qa_summary.html" %}
 </section>
 
@@ -29,8 +33,8 @@
         {% endfor %}
       </select>
     </label>
-    <button type="submit">Apply</button>
-    <span class="htmx-indicator meta">…</span>
+    <button type="submit">Filter issues</button>
+    <span class="htmx-indicator calm-loader calm-loader--small" role="status">Filtering</span>
   </form>
 
   {% include "partials/_qa_issues.html" %}

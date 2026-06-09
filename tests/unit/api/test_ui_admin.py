@@ -80,6 +80,17 @@ def _candidate_ids(client: TestClient, name: str) -> list[int]:
     return [c["id"] for c in body["candidates"]]
 
 
+def test_candidate_actions_are_unambiguous(admin_client: TestClient) -> None:
+    name = _name(admin_client)
+    page = admin_client.get(f"/ui/projects/{name}/glossary/candidates").text
+
+    assert "Approve existing target" in page
+    assert "Edit target" in page
+    assert "Translate target with AI" in page
+    assert "Edit + approve" not in page
+    assert ">Approve</button>" not in page
+
+
 def test_candidate_approve(admin_client: TestClient) -> None:
     name = _name(admin_client)
     ids = _candidate_ids(admin_client, name)
@@ -107,6 +118,22 @@ def test_candidate_edit_then_reject(admin_client: TestClient) -> None:
         f"/ui/projects/{name}/glossary/candidates/{ids[1]}/reject", data={"offset": "0"}
     )
     assert rejected.status_code == 200
+
+
+def test_candidate_ai_translate_skeleton_does_not_approve(admin_client: TestClient) -> None:
+    name = _name(admin_client)
+    ids = _candidate_ids(admin_client, name)
+    if not ids:
+        pytest.skip("fixture produced no glossary candidates")
+
+    response = admin_client.post(
+        f"/ui/projects/{name}/glossary/candidates/{ids[0]}/translate", data={"offset": "0"}
+    )
+
+    assert response.status_code == 200
+    assert "not wired yet" in response.text
+    remaining_ids = _candidate_ids(admin_client, name)
+    assert ids[0] in remaining_ids
 
 
 def test_candidate_unknown_404(admin_client: TestClient) -> None:

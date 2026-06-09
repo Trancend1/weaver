@@ -18,6 +18,8 @@ from weaver.core.config import load_project_config
 from weaver.core.ir import scope_document_to_volume
 from weaver.errors import WeaverError
 from weaver.readers import detect_format, read_source
+from weaver.readers.epub import PARSER_VERSION, parse_epub_structure
+from weaver.services.epub_snapshot import compute_source_hash, store_snapshot
 from weaver.services.glossary import extract_and_store_project_glossary
 from weaver.services.logging_setup import log_runtime_event
 from weaver.storage.db import connect_database, transaction
@@ -99,6 +101,16 @@ def import_volume(
                 connection, project_id=project_id, source_path=str(source_path)
             )
         connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+    if source_format == "epub":
+        parsed = parse_epub_structure(source_path)
+        store_snapshot(
+            db_path,
+            volume_id=volume_id,
+            parsed=parsed,
+            source_hash=compute_source_hash(source_path),
+            parser_version=PARSER_VERSION,
+        )
 
     log_runtime_event(
         "volume.imported",

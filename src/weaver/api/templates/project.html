@@ -10,6 +10,14 @@
     hx-confirm="Delete &quot;{{ tree.project_name }}&quot;? This permanently removes its translations, history, glossary, and exports. The original source file is not affected."
     hx-swap="none">Delete project</button>{% endset %}
   {% include "partials/_page_header.html" %}
+  <ol class="workflow-rail" aria-label="Translation workflow">
+    <li><span>1</span><strong>Import</strong><small>Add volumes</small></li>
+    <li><span>2</span><strong>Inspect</strong><small>EPUB + images</small></li>
+    <li><span>3</span><strong>Translate</strong><small>Chapter workspace</small></li>
+    <li><span>4</span><strong>Review</strong><small>Candidates + glossary</small></li>
+    <li><span>5</span><strong>QA</strong><small>Prioritize issues</small></li>
+    <li><span>6</span><strong>Export</strong><small>Preflight first</small></li>
+  </ol>
   <nav class="subnav" aria-label="Project sections">
     <a href="/ui/projects/{{ tree.project_name }}/qa">Quality</a>
     <a href="/ui/projects/{{ tree.project_name }}/jobs">Jobs</a>
@@ -27,9 +35,11 @@
   {% include "partials/_tree.html" %}
 </section>
 
-<section class="panel c-panel">
-  <h2>Import a volume</h2>
-  <p class="meta">Add another source (.epub/.txt/.html) as a new volume. The tree above refreshes on success.</p>
+<div id="modal-root"></div>
+
+<section class="panel c-panel" id="import-volume">
+  <h2>Import volume</h2>
+  <p class="meta">A Project is the workspace. Each EPUB/TXT/HTML file you add becomes a Volume inside it.</p>
 
   <div class="error" id="import_error" hidden></div>
 
@@ -42,8 +52,8 @@
     <div class="field">Browsed source: <span id="selected_source" class="meta">(none)</span>
       <input type="hidden" name="source_path" id="source_path">
     </div>
-    <button type="submit">Import volume</button>
-    <span class="htmx-indicator meta">importing…</span>
+    <button type="submit">Import first / next volume</button>
+    <span class="htmx-indicator calm-loader" role="status">Importing volume</span>
   </form>
 
   <h3>Browse sources</h3>
@@ -54,9 +64,7 @@
 
 <section class="panel c-panel">
   <h2>Export project</h2>
-  <p class="meta">One artifact per volume. Each segment uses its latest translation; segments
-    you haven't translated yet fall back to the original source text. A quality check runs first —
-    export is never blocked.</p>
+  <p class="meta">Run preflight before writing files. Export preserves volume structure and reports fallback risk; advisory QA never silently blocks export.</p>
   <form hx-get="/ui/projects/{{ tree.project_name }}/export/preflight"
         hx-target="#export-panel" hx-swap="outerHTML" class="inline-form form-row">
     <label>Format

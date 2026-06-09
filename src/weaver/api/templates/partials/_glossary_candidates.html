@@ -20,7 +20,7 @@
   {% if page.items %}
   <div class="table-scroll">
   <table class="grid">
-    <thead><tr><th>Source</th><th class="num">Freq</th><th>Approve as</th><th></th></tr></thead>
+    <thead><tr><th>Source</th><th class="num">Freq</th><th>Target</th><th>Review action</th></tr></thead>
     <tbody>
       {% for c in page.items %}
       <tr>
@@ -31,16 +31,23 @@
                 hx-target="#glossary-candidates" hx-swap="outerHTML">
             <input type="hidden" name="offset" value="{{ page.offset }}">
             <input type="hidden" name="find" value="{{ find }}">
-            <input name="target" value="{{ c.target or '' }}" placeholder="target (EN)" aria-label="Approve '{{ c.source }}' as (English)">
-            <button type="submit">Edit + approve</button>
+            <input name="target" value="{{ c.target or '' }}" placeholder="target (EN)" aria-label="Target for '{{ c.source }}' (English)">
+            <button type="submit">Edit target</button>
           </form>
+          <p class="hint">Editing saves this target as the approved glossary term.</p>
         </td>
         <td>
           <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/approve"
                 hx-target="#glossary-candidates" hx-swap="outerHTML" style="display:inline">
             <input type="hidden" name="offset" value="{{ page.offset }}">
             <input type="hidden" name="find" value="{{ find }}">
-            <button type="submit">Approve</button>
+            <button type="submit">Approve existing target</button>
+          </form>
+          <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/translate"
+                hx-target="#glossary-candidates" hx-swap="outerHTML" style="display:inline">
+            <input type="hidden" name="offset" value="{{ page.offset }}">
+            <input type="hidden" name="find" value="{{ find }}">
+            <button type="submit">Translate target with AI</button>
           </form>
           <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/reject"
                 hx-target="#glossary-candidates" hx-swap="outerHTML" style="display:inline">

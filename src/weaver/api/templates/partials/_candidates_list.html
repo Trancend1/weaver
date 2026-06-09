@@ -4,7 +4,7 @@
   <div class="candidate-card card" id="candidate-{{ c.id }}">
     <div class="candidate-header">
       <span class="badge c-badge {{ 'ok' if c.status == 'applied' else 'bad' if c.status in ('rejected','failed') else '' }}">{{ c.status }}</span>
-      <span class="meta">{{ c.provider }}/{{ c.model }}</span>
+      <span class="meta">AI suggestion · {{ c.provider }}/{{ c.model }}</span>
     </div>
     <div class="candidate-source">
       <strong>Source:</strong>
@@ -16,10 +16,11 @@
     </div>
     {% if c.status == 'pending' %}
     <div class="candidate-actions toolbar-row">
-      <button class="btn-sm" hx-post="/ui/projects/{{ name }}/candidates/{{ c.id }}/approve" hx-target="#candidate-{{ c.id }}" hx-swap="outerHTML">Approve</button>
+      <button class="btn-sm" hx-post="/ui/projects/{{ name }}/candidates/{{ c.id }}/approve" hx-target="#candidate-{{ c.id }}" hx-swap="outerHTML">Approve draft</button>
       <button class="btn-sm" hx-post="/ui/projects/{{ name }}/candidates/{{ c.id }}/reject" hx-target="#candidate-{{ c.id }}" hx-swap="outerHTML">Reject</button>
-      <button class="btn-sm" hx-post="/ui/projects/{{ name }}/candidates/{{ c.id }}/apply" hx-target="#candidate-{{ c.id }}" hx-swap="outerHTML">Apply</button>
+      <button class="btn-sm btn--primary" hx-post="/ui/projects/{{ name }}/candidates/{{ c.id }}/apply" hx-target="#candidate-{{ c.id }}" hx-swap="outerHTML">Apply to segment</button>
     </div>
+    <p class="hint candidate-note">Approve keeps it as a reviewed suggestion. Apply writes normal translation history.</p>
     {% elif c.status == 'approved' %}
     <div class="candidate-actions toolbar-row">
       <button class="btn-sm" hx-post="/ui/projects/{{ name }}/candidates/{{ c.id }}/apply" hx-target="#candidate-{{ c.id }}" hx-swap="outerHTML">Apply to segment</button>
@@ -27,7 +28,7 @@
     </div>
     {% endif %}
     <details class="candidate-provenance">
-      <summary class="meta">Provenance</summary>
+      <summary class="meta">Provenance and prompt context</summary>
       <pre class="provenance-detail">{{ c.provenance | tojson(indent=2) if c.provenance is mapping else c.provenance }}</pre>
     </details>
     <p class="meta">Created: {{ c.created_at }} · Updated: {{ c.updated_at }}</p>

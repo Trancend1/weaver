@@ -2,7 +2,7 @@
   {% if tree.volumes %}
   <ul class="tree">
     {% for v in tree.volumes %}
-    <li class="vol">
+    <li class="vol" id="volume-{{ v.id }}">
       {% set v_done = v.chapters | sum(attribute="done_count") %}
       {% set v_pct = (100 * v_done / (v.segment_count or 1)) | round | int %}
       <div class="vol-head">
@@ -18,15 +18,14 @@
                   hx-confirm="Delete volume &quot;{{ v.title }}&quot;? This permanently removes its chapters, translations, and quality history. Glossary and translation memory stay.">Delete volume</button>
         </div>
         <div class="vol-snapshot" id="snapshot-vol-{{ v.id }}">
+          <button type="button" class="btn btn--primary"
+                  hx-get="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/structure/modal"
+                  hx-target="#modal-root" hx-swap="innerHTML">Preview EPUB</button>
           <button type="button" class="btn btn--quiet"
                   hx-get="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/snapshot"
-                  hx-target="#snapshot-vol-{{ v.id }}" hx-swap="outerHTML">Inspect EPUB</button>
-          <button type="button" class="btn btn--quiet"
-                  hx-post="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/reparse"
-                  hx-target="#snapshot-vol-{{ v.id }}" hx-swap="outerHTML"
-                  hx-confirm="Reparse the source EPUB? This refreshes the preservation snapshot in the background.">Reparse EPUB</button>
+                  hx-target="#snapshot-vol-{{ v.id }}" hx-swap="outerHTML">Inspect status</button>
           <a class="btn btn--quiet"
-             href="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/structure">View structure</a>
+             href="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/structure">Full structure page</a>
         </div>
         <div class="vol-head__meta">
           <span class="meta">{{ v.source_format | upper }} · {{ v.chapter_count }} chapters</span>
