@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Reading Preview · {{ project_name }} · Weaver{% endblock %}
+
+{% block content %}
+<section class="panel">
+  {% set crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ project_name, "label": project_name}] %}
+  {% if volume_id is not none %}
+    {% set crumbs = crumbs + [{"href":"/ui/projects/" ~ project_name ~ "#volume-" ~ volume_id, "label": "Volume " ~ volume_id}] %}
+  {% endif %}
+  {% if chapter_id is not none %}
+    {% set crumbs = crumbs + [{"href":"/ui/projects/" ~ project_name ~ "/chapters/" ~ chapter_id, "label": "Chapter"}] %}
+  {% endif %}
+  {% set page_crumbs = crumbs + [{"href": none, "label": "Reading preview"}] %}
+  {% set page_title = "Reading preview" %}
+  {% set page_meta = "Read-only view. Mirroring the export publishable rule." %}
+  {% set page_actions %}
+    <a class="btn btn--secondary" href="/ui/projects/{{ project_name }}">Back to project</a>
+    <a class="btn{% if mode == 'reading' %} btn--primary{% else %} btn--quiet{% endif %}"
+       href="{{ base_url }}?mode=reading">Reading</a>
+    <a class="btn{% if mode == 'compare' %} btn--primary{% else %} btn--quiet{% endif %}"
+       href="{{ base_url }}?mode=compare">Before / After</a>
+    {% if volume_id is not none %}
+    <a class="btn btn--quiet" href="/ui/projects/{{ project_name }}/volumes/{{ volume_id }}/structure">Structure</a>
+    {% endif %}
+  {% endset %}
+  {% include "partials/_page_header.html" %}
+</section>
+
+{% if mode == 'reading' %}
+<section class="panel reading-flow" tabindex="0">
+  {% for ch in chapters %}
+  <article class="reading-chapter">
+    <h2>{{ ch.title or "Untitled chapter" }}</h2>
+    {% for block in ch.blocks %}
+    <div class="reading-block{% if block.is_fallback %} reading-block--fallback{% endif %}">
+      {{ block.html|safe }}
+      {% if block.is_fallback %}
+      <span class="badge warn" title="No publishable translation; showing source fallback">fallback</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </article>
+  {% else %}
+  <div class="empty"><p>No chapters found for this scope.</p></div>
+  {% endfor %}
+</section>
+
+{% elif mode == 'compare' %}
+<section class="panel">
+  {% for ch in chapters %}
+  <h2>{{ ch.title or "Untitled chapter" }}</h2>
+  <div class="table-scroll">
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Source (JP)</th>
+          <th>Translation (EN)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for block in ch.blocks %}
+        <tr>
+          <td>
+            <span class="badge{% if block.status == 'translated' %} ok{% elif block.status == 'manual' %} ok{% elif block.status == 'failed' %} bad{% elif block.status == 'pending' %} warn{% endif %}">
+              {{ translation_status_label(block.status) }}
+            </span>
+            {% if block.is_fallback %}
+            <span class="badge warn" title="No publishable translation for this segment">fallback</span>
+            {% endif %}
+          </td>
+          <td lang="ja">{{ block.source_text }}</td>
+          <td>
+            {% if not block.is_fallback %}
+            {{ block.resolved_text }}
+            {% else %}
+            <span class="meta">— source fallback —</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><p>No chapters found for this scope.</p></div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="toolbar-row modal-actions" aria-label="Preview actions">
+    <a class="btn btn--quiet" href="/ui/projects/{{ project_name }}">Back to project</a>
+    {% if chapter_id is not none %}
+    <a class="btn btn--quiet" href="/ui/projects/{{ project_name }}/chapters/{{ chapter_id }}">Back to workspace</a>
+    {% endif %}
+    <a class="btn btn--quiet" href="/ui/projects/{{ project_name }}/qa">Continue to QA</a>
+    <a class="btn btn--primary" href="/ui/projects/{{ project_name }}/export/preflight">Export preflight</a>
+  </div>
+</section>
+{% endblock %}

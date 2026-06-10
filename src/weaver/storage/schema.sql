@@ -47,6 +47,13 @@ CREATE TABLE IF NOT EXISTS segments (
     'stale',
     'skipped',
     'manual'
+  )),
+  review_status TEXT NOT NULL DEFAULT 'not_reviewed' CHECK (review_status IN (
+    'not_reviewed',
+    'needs_review',
+    'needs_revision',
+    'approved',
+    'rejected'
   ))
 );
 

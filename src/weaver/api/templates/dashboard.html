@@ -4,7 +4,7 @@
 <section class="dashboard">
   {% set page_actions %}<a class="btn btn--primary" href="/ui/new">+ New project</a>{% endset %}
   {% set page_meta %}{{ projects|length }} project{{ "" if projects|length == 1 else "s" }} in <code>{{ books_dir }}</code> · defaults <code>{{ default_provider }}</code> / <code>{{ default_model }}</code>{% endset %}
-  {% set page_title = "Projects" %}
+  {% set page_title = "Dashboard" %}
   {% include "partials/_page_header.html" %}
 
   {% if projects %}

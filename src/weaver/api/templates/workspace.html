@@ -2,17 +2,16 @@
 {% block title %}{{ ws.chapter_title or "Chapter" }} · {{ ws.project_name }} · Weaver{% endblock %}
 {% block content %}
 <section class="panel c-panel workspace-panel">
-  {% set counts = namespace(manual=0, pending=0, failed=0, stale=0, reusable=0) %}
+  {% set counts = namespace(manual=0, pending=0, failed=0, stale=0) %}
   {% for seg in ws.segments %}
     {% if seg.status == "manual" %}{% set counts.manual = counts.manual + 1 %}{% endif %}
     {% if seg.status == "pending" %}{% set counts.pending = counts.pending + 1 %}{% endif %}
     {% if seg.status == "failed" %}{% set counts.failed = counts.failed + 1 %}{% endif %}
     {% if seg.status == "stale" %}{% set counts.stale = counts.stale + 1 %}{% endif %}
-    {% if seg.status in ("reused", "tm", "memory") %}{% set counts.reusable = counts.reusable + 1 %}{% endif %}
   {% endfor %}
   {% set workflow_done = ws.translated_count + counts.manual %}
   {% set progress_pct = (workflow_done * 100 / ws.segment_count) if ws.segment_count else 0 %}
-  {% set page_crumbs = [{"href":"/ui/projects/" ~ ws.project_name, "label": ws.project_name}, {"href": none, "label": ws.volume_title}, {"href": none, "label": ws.chapter_title or "Chapter"}] %}
+  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ ws.project_name, "label": ws.project_name}, {"href": none, "label": ws.volume_title}, {"href": none, "label": ws.chapter_title or "Chapter"}] %}
   {% set page_title = ws.chapter_title or "Chapter" %}
   {% set page_meta %}{{ ws.segment_count }} segments · {{ workflow_done }} ready · {{ counts.pending }} pending{% endset %}
   {% set page_actions %}

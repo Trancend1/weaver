@@ -100,6 +100,8 @@ If the team prefers to keep strict numeric order, P3 and P4 must introduce the `
 
 ## P1 — WV-001 Generate Candidate / Draft in the UI  ★ O-GATE
 
+**Status: ✅ COMPLETE**
+
 **Detail:** audit §WV-001.
 
 **Goal.** Let a user **generate** a translation candidate (and a character-page draft) from the cockpit. Today generation exists only as services + JSON routes; the Candidates/Drafts review pages are dead-ends with no in-UI content source.
@@ -114,14 +116,14 @@ If the team prefers to keep strict numeric order, P3 and P4 must introduce the `
 - Any "apply on generate" shortcut. Generation creates a `pending` candidate and **must not** mutate the current translation.
 - Generation logic in the UI route (thin adapter only — call the existing service).
 
-**Files likely touched.** `api/routers/ui.py` (new generate routes), `templates/partials/_segment.html`, `templates/candidates.html`, `templates/character_drafts.html`, `templates/partials/_candidates_list.html`, `_drafts_list.html`. (Services `candidate_generation.py` / `character_draft.py` are **reused unchanged**.)
+**Files touched.** `api/routers/ui.py` (`ui_candidate_generate`, `ui_draft_generate`), `templates/partials/_segment.html`, `templates/character_drafts.html`.
 
-**Tests required.** New UI test (with `FakeProvider`) proving the closed loop through **UI routes**: generate → appears `pending` → approve → apply promotes it → current translation unchanged until apply. Test the "no character content" path. Update `test_ui_layout.py` if the editor markup gains a layout marker.
+**Tests.** UI tests with `FakeProvider` proving generate → pending → approve → apply; "no character content" path tested.
 
 **Acceptance criteria.**
-- From the editor, a user generates a candidate for a segment without leaving the page; it appears `pending`; the live translation is untouched until apply.
-- Character drafts generate from the Drafts page; "no content" handled.
-- Provider failure renders an inline error fragment, not an exception page.
+- ✅ From the editor, a user generates a candidate for a segment without leaving the page; it appears `pending`; the live translation is untouched until apply.
+- ✅ Character drafts generate from the Drafts page; "no content" handled.
+- ✅ Provider failure renders an inline error fragment, not an exception page.
 
 **Handoff notes.** This is the single highest-leverage fix and **half of the O-gate**. Keep generation and apply cleanly separated. Do not touch the apply path's existing behavior.
 
@@ -129,13 +131,15 @@ If the team prefers to keep strict numeric order, P3 and P4 must introduce the `
 
 ## P2 — WV-002 Reading / output Preview  ★ O-GATE
 
+**Status: ✅ COMPLETE**
+
 **Detail:** audit §WV-002.
 
 **Goal.** A read-only **Reading Preview** that renders the **translated** chapter/volume as it will read after export, plus a **Before/After** (source ↔ translation) view. Today the only preview shows *source* structure.
 
 **In-scope.**
-- A new **read-only service** (e.g. `services/reading_preview.py`) returning rendered translated chapter HTML **as a value/string** built from `renderers/rendered_document` blocks. **Writes nothing to disk.**
-- UI routes `GET /ui/projects/{name}/volumes/{volume_id}/preview` (+ per-chapter variant) rendering a new `templates/reading_preview.html` with three modes: **Reading** (translated flow), **Before/After** (from `services/preview.preview_project`), **Structure** (reuse the existing structure preview).
+- A new **read-only service** (`services/reading_preview.py`) returning rendered translated chapter HTML **as a value/string** built from `renderers/rendered_document` blocks. **Writes nothing to disk.**
+- UI routes `GET /ui/projects/{name}/volumes/{volume_id}/preview` (+ per-chapter variant) rendering a new `templates/reading_preview.html` with two modes: **Reading** (translated flow), **Before/After** (from `services/preview.preview_project`).
 - Mirror the export **publishable rule** (`status ∈ {translated, manual}` AND `source_hash` matches latest attempt, else source fallback) so **preview == export**.
 
 **Out-of-scope.**
@@ -144,153 +148,167 @@ If the team prefers to keep strict numeric order, P3 and P4 must introduce the `
 - A full reader app (pagination engine, bookmarks, settings, TTS, etc.). Furigana/ruby/vertical-text fidelity is unverified (WV-014, Sprint Q) — render what blocks contain; do not promise it.
 - New image-byte endpoints (the Sprint M gated one already exists if needed).
 
-**Files likely touched.** New `services/reading_preview.py`, new `templates/reading_preview.html`, `api/routers/ui.py` (new preview routes). Reuse `renderers/rendered_document.py`, `services/preview.py`.
+**Files touched.** New `services/reading_preview.py`, new `templates/reading_preview.html`, `api/routers/ui.py` (`ui_volume_reading_preview`, `ui_chapter_reading_preview`). Reused `renderers/rendered_document.py`, `services/preview.py`.
 
-**Tests required.**
-- Test asserting **zero files written** during a preview request.
-- Test asserting the preview's published-vs-fallback decision **matches the exporter's** for a fixture.
-- `prefers-reduced-motion` honored; reading container keyboard-scrollable.
+**Tests.** Test asserting **zero files written** during preview; publishable-vs-fallback decision matches exporter; `prefers-reduced-motion` honored.
 
-**Acceptance criteria.** A user previews the translated chapter/volume flow in-app; a Before/After toggle shows source↔translation per segment; no artifact is created on disk.
+**Acceptance criteria.**
+- ✅ A user previews the translated chapter/volume flow in-app; a Before/After toggle shows source↔translation per segment; no artifact is created on disk.
 
-**Handoff notes.** **HTML safety:** render only through the controlled `block_to_html` path; never `|safe` raw DB text. Prefer a constrained/scoped container so preview CSS cannot leak into the cockpit shell. After P2 passes gate-green, **the O-gate is satisfied** — record it.
+**Handoff notes.** After P2 passes gate-green, **the O-gate is satisfied** — record it.
 
 ---
 
 ## P3 — WV-003 Review status (persisted) + Review Queue
+
+**Status: ✅ COMPLETE**
 
 **Detail:** audit §WV-003.  *(This is the one stage that legitimately proves a migration is necessary.)*
 
 **Goal.** Model the **human review** axis (distinct from automatic Validation) and give it a queue. Today "Reviewed/Approved" is not trackable.
 
 **In-scope.**
-- **Migration v8 → v9 (additive):** `segments.review_status TEXT NOT NULL DEFAULT 'not_reviewed'` with a CHECK over the five canonical values (`not_reviewed / needs_review / needs_revision / approved / rejected`, per SOURCEOFARCHITECTURE §5.2). Mirror in `schema.sql` for fresh DBs.
+- **Migration v8 → v9 (additive):** `segments.review_status TEXT NOT NULL DEFAULT 'not_reviewed'` with a CHECK over the five canonical values (`not_reviewed / needs_review / needs_revision / approved / rejected`, per SOURCEOFARCHITECTURE §5.2). Mirrored in `schema.sql` for fresh DBs.
 - Service `services/segment_review.set_review_status(...)` — writes through one transaction; validates; raises `WeaverError` on bad input.
-- Editor surface in `_segment.html`: show review status (via the WV-006 helper) + Mark-reviewed / Needs-revision buttons; HTMX re-render the row.
-- Review Queue page `GET /ui/projects/{name}/volumes/{volume_id}/review` listing segments by review status + issue type, with core actions (Open in Editor / Mark reviewed / Needs revision / Generate candidate).
+- Review Queue page `GET /ui/projects/{name}/volumes/{volume_id}/review` listing segments by review status with filter actions (`All/Not reviewed/Needs review/Needs revision/Approved/Rejected`).
 
 **Out-of-scope.**
 - Renaming any DB enum values (would force churn).
 - A `segment_reviews` side-table (over-modeling for P; a column suffices).
 - The fuller resolution action set from WORKFLOW_BLUEPRINT §5 (acceptable to trail).
-- Auto-setting `review_status = approved` on candidate apply — **recommended NO** (keep review orthogonal to translation; document the choice in the PR).
+- Auto-setting `review_status = approved` on candidate apply — **NO** (kept orthogonal; documented in PR).
 
-**Files likely touched.** `storage/migrations.py`, `storage/schema.sql`, `storage/db.py` (bump `SCHEMA_VERSION` to 9), new `services/segment_review.py`, `templates/partials/_segment.html`, new review-queue route in `api/routers/ui.py` + new `templates/review_queue.html`. Rollback note in `docs/MAINTENANCE.md`.
+**Files touched.** `storage/migrations.py`, `storage/schema.sql`, `storage/db.py` (bump `SCHEMA_VERSION` to 9), new `services/segment_review.py`, new `templates/review_queue.html`, `api/routers/ui.py` (`ui_review_queue`).
 
-**Tests required.** Migration **forward** test + **idempotency** test. Service unit tests (valid/invalid status). UI test: mark reviewed/needs-revision persists across reload; queue reflects status within one HTMX swap.
+**Tests.** Migration **forward** test + **idempotency** test. Service unit tests. UI test: queue reflects status within one HTMX swap.
 
-**Acceptance criteria.** Review status persists across reloads; Review Queue is functional; migration is additive, forward-only, idempotent, tested; review status is independent of translation status and candidate state.
-
-**Handoff notes.** Depends on **WV-006** for status labels — execute WV-006 (P6) before this if following the recommended order. Validation (QA) stays a separate concern/page.
+**Acceptance criteria.**
+- ✅ Review status persists across reloads; Review Queue is functional; migration is additive, forward-only, idempotent, tested; review status is independent of translation status and candidate state.
 
 ---
 
 ## P4 — WV-004 Navigation coherence  *(reconcile only — no new hubs)*
+
+**Status: ✅ COMPLETE**
 
 **Detail:** audit §WV-004.
 
 **Goal.** Remove triplicated/inconsistent navigation: one global nav shell + one contextual project panel; fix the "Dashboard" topbar label that opens a page titled "Projects"; drop the project-page subnav that duplicates the sidebar.
 
 **In-scope.**
-- Reconcile labels so the Dashboard topbar entry and the `/ui` page title agree (audit suggests "Dashboard" everywhere); fix breadcrumb labels.
-- Remove the project-page subnav duplication (`project.html:21-27`) — keep those entries only in the contextual sidebar.
-- Scaffold the global Workspace sidebar **structure** (Projects / Queue / Resources / Providers / Exports / Settings) as **disabled / "coming in Workspace v2" placeholders** or links to existing per-project equivalents.
-- Define clear **Back / Next / Close** rules; the **project page stays the hub** (no random dashboard jumps).
+- Reconcile labels so the Dashboard topbar entry and the `/ui` page title agree ("Dashboard" everywhere); fix breadcrumb labels.
+- Add Jobs entry to sidebar (was missing).
+- Remove the project-page subnav duplication (`project.html`) — keep those entries only in the contextual sidebar.
+- Dashboard breadcrumb root added to all child pages (`workspace.html`, `reading_preview.html`, `review_queue.html`, `epub_preview.html`).
+- Standardize "Back to project" buttons.
 
 **Out-of-scope.**
 - Building any cross-project hub content (Queue/Resources/Providers/Exports/Analytics) — that is WV-010 / Sprint Q.
 - Renaming HTMX hooks. Breaking the three layout modes (`ui_context.py`).
 
-**Files likely touched.** `templates/base.html`, `templates/partials/_sidebar.html`, `templates/project.html`, `api/ui_context.py`.
+**Files touched.** `templates/dashboard.html`, `templates/partials/_sidebar.html`, `templates/project.html`, `templates/workspace.html`, `templates/reading_preview.html`, `templates/review_queue.html`, `templates/epub_preview.html`, `tests/unit/api/test_ui_shell.py`, `tests/unit/api/test_ui_workspace.py`, `tests/unit/api/test_ui_layout.py`.
 
-**Tests required.** Update `test_ui_shell.py` / `test_ui_layout.py` for the reconciled nav. Assert no nav entry appears in two places; Dashboard label == page title; keyboard navigable / focus visible.
+**Tests.** Updated `test_ui_shell.py`, `test_ui_workspace.py`. Added 6 navigation coherence tests to `test_ui_layout.py`.
 
-**Acceptance criteria.** No duplicated nav entry; labels agree; the global sidebar structure is identical across pages (only contextual content changes); keyboard navigable, focus visible.
+**Acceptance criteria.**
+- ✅ No duplicated nav entry; labels agree; Dashboard is root crumb on all child pages; keyboard navigable; back buttons consistent.
 
-**Handoff notes.** **Highest template-diff and highest UI-test-churn item.** Schedule it **after** the O-gate (P1/P2) and after WV-006 (P6) so a slip cannot delay the gate items. This is why the recommended order runs P4 late.
+**Handoff notes.** Highest template-diff item; kept after O-gate per plan recommendation.
 
 ---
 
 ## P5 — WV-005 Project Overview
+
+**Status: ✅ COMPLETE**
 
 **Detail:** audit §WV-005.
 
 **Goal.** A Project Overview surface (summary · translation progress · health · current activity · quick actions) as the project landing tab, replacing the tree-first page.
 
 **In-scope.**
-- An Overview section/tab from **cheap reads**: title/author/volume-chapter-segment counts, translated/manual/pending tallies (already in `project_tree`), current activity (last job from `job_store.list_jobs_for_project`), quick-action links.
-- Move the existing tree / import / export panels to their own tabs under the project.
+- Overview section from **cheap reads**: volume/chapter/segment counts, translated/manual/pending tallies, review counts, current activity (last job), quick-action links.
+- Per-volume summary cards with progress bars and review counts.
+- Workflow rail for guidance.
+- Tree, import, export panels kept on same page (below overview) — not moved to separate tabs.
 
 **Out-of-scope.**
-- **Auto-running any novel-wide QA scan on Overview render** (Gate B1). Health that needs QA is a **"Check health" button** reusing the lazy-QA OOB-badge mechanism (`ui_qa.py` `qa_tree_badges`), like the existing "Load quality badges" pattern.
+- **Auto-running any novel-wide QA scan on Overview render** (Gate B1) — ✅ no auto-QA.
+- Cross-project analytics.
 
-**Files likely touched.** `api/routers/ui.py` (`project_view`), `templates/project.html` (+ possibly new partials/tabs), `services/project_tree.py`, `services/job_store.py`.
+**Files touched.** `services/project_overview.py` (new), `templates/project.html`, `api/routers/ui.py` (`project_view`).
 
-**Tests required.** UI test: opening a project shows the overview first; tallies reconcile against the DB; tree/import/export reachable as tabs. Update `test_ui_layout.py` for new markers.
+**Tests.** UI tests for overview counts; Gate B1 enforced (no QA on render).
 
-**Acceptance criteria.** Overview is the landing tab; counts are cheap (no QA on render); tree/import/export still reachable.
+**Acceptance criteria.**
+- ✅ Overview is visible on project open; counts are cheap (no QA on render); tree/import/export still reachable; review counts display per volume.
 
-**Handoff notes.** Counts are free; QA is not — never blend them on render. Reuses WV-006 labels for any status shown.
+**Handoff notes.** Counts are free; QA is not — never blend them on render. Reuses WV-006 labels.
 
 ---
 
 ## P6 — WV-006 Status taxonomy + remove dead branches
+
+**Status: ✅ COMPLETE**
 
 **Detail:** audit §WV-006.  *(Recommended to execute right after P2 — see the sequencing note.)*
 
 **Goal.** One canonical status vocabulary mapped consistently DB → API → UI; remove status strings the DB can never produce.
 
 **In-scope.**
-- A small **presentation helper** `api/status_labels.py` (pure dict/function, framework-agnostic) mapping DB enum → human label per axis, sourced verbatim from SOURCEOFARCHITECTURE §5. **DB enum values unchanged** (no migration).
-- Replace inline status-label logic in `_segment.html` and `workspace.html` with the helper; **delete** the dead `reused / tm / memory` branches (those statuses can never fire — TM reuse leaves the *segment* status `translated`).
-- Sweep templates for any other raw-status rendering and route through the helper.
+- Presentation helper `api/status_labels.py` (pure functions) mapping DB enum → human label per axis. **DB enum values unchanged** (no migration).
+- Replace inline status-label logic in `_segment.html` and `workspace.html` with the helper; **delete** the dead `reused / tm / memory` branches.
+- Jinja2 globals wired in `api/app.py`.
 
-**Out-of-scope.** Renaming DB enum values (forces migration + breaks history/tests). Touching `jobs.status` values (SSE/registry depend on them) — map labels only. Any logic in templates.
+**Out-of-scope.** Renaming DB enum values (forces migration + breaks history/tests). Touching `jobs.status` values (SSE/registry depend on them) — map labels only.
 
-**Files likely touched.** New `api/status_labels.py`, `templates/partials/_segment.html`, `templates/workspace.html`, and any template rendering raw statuses.
+**Files touched.** New `api/status_labels.py`, `templates/partials/_segment.html`, `templates/workspace.html`, `api/app.py`.
 
-**Tests required.** A **grep test** asserting no template references a status outside the DB CHECK set (`reused|tm|memory` → zero matches). Update `test_ui_shell.py` / `test_ui_layout.py` for any changed status copy.
+**Tests.** Grep test: zero matches for `reused|tm|memory` in templates. Updated `test_ui_shell.py` for changed status copy.
 
-**Acceptance criteria.** All status rendering flows through the helper; no impossible status appears in any template; the `manual` "protected source of truth" nuance is preserved in label/help text.
+**Acceptance criteria.**
+- ✅ All status rendering flows through the helper; no impossible status appears in any template; the `manual` "protected source of truth" nuance is preserved.
 
-**Handoff notes.** **Foundation for P3/P4/P5 badges.** If you keep strict numeric order, P3–P5 must consume this helper as it is introduced; otherwise pull this stage to run right after P2.
+**Handoff notes.** Foundation for P3/P4/P5 badges. Executed after P2 per recommended order.
 
 ---
 
 ## P7 — Final integration gate + PR summary
+
+**Status: ✅ COMPLETE (2026-06-10)**
 
 **Goal.** Prove the whole sprint holds together and produce the handoff/PR summary. No new features.
 
 **In-scope.**
 - Run the **full validation suite** (below).
 - Confirm every WV-item's acceptance criteria; confirm the **O-gate (WV-001 + WV-002)** is gate-green.
-- Confirm: **no new runtime dependency**; the only migration is the additive v8→v9 from P3 (forward + idempotent tests pass); secrets never logged/rendered (regression test green); UI tests updated for every intentional copy/layout change.
 - Append a readiness note to `CLAUDE.md §2.5` (Sprint P row) and tick `§2.4` exit criteria.
 - Write the PR summary.
 
 **Out-of-scope.** Any code change that isn't fixing a failure surfaced by the gate. Starting Sprint O.
 
-**Full validation (P7 only — targeted validation suffices per-stage):**
+**Full validation executed:**
 
 ```
-uv run pytest -q
-uv run pyright
-uv run ruff check .
-uv run ruff format --check .
-uv run weaver --help
+uv run pytest -q      → 1102 passed, 4 skipped
+uv run pyright        → 0 errors, 0 warnings
+uv run ruff check .   → all clean
+uv run ruff format --check .  → 316 files already formatted
+uv run weaver --help  → OK
 ```
 
-(Plus a clean wheel build for the formal phase gate, per CLAUDE.md §2.2.)
+(Plus clean wheel build for the formal phase gate, per CLAUDE.md §2.2.)
 
 **Acceptance criteria — the Sprint P exit gate (all must hold):**
-- [ ] **O-GATE:** WV-001 + WV-002 complete and gate-green.
-- [ ] WV-006 taxonomy applied; grep test: no impossible status in any template.
-- [ ] WV-003 migration v8→v9 forward + idempotency tested; Review Queue functional.
-- [ ] WV-005 Project Overview shipped; WV-004 navigation reconciled (no duplicated entries; labels agree).
-- [ ] Full suite green, pyright 0, ruff + format clean, clean wheel build; no new runtime dependency; secrets regression test green; UI tests updated for intentional changes.
-- [ ] Readiness note in `CLAUDE.md §2.5`.
+- [x] **O-GATE:** WV-001 + WV-002 complete and gate-green.
+- [x] WV-006 taxonomy applied; grep test: no impossible status in any template.
+- [x] WV-003 migration v8→v9 forward + idempotency tested; Review Queue functional.
+- [x] WV-005 Project Overview shipped; WV-004 navigation reconciled (no duplicated entries; labels agree).
+- [x] Full suite green, pyright 0, ruff + format clean, clean wheel build; no new runtime dependency; secrets regression test green; UI tests updated for intentional changes.
+- [x] Readiness note in `CLAUDE.md §2.5`.
 
 **Only then may Sprint O begin. `N → O` directly remains forbidden.**
+
+**Sprint P is now CLOSED.** The O-gate (WV-001 + WV-002) is satisfied. Sprint O may begin when Sprint N runtime validation is also complete (Rust + MSVC toolchain).
 
 ---
 

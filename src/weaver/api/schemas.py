@@ -298,7 +298,7 @@ class GlossaryDiffResponse(BaseModel):
 
 
 class WorkspaceSegmentResponse(BaseModel):
-    """One source segment paired with its latest translation, if any."""
+    """One source segment paired with its latest translation and review state."""
 
     id: str
     block_order: int
@@ -306,6 +306,7 @@ class WorkspaceSegmentResponse(BaseModel):
     source_text: str
     status: str
     translated_text: str | None
+    review_status: str
 
 
 class ChapterWorkspaceResponse(BaseModel):

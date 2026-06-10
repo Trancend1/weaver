@@ -1,15 +1,122 @@
 {% extends "base.html" %}
 {% block title %}{{ tree.project_name }} · Weaver{% endblock %}
 {% block content %}
-<section class="panel c-panel project-panel">
+
+{# ── Overview hub (Sprint P5) ───────────────────────────── #}
+<section class="panel c-panel project-overview">
   {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label": tree.project_name}] %}
   {% set page_title = tree.project_name %}
-  {% set page_meta = "Project tree, import, export, and on-demand quality badges." %}
+  {% set page_meta = project_meta %}
   {% set page_actions %}<button class="btn btn--danger" type="button"
     hx-post="/ui/projects/{{ tree.project_name }}/delete"
     hx-confirm="Delete &quot;{{ tree.project_name }}&quot;? This permanently removes its translations, history, glossary, and exports. The original source file is not affected."
     hx-swap="none">Delete project</button>{% endset %}
   {% include "partials/_page_header.html" %}
+
+  <div class="overview-cards">
+    <div class="overview-card">
+      <strong>{{ overview.volume_count }}</strong>
+      <span>{{ "Volume" if overview.volume_count == 1 else "Volumes" }}</span>
+    </div>
+    <div class="overview-card">
+      <strong>{{ overview.chapter_count }}</strong>
+      <span>{{ "Chapter" if overview.chapter_count == 1 else "Chapters" }}</span>
+    </div>
+    <div class="overview-card">
+      <strong>{{ overview.segment_count }}</strong>
+      <span>{{ "Segment" if overview.segment_count == 1 else "Segments" }}</span>
+    </div>
+    <div class="overview-card">
+      <strong>{{ overview.done_count }}</strong>
+      <span>Done</span>
+    </div>
+    <div class="overview-card">
+      <strong>{{ overview.pending_count }}</strong>
+      <span>Pending</span>
+    </div>
+    <div class="overview-card">
+      <strong>{{ overview.failed_stale_count }}</strong>
+      <span>Failed / Stale</span>
+    </div>
+  </div>
+
+  {% if overview.review_counts.approved or overview.review_counts.needs_review or overview.review_counts.needs_revision %}
+  <div class="overview-review-bar">
+    <span class="meta">Review:</span>
+    <span class="badge ok">{{ overview.review_counts.approved }} approved</span>
+    <span class="badge warn">{{ overview.review_counts.needs_review }} needs review</span>
+    <span class="badge bad">{{ overview.review_counts.needs_revision }} needs revision</span>
+    <span class="badge">{{ overview.review_counts.not_reviewed }} not reviewed</span>
+  </div>
+  {% endif %}
+
+  {% if overview.recent_job %}
+  <div class="overview-recent-job">
+    <span class="meta">Recent activity:</span>
+    <span class="badge job-status--{{ overview.recent_job.status }}">{{ job_status_label(overview.recent_job.status) }}</span>
+    <span class="meta">{{ overview.recent_job.kind }}</span>
+    <span class="meta">{{ overview.recent_job.started_at[:19].replace("T"," ") }}</span>
+    <a class="link-btn" href="/ui/projects/{{ tree.project_name }}/jobs/{{ overview.recent_job.id }}/detail">Detail</a>
+  </div>
+  {% endif %}
+</section>
+
+{# ── Next actions ───────────────────────────────────────── #}
+<section class="panel c-panel">
+  <h2>Next actions</h2>
+  <div class="toolbar-row actions-row">
+    {% if overview.volume_count == 0 %}
+    <a class="btn btn--primary" href="#import-volume">Import first volume</a>
+    {% else %}
+    <a class="btn btn--secondary" href="#import-volume">Import another volume</a>
+    {% endif %}
+    {% if overview.volumes %}
+    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/chapters/{{ tree.volumes[0].chapters[0].id }}">Open workspace</a>
+    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/candidates">Review candidates</a>
+    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/volumes/{{ tree.volumes[0].id }}/review">Review queue</a>
+    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/qa">Run QA</a>
+    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/volumes/{{ tree.volumes[0].id }}/preview">Reading preview</a>
+    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/export/preflight">Export preflight</a>
+    {% endif %}
+  </div>
+</section>
+
+{# ── Per-volume summary ─────────────────────────────────── #}
+{% if overview.volumes %}
+<section class="panel c-panel">
+  <h2>Volumes</h2>
+  <div class="volume-grid">
+    {% for v in overview.volumes %}
+    <div class="volume-card">
+      <div class="volume-card__head">
+        <strong>{{ v.title }}</strong>
+        <span class="badge vol-status--{{ v.snapshot_status }}">{{ v.snapshot_status }}</span>
+      </div>
+      <div class="volume-card__meta">
+        <span>{{ v.source_format | upper }} · {{ v.chapter_count }} chapters · {{ v.segment_count }} segments</span>
+      </div>
+      <div class="progress-block">
+        <progress value="{{ v.done_count }}" max="{{ v.segment_count or 1 }}"></progress>
+        <span class="meta">{{ v.done_count }}/{{ v.segment_count }} done</span>
+      </div>
+      {% if v.review_counts.approved or v.review_counts.needs_review or v.review_counts.needs_revision %}
+      <div class="meta">
+        Review: {{ v.review_counts.approved }} approved · {{ v.review_counts.needs_review }} needs review · {{ v.review_counts.needs_revision }} needs revision
+      </div>
+      {% endif %}
+      <div class="toolbar-row">
+        <a class="link-btn" href="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/structure">Inspect</a>
+        <a class="link-btn" href="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/preview">Preview</a>
+        <a class="link-btn" href="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/review">Review queue</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{# ── Workflow rail (kept for guidance) ──────────────────── #}
+<section class="panel c-panel">
   <ol class="workflow-rail" aria-label="Translation workflow">
     <li><span>1</span><strong>Import</strong><small>Add volumes</small></li>
     <li><span>2</span><strong>Inspect</strong><small>EPUB + images</small></li>
@@ -18,14 +125,10 @@
     <li><span>5</span><strong>QA</strong><small>Prioritize issues</small></li>
     <li><span>6</span><strong>Export</strong><small>Preflight first</small></li>
   </ol>
-  <nav class="subnav" aria-label="Project sections">
-    <a href="/ui/projects/{{ tree.project_name }}/qa">Quality</a>
-    <a href="/ui/projects/{{ tree.project_name }}/jobs">Jobs</a>
-    <a href="/ui/projects/{{ tree.project_name }}/glossary">Glossary</a>
-    <a href="/ui/projects/{{ tree.project_name }}/characters">Characters</a>
-    <a href="/ui/projects/{{ tree.project_name }}/memory">Translation memory</a>
-  </nav>
+</section>
 
+{# ── Content tree (unchanged target) ────────────────────── #}
+<section class="panel c-panel">
   <p class="actions toolbar-row">
     <button type="button" hx-get="/ui/projects/{{ tree.project_name }}/qa/tree-badges"
             hx-target="#qa-badge-status" hx-swap="innerHTML">Load quality badges</button>
@@ -37,6 +140,7 @@
 
 <div id="modal-root"></div>
 
+{# ── Import volume ──────────────────────────────────────── #}
 <section class="panel c-panel" id="import-volume">
   <h2>Import volume</h2>
   <p class="meta">A Project is the workspace. Each EPUB/TXT/HTML file you add becomes a Volume inside it.</p>
@@ -62,6 +166,7 @@
   </div>
 </section>
 
+{# ── Export project ─────────────────────────────────────── #}
 <section class="panel c-panel">
   <h2>Export project</h2>
   <p class="meta">Run preflight before writing files. Export preserves volume structure and reports fallback risk; advisory QA never silently blocks export.</p>

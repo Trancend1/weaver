@@ -297,6 +297,7 @@ def get_chapter_workspace(name: str, chapter_id: str, request: Request) -> Chapt
                 source_text=s.source_text,
                 status=s.status,
                 translated_text=s.translated_text,
+                review_status=s.review_status,
             )
             for s in workspace.segments
         ],

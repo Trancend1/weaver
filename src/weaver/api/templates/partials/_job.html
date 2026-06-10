@@ -6,7 +6,7 @@
   {% endif %}>
   <div class="job-head">
     <strong>Translate</strong>
-    <span class="badge c-badge {{ 'ok' if job.status == 'done' else 'bad' if job.status == 'failed' else '' }}">{{ job.status }}</span>
+    <span class="badge c-badge {{ 'ok' if job.status == 'done' else 'bad' if job.status == 'failed' else '' }}">{{ job_status_label(job.status) }}</span>
     <span class="meta">scope: {{ job.mode }}</span>
   </div>
 

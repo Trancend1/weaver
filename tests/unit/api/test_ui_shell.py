@@ -39,7 +39,7 @@ def test_dashboard_renders_html(ui_client: TestClient) -> None:
     r = ui_client.get("/ui")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/html")
-    assert "Projects" in r.text
+    assert "Dashboard" in r.text
     # the initialised project appears with a link to its view
     name = _name(ui_client)
     assert name in r.text

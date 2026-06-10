@@ -83,3 +83,88 @@ def test_workspace_mode_collapses_sidebar(ui_client: TestClient) -> None:
     assert "layout--workspace" in html
     assert "app-shell--workspace" in html
     assert 'class="sidebar sidebar--workspace"' in html
+
+
+# --- P4 navigation coherence (WV-004) ---------------------------------------
+
+
+def test_sidebar_includes_jobs_link(ui_client: TestClient) -> None:
+    """Sidebar must expose the Jobs page (Sprint P4)."""
+    name = _name(ui_client)
+    html = ui_client.get(f"/ui/projects/{name}").text
+    assert f'href="/ui/projects/{name}/jobs"' in html
+    assert ">Jobs<" in html
+
+
+def test_project_page_has_no_duplicate_subnav(ui_client: TestClient) -> None:
+    """Project page must not repeat sidebar links in a subnav rail (P4)."""
+    name = _name(ui_client)
+    html = ui_client.get(f"/ui/projects/{name}").text
+    # The old duplicate subnav is a <nav class="subnav"> inside the tree section.
+    # After P4 it is removed.
+    tree_section = html.split('id="tree"', 1)[0] if 'id="tree"' in html else html
+    assert '<nav class="subnav"' not in tree_section
+
+
+def test_child_pages_have_dashboard_breadcrumb(ui_client: TestClient) -> None:
+    """All non-dashboard pages must lead back to Dashboard in breadcrumbs."""
+    name = _name(ui_client)
+    project_html = ui_client.get(f"/ui/projects/{name}").text
+    m = re.search(rf"/ui/projects/{re.escape(name)}/chapters/([^\"']+)", project_html)
+    chapter_id = m.group(1) if m else None
+
+    pages = [
+        ("/ui", False),  # Dashboard itself – no crumb to self
+        (f"/ui/projects/{name}", True),
+        (f"/ui/projects/{name}/glossary", True),
+        (f"/ui/projects/{name}/characters", True),
+        (f"/ui/projects/{name}/memory", True),
+        (f"/ui/projects/{name}/candidates", True),
+        (f"/ui/projects/{name}/qa", True),
+        (f"/ui/projects/{name}/jobs", True),
+    ]
+    if chapter_id:
+        pages.append((f"/ui/projects/{name}/chapters/{chapter_id}", True))
+
+    for path, expect_dashboard in pages:
+        html = ui_client.get(path).text
+        if expect_dashboard:
+            assert '<a href="/ui">Dashboard</a>' in html, f"{path} missing Dashboard crumb"
+        else:
+            # Dashboard page should not breadcrumb to itself
+            pass
+
+
+def test_back_button_consistency(ui_client: TestClient) -> None:
+    """Workspace, preview, and review queue must have a Back-to-project action."""
+    name = _name(ui_client)
+    project_html = ui_client.get(f"/ui/projects/{name}").text
+    m = re.search(rf"/ui/projects/{re.escape(name)}/chapters/([^\"']+)", project_html)
+    if m is None:
+        pytest.skip("fixture project has no chapter to open")
+    chapter_id = m.group(1)
+
+    ws_html = ui_client.get(f"/ui/projects/{name}/chapters/{chapter_id}").text
+    assert "Back to project" in ws_html
+
+    # Reading preview (volume scope)
+    vol_id_match = re.search(rf"/ui/projects/{re.escape(name)}/volumes/(\d+)/preview", project_html)
+    if vol_id_match:
+        preview_html = ui_client.get(
+            f"/ui/projects/{name}/volumes/{vol_id_match.group(1)}/preview"
+        ).text
+        assert "Back to project" in preview_html
+
+    # Review queue
+    review_html = ui_client.get(f"/ui/projects/{name}/volumes/1/review").text
+    assert "Back to project" in review_html
+
+
+def test_dashboard_page_title_matches_topbar(ui_client: TestClient) -> None:
+    """Dashboard tab/title must say Dashboard, not Projects (P4)."""
+    html = ui_client.get("/ui").text
+    assert "Dashboard" in html
+    # The old title "Projects" should no longer appear as a page heading
+    title_tag = re.search(r"<h1>([^<]+)</h1>", html)
+    assert title_tag is not None
+    assert title_tag.group(1).strip() == "Dashboard"
