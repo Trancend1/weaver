@@ -469,6 +469,40 @@ def _migrate_to_v9(connection: sqlite3.Connection) -> None:
         )
 
 
+def _migrate_to_v10(connection: sqlite3.Connection) -> None:
+    """Add stable project uuid (schema v10, Sprint Q1 / WV-010).
+
+    Adds ``projects.uuid`` column, backfills with ``uuid4()`` per row, and
+    creates a unique index. Idempotent: safe to re-run.
+    """
+
+    import uuid
+
+    tables = {
+        str(row["name"])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    if "projects" not in tables:
+        return
+
+    columns = {
+        str(row["name"]) for row in connection.execute("PRAGMA table_info(projects)").fetchall()
+    }
+    if "uuid" not in columns:
+        connection.execute("ALTER TABLE projects ADD COLUMN uuid TEXT")
+
+    for row in connection.execute("SELECT id, uuid FROM projects").fetchall():
+        if row["uuid"] is None or str(row["uuid"]).strip() == "":
+            connection.execute(
+                "UPDATE projects SET uuid = ? WHERE id = ?",
+                (str(uuid.uuid4()), int(row["id"])),
+            )
+
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_uuid ON projects(uuid)")
+
+
 _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _migrate_to_v2,
     3: _migrate_to_v3,
@@ -478,4 +512,5 @@ _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     7: _migrate_to_v7,
     8: _migrate_to_v8,
     9: _migrate_to_v9,
+    10: _migrate_to_v10,
 }

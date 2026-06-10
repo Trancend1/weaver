@@ -2,7 +2,7 @@
 
 Offline-capable, glossary-aware **JP→EN** light-novel translation workbench with a **CLI** and local **web cockpit** (web-cockpit-first development). **Not:** SaaS, consumer product, hosted service, complex SPA.
 
-> **Status (2026-06-10):** v0.7.0 stable · Sprints A–M complete · **Sprint P CLOSED** (Workflow Coherence — 1102 tests / 4 skipped, pyright 0, ruff clean, O-gate WV-001 + WV-002 green) · **Active: Sprint N** (Tauri Shell Alpha — 🟡 `desktop/` scaffold complete, build/runtime validation pending Rust+MSVC toolchain) · strict next **N → P → O → Q** — `N → O` is **forbidden**; **WV-001 + WV-002 gate Sprint O** · Roadmap of record: [.docs/audit/ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md); Sprint P execution: [docs/SPRINT_P_EXECUTION_PLAN.md](docs/SPRINT_P_EXECUTION_PLAN.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
+> **Status (2026-06-10):** v0.7.0 stable · Sprints A–M + **N, P, O all COMPLETE** (1102 tests / 4 skipped, pyright 0, ruff clean) · **Active: Sprint Q — Workspace v2** (cross-project command center) · **Q0 planning ✅ COMPLETE** (deep audit + execution plan + risk register + handoff) · **Q implementation ⛔ NOT STARTED** · next real stage **Q1 — WV-010** (project identity + cross-project read layer) · Sprint Q source of truth: [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [SPRINT_Q_RISK_REGISTER.md](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md); roadmap of record: [.docs/audit/ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
 
 ---
 
@@ -25,17 +25,21 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 | [docs/DECISIONS.md](docs/DECISIONS.md) · [docs/decisions/](docs/decisions/) | ADR index (`001`–`012`) + full ADR texts |
 | Supplementary: [PROMPT_DESIGN.md](docs/PROMPT_DESIGN.md) · [SECURITY_AND_PERFORMANCE.md](docs/SECURITY_AND_PERFORMANCE.md) | Active reference specs |
 
-**Audit & roadmap of record (`.docs/audit/`)** — the agent-independent planning set (2026-06-09 Council audit):
+**Audit & roadmap of record (`.docs/audit/`)** — the agent-independent planning set (2026-06-09 Council audit). **For the active Sprint Q, the four `SPRINT_Q_*` docs are the primary source of truth** — read them first:
 
 | Doc | Purpose |
 |-----|---------|
-| [.docs/audit/ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md) | **Active roadmap:** strict N → P → O → Q (O-gate: WV-001 + WV-002) |
-| [.docs/audit/SPRINT_P_EXECUTION.md](.docs/audit/SPRINT_P_EXECUTION.md) | **Sprint P task-level execution breakdown** (agent handoff: order, reuse, constraints, acceptance) |
-| [.docs/audit/SOURCEOFARCHITECTURE.md](.docs/audit/SOURCEOFARCHITECTURE.md) | Reconciled product spec (build-state annotated) — spec for Sprint P/Q |
-| [.docs/audit/THE_COUNCIL_WEAVER_AUDIT.md](.docs/audit/THE_COUNCIL_WEAVER_AUDIT.md) | Current-state map, pain verification, council findings, Top 10 fixes |
+| [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) | **★ Active Sprint Q execution plan** — staged Q0–Q12, per-stage scope/deps/files/risks/tests/acceptance/rollback; Q2 = read-path hardening before hubs |
+| [.docs/audit/SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) | **★ Sprint Q evidence base** — WV-001..014 inheritance map, gap matrix G-01..G-15, findings QF-01..QF-22 (file:line), security/perf/UX audits, docs-vs-code mismatches D-01..D-07 |
+| [.docs/audit/SPRINT_Q_RISK_REGISTER.md](.docs/audit/SPRINT_Q_RISK_REGISTER.md) | **★ Sprint Q risk register** — R-01..R-23 + per-stage-gate review rule |
+| [.docs/audit/SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md) | **★ Sprint Q cold-start handoff** — status, read order, branch advice, hard fences, Q1 first-task checklist |
+| [.docs/audit/ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md) | Roadmap of record: strict N → P → O → Q (all of N/P/O complete; Q active); Sprint Q acceptance |
+| [.docs/audit/SOURCEOFARCHITECTURE.md](.docs/audit/SOURCEOFARCHITECTURE.md) | Reconciled product spec (build-state annotated) — target spec Sprint Q builds against |
+| [.docs/audit/ISSUE_BACKLOG.md](.docs/audit/ISSUE_BACKLOG.md) | WV-001..WV-014 with acceptance criteria (WV-010 = Sprint Q entry item) |
+| [.docs/audit/PAGE_LAYOUT_BLUEPRINT.md](.docs/audit/PAGE_LAYOUT_BLUEPRINT.md) | Target page layouts (§0 global shell, §1 dashboard, §10 hubs) |
 | [.docs/audit/WORKFLOW_BLUEPRINT.md](.docs/audit/WORKFLOW_BLUEPRINT.md) | Per-process Today/Target/Delta |
-| [.docs/audit/PAGE_LAYOUT_BLUEPRINT.md](.docs/audit/PAGE_LAYOUT_BLUEPRINT.md) | Target page layouts |
-| [.docs/audit/ISSUE_BACKLOG.md](.docs/audit/ISSUE_BACKLOG.md) | WV-001..WV-014 with acceptance criteria |
+| [.docs/audit/THE_COUNCIL_WEAVER_AUDIT.md](.docs/audit/THE_COUNCIL_WEAVER_AUDIT.md) | Original current-state map, pain verification, council findings, Top 10 fixes |
+| [.docs/audit/SPRINT_P_EXECUTION.md](.docs/audit/SPRINT_P_EXECUTION.md) | Sprint P task-level execution breakdown (closed; reference for staging discipline) |
 
 > Retired docs (pre-reset specs, Phase A UI audit, MVP sprint/scope logs, Flask→FastAPI audits, completed phase plans, RC1 reports, design exploration, the prior `weaver_next_plan.md` Sprint G–O plan, `ENGINEERING_STANDARDS.md`/`AI_SLOP_PREVENTION.md` whose rules are now absorbed into §4.2/§4.3) are in **git history** only. The Sprint G–O detail is captured by the completed phase log (§2.5) + ADRs `009`–`012`; the forward plan is the audit roadmap above.
 
@@ -65,13 +69,18 @@ Foundation (v0.6.0) ✅
   → Sprint M — Image / OCR security gate   ✅
   → Sprint N — Tauri shell alpha           ✅  (runtime validated, dependency pins fixed, design system integrated)
   → Sprint P — Workflow Coherence          ✅  (WV-001..006 complete; O-gate green)
-  → **Sprint O — Production desktop**       ✅  (portable app path; smoke test green; docs/INSTALL_DESKTOP.md)
-  → Sprint Q — Workspace v2 (cross-project)⬜  (high-level only until O + WV-010 + desktop feedback)
+  → Sprint O — Production desktop          ✅  (portable app path; smoke test green; docs/INSTALL_DESKTOP.md)
+   → **Sprint Q — Workspace v2 (cross-project)** 🟡  ACTIVE — Q0 planning ✅; Q1 implementation ✅ COMPLETE; next = Q2
+       Q0 planning              ✅  (deep audit + execution plan + risk register + handoff)
+       Q1 identity + read layer ✅  (WV-010: migration v10 + project_discovery uuid + workspace_index; ships dark)
+       Q2 read-path hardening   ⬜  (readonly reads, reset/migration relocation, EPUB-hash fix, error fragments, ui.py split)
+       Q3 shell + dashboard     ⬜  · Q4 queue · Q5 resources · Q6 providers · Q7 export gate+ledger · Q8 analytics
+       Q9 explorer v2           ⬜  · Q10 editor panel · Q11 validation (WV-007/008/011) · Q12 cleanup + final gate
 ```
 
-Legend: ✅ complete · ⬜ pending · 🚫 deferred/blocked
+Legend: ✅ complete · 🟡 active · ⬜ pending · 🚫 deferred/blocked
 
-> Phase ordering is dependency-driven, not calendar. **Strict sequence N → P → O → Q** (one at a time, not parallel). The backend is ready to package, but the cockpit workflow is not yet coherent (see audit), so Sprint N (low-risk, packaging-only) ships first, then Sprint P closes the workflow gaps before production packaging (O). **Hard O-gate:** Sprint O may not start until **WV-001 (Generate Candidate UI)** and **WV-002 (Reading Preview)** are complete — `N → O` directly is forbidden. Sprint Q stays high-level until O ships, WV-010 exists, and real desktop feedback is collected. Sprint detail per row in §2.5; forward detail in the audit roadmap + [Sprint P execution breakdown](.docs/audit/SPRINT_P_EXECUTION.md).
+> Phase ordering is dependency-driven, not calendar. **N → P → O are all closed; Sprint Q is active.** Sprint Q is the cross-project Workspace layer; it is staged Q0–Q12 (one stage = one branch + one PR, not parallel) per [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md). **Hard ordering inside Q:** Q1 (WV-010 identity + read-only index) defines the correct read patterns; Q2 retrofits them (readonly reads, reset/migration relocation, no per-render EPUB hashing, visible failures); **no cross-project hub (Q3+) may be built on the un-hardened foundation.** Stage detail + acceptance per stage in the execution plan; cold-start orientation in [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md).
 
 ### 2.2 Reusable Phase Gate
 
@@ -86,30 +95,40 @@ Before starting any phase or stage:
 
 > Required reminder: **"Check exit criteria first. No next phase until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Sprint O (Production Desktop) ✅ COMPLETE
+### 2.3 Active Phase — Sprint Q (Workspace v2) 🟡 ACTIVE · Q0 planning ✅ · Q1 implementation ✅ COMPLETE · next = Q2
 
-> Strict order **N → P → O → Q** (one sprint at a time). Sprint P is **CLOSED**. Sprint N is **CLOSED** (runtime validated, build green). Sprint O is **COMPLETE** (portable app path, smoke test green, docs). Forward scope: [.docs/audit/ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md).
+> Sprints N → P → O are **all CLOSED**. **Sprint Q is the active phase**: the cross-project Workspace command center. **Stage Q0 (planning) is complete**; **no implementation has begun**. Next real stage is **Q1 (WV-010)**. Primary source of truth: [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md); cold-start: [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md).
 
-**Sprint N — in scope (packaging-only, no UI rewrite):**
-- Minimal Tauri workspace in `desktop/` (isolated subtree, not a Python dependency).
-- Sidecar lifecycle: start `weaver serve --host 127.0.0.1 --port <free> --no-browser` with `WEAVER_ENV=desktop` (env var — there is no `--env` flag) → poll `/healthz` → open WebView → inject `X-Weaver-Session` on every request → graceful shutdown (Windows: `taskkill /T`→5s→`/F`).
-- Cockpit writes its own `logs_dir/runtime.log`; host tees the sidecar console to `logs_dir/sidecar.console.log` (a second writer on the cockpit's rotating `runtime.log` is unsafe on Windows). Crash screen on backend-start failure.
-- `WEAVER_ENV=desktop` security baseline already in place from Sprint G.
+**Core premise (why Q is staged the way it is):** one project DB per project is the only source of truth for that project. Cross-project features therefore need a **read-only cross-project read layer first** — there is **no global mutable store** without an ADR. So Q1 builds stable identity (`projects.uuid`) + a read-only, cached, error-isolated `workspace_index`, Q2 hardens the existing read paths to match, and only then (Q3+) are any hubs built.
 
-**Sprint P — Workflow Coherence (CLOSED 2026-06-10):**
-- WV-001 **(P0)** ✅ surface candidate + character-draft **generation** in the cockpit (`ui_candidate_generate`, `ui_draft_generate`).
-- WV-002 **reading/output Preview** ✅ (`reading_preview_for_chapter/volume`, `reading_preview.html` with Reading + Before/After modes).
-- WV-003 **Review (persistent per-segment human state) vs Validation (automatic QA)** ✅ (`segments.review_status`, `segment_review.py`, Review Queue UI).
-- WV-004 **navigation** unification ✅ (Dashboard label, Jobs sidebar, subnav removal, breadcrumb roots, back buttons).
-- WV-005 **Project Overview** ✅ (`project_overview.py`, overview cards, volume-grid, next-actions).
-- WV-006 single **status taxonomy** ✅ (`status_labels.py`, dead `reused/tm/memory` branches removed).
-- O-gate: **GREEN** — WV-001 + WV-002 tested and passing.
+**Sprint Q — staged scope (per [SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md)):**
+- **Q0 — Planning** ✅ COMPLETE — deep audit (QF-01..22, G-01..15), staged execution plan Q0–Q12, risk register R-01..23, cold-start handoff.
+- **Q1 — WV-010 identity + read layer** ⬜ NEXT — migration v9→v10 adds `projects.uuid` (stable, rename-safe); extend `project_discovery` with uuid + duplicate detection; build `services/workspace_index.py` (read-only, mtime-cached, per-project error-isolated, budget-tested). **Ships dark — zero UI consumers.**
+- **Q2 — Read-path & failure-visibility hardening** ⬜ — retrofit `connect_readonly_database` for all reads; relocate `reset_interrupted_segments`/migration off the read path; remove per-render EPUB hashing from Project Overview; surface swallowed approve/apply failures; mechanical `ui.py` split (PR-a) then fixes (PR-b). **No hub may be built before this is green.**
+- **Q3–Q8 — Hubs** ⬜ — global shell + dashboard, cross-project queue (`stale_running` distinct), Resources, Providers, Export gate + ledger (migration v11; advisory stays default per ADR 008), Analytics.
+- **Q9–Q11 — Per-project surfaces** ⬜ — Content Explorer v2, editor context panel, validation completion (WV-007 structure-QA join, WV-008 4 checks + ADR-013-gated `error` tier, WV-011 `qa_warnings` verdict).
+- **Q12 — Cleanup + final gate** ⬜ — residual dead code, conditional migration v12, full validation matrix + desktop/security/perf smoke.
 
-**Carry-over invariants (unchanged across the roadmap):**
-- `read_epub()` and `DocumentIR` remain the import/export/translation path; `ParsedEpub` is the structural layer — do not merge.
-- State writes go through services; CLI/web never touch SQLite directly.
-- API keys via env vars or `~/.weaver/secrets.toml` only — never in config, never logged, never rendered.
-- Locked stack (§3) unchanged; in-process SQLite job core (ADR `010`) — no external queue; Tauri lives in `desktop/`, not a Python dependency.
+**Sprint Q PR strategy:**
+- Q0 docs-only PR ✅ (landed on `feat/full-complete-workspace`)
+- Q1 one PR (`feat/workspace-v2-q1`) — WV-010 identity + read layer
+- Q2 split into two PRs — PR-a mechanical `ui.py` split (zero behaviour change); PR-b read-path fixes (readonly, reset relocation, hashing removal, error fragments)
+- Q3–Q8 grouped only if scope kecil (single concern, ≤400 lines diff); otherwise one PR per hub
+- Q9–Q11 one PR per surface (Content Explorer v2, editor panel, validation)
+- Q12 final cleanup PR — full gate matrix
+- Sprint-level PR (all Q stages → main) stays unopened until Q12 is green
+
+**Hard fences for all of Sprint Q (full list in [SPRINT_Q_HANDOFF.md §6](.docs/audit/SPRINT_Q_HANDOFF.md)):**
+- **One project DB = the source of truth for that project. No global mutable store without an ADR.**
+- **Gate B1 (extended):** no QA scan, no provider call, **and no source-file hashing** on any render/list/hub path.
+- Read paths use `connect_readonly_database` only — never trigger migrations or `in_progress` reset on read.
+- State writes go through services; CLI/web/UI routers never touch SQLite directly (Q2 enforces a permanent grep-gate).
+- `read_epub()`/`DocumentIR` vs `ParsedEpub` — separate paths, never merge.
+- Locked stack (§3) unchanged; in-process `JobRegistry` (ADR `010`) — no external queue/worker/SSE-fan-in; **no new runtime dependency.**
+- `desktop/` is read-only for all of Q (smoke only at Q12).
+- HTMX hooks (§4.2) and DB enum values are never renamed — presentation-mapped only.
+- API keys via env vars or `~/.weaver/secrets.toml` only — never in config, logged, rendered, or in an SSE event.
+- One stage = one branch + one PR; **PR for the whole sprint stays unopened until Sprint Q is finished** (per maintainer instruction 2026-06-10).
 
 ### 2.4 Exit Criteria
 
@@ -155,6 +174,18 @@ Before starting any phase or stage:
 - [x] O8 — Maintenance: `docs/MAINTENANCE.md` updated with desktop packaging validation section and regression checklist.
 - [x] O9 — Full gate: **1102 passed / 4 skipped**; pyright 0; ruff check + format clean; `weaver --help` validates; no new runtime dependency.
 
+**Sprint Q exit criteria** (Workspace v2) — executed per [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md), each stage gated per §2.2:
+
+> **Gate Q status: 🟡 IN PROGRESS — Q0 planning ✅ complete; Q1 ✅ COMPLETE; Q2–Q12 ⛔ pending.**
+
+- [x] Q0 — Planning complete: deep audit, execution plan (Q0–Q12), risk register (R-01..23), cold-start handoff — all four `.docs/audit/SPRINT_Q_*` docs landed.
+- [x] Q1 — WV-010: migration v10 (`projects.uuid`, forward + idempotency tests); `project_discovery` uuid + duplicate detection; `services/workspace_index.py` read-only/mtime-cached/error-isolated/budget-tested; grep-gate test added; **index consumed by zero routes**.
+- [ ] Q2 — Read paths use `connect_readonly_database` only; `reset_interrupted_segments`/migration off the read path; zero source-file hashing on any render; approve/apply failures surfaced; `ui.py` split (zero behavior change); router-SQL grep-gate → zero.
+- [ ] Q3–Q8 — Hubs built only on the hardened foundation: global shell + dashboard, cross-project queue (`stale_running` distinct), Resources, Providers, Export gate + ledger (migration v11; advisory default preserved), Analytics — each within performance budget, no SQLite in CLI/web layer, ADR 010 unviolated.
+- [ ] Q9–Q11 — Content Explorer v2; editor context panel; validation completion (WV-007/008/011; `error` tier only after ADR 013).
+- [ ] Q12 — Residual cleanup; conditional migration v12; **final gate green** — full suite + pyright 0 + ruff clean + `weaver --help` + `cargo check`/`cargo tauri build`; desktop smoke (≥3 projects, no orphans, both logs); security smoke (traversal rejected, zero key/token in logs/render, no cross-project path leak); performance smoke (index within budget @10 projects, zero render-time hashing).
+- [ ] Throughout: no new runtime dependency; one stage = one branch + one PR; **sprint PR opened only after Sprint Q is finished**.
+
 ### 2.5 Phase Log
 
 Deep detail per entry lives in git history and linked docs.
@@ -184,7 +215,7 @@ Deep detail per entry lives in git history and linked docs.
 | **Sprint N — Tauri Shell Alpha** | `desktop/` | 1043 / 4 | ✅ CLOSED — runtime validated, build green (dependency pins fixed, design system integrated) |
 | **Sprint P — Workflow Coherence** | [SPRINT_P_EXECUTION](.docs/audit/SPRINT_P_EXECUTION.md) + [SPRINT_P_EXECUTION_PLAN](docs/SPRINT_P_EXECUTION_PLAN.md) | 1102 / 4 | ✅ CLOSED 2026-06-10 — all 6 WV items (P1–P6) complete; O-gate WV-001+WV-002 green; pyright 0; ruff clean; no new runtime dependency |
 | **Sprint O — Production Desktop** | `desktop/` | 1102 / 4 | ✅ COMPLETE 2026-06-10 — portable app path (cargo tauri build → 3.2 MB exe); production icons; docs/INSTALL_DESKTOP.md; smoke test green; sidecar bundling plan (PyInstaller recommended for single-file); PATH dependency baseline |
-| Sprint Q — Workspace v2 | [ROADMAP_REPLAN](.docs/audit/ROADMAP_REPLAN.md) | — | ⬜ Post-O (high-level only) |
+| **Sprint Q — Workspace v2** | [SPRINT_Q_EXECUTION_PLAN](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [DEEP_AUDIT](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [RISK_REGISTER](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [HANDOFF](.docs/audit/SPRINT_Q_HANDOFF.md) | 1131 / 4 | 🟡 ACTIVE — **Q0 planning ✅ COMPLETE** · **Q1 ✅ COMPLETE** (migration v10, project_discovery uuid, workspace_index read-only layer, grep-gate); next = **Q2** read-path hardening |
 
 ---
 
@@ -216,7 +247,7 @@ Provider registry: `providers/registry.py`. API keys resolve from env vars or `~
 
 ### 4.1 Before Coding
 
-- Read the relevant doc/ADR section first. Docs are authoritative; the forward spec is [.docs/audit/SOURCEOFARCHITECTURE.md](.docs/audit/SOURCEOFARCHITECTURE.md) + [ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md).
+- Read the relevant doc/ADR section first. Docs are authoritative. For the **active Sprint Q**, the forward spec is [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) (cold start: [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md)), against the target [SOURCEOFARCHITECTURE.md](.docs/audit/SOURCEOFARCHITECTURE.md) + [ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md).
 - Respect sprint order. Run the §2.2 phase gate before starting a new sprint.
 - Use exact names/values from docs for types, schemas, exit codes. Do not improvise.
 - When unsure: ask. Do not invent fields, prompts, commands, or exit codes.
@@ -261,10 +292,9 @@ ADR `002`. (Absorbs the former `ENGINEERING_STANDARDS.md`; still-valid rules bel
 ### 4.4 Scope Discipline
 
 - Build only what the active phase (§2.3) lists. Deferred/advanced items get no scaffolding "for later".
-- One PR = one concern. No bundled refactor + feature.
-- **Sprint N:** minimal Tauri shell alpha only — sidecar lifecycle, health polling, session token, graceful shutdown. No packaging, no installer, no signed builds, **no UI rewrite (template diff = 0)**.
-- **Sprint P:** the audit's per-project Workflow Coherence fixes only (WV-001..008, 013) — execution order + constraints + reuse map in [.docs/audit/SPRINT_P_EXECUTION.md](.docs/audit/SPRINT_P_EXECUTION.md). **WV-001 + WV-002 are the hard gate for Sprint O; `N → O` is forbidden.** **Out of scope:** cross-project Workspace hubs, Analytics, project-id refactor, OCR implementation — those are Sprint Q / ADR-gated.
-- Historical: Sprint L = candidate-review + character-draft only; Sprint M = image/OCR security gate (ADR `012`) only.
+- One PR = one concern. No bundled refactor + feature. **One Sprint Q stage = one branch + one PR.**
+- **Sprint Q (active):** build only the stage named in §2.3 / the execution plan, in order. **Q1 (read layer) and Q2 (hardening) precede every hub — no Q3+ surface on the un-hardened foundation.** The cross-project read layer is **read-only**; **no global mutable store without an ADR**; **no source-file hashing on any render path** (Gate B1 extended). Out of scope for Q unless its stage names it: OCR implementation, provider expansion, route rewrite, SPA/Node, external queue, `desktop/` changes (smoke only at Q12). Defer the sprint PR until all of Q is finished (per maintainer instruction 2026-06-10).
+- Historical: Sprint N = Tauri shell alpha (sidecar lifecycle, no UI rewrite); Sprint P = per-project Workflow Coherence (WV-001..006); Sprint O = production desktop packaging; Sprint L = candidate-review + character-draft; Sprint M = image/OCR security gate (ADR `012`).
 
 ### 4.5 Communication
 

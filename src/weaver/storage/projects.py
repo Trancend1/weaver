@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -19,6 +20,7 @@ class ProjectRecord:
     source_lang: str
     target_lang: str
     schema_version: int
+    uuid: str | None = None
 
 
 def create_project(
@@ -54,6 +56,7 @@ def create_project(
     if existing is not None:
         return int(existing["id"])
 
+    project_uuid = str(uuid.uuid4())
     cursor = connection.execute(
         """
         INSERT INTO projects (
@@ -62,9 +65,10 @@ def create_project(
           source_lang,
           target_lang,
           created_at,
-          schema_version
+          schema_version,
+          uuid
         )
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             name,
@@ -73,6 +77,7 @@ def create_project(
             target_lang,
             datetime.now(UTC).isoformat(),
             SCHEMA_VERSION,
+            project_uuid,
         ),
     )
     if cursor.lastrowid is None:
@@ -96,7 +101,7 @@ def get_project(connection: sqlite3.Connection, project_id: int) -> ProjectRecor
 
     row = connection.execute(
         """
-        SELECT id, name, source_path, source_lang, target_lang, schema_version
+        SELECT id, name, source_path, source_lang, target_lang, schema_version, uuid
         FROM projects
         WHERE id = ?
         """,
@@ -111,4 +116,37 @@ def get_project(connection: sqlite3.Connection, project_id: int) -> ProjectRecor
         source_lang=str(row["source_lang"]),
         target_lang=str(row["target_lang"]),
         schema_version=int(row["schema_version"]),
+        uuid=str(row["uuid"]) if row["uuid"] is not None else None,
+    )
+
+
+def get_project_by_uuid(connection: sqlite3.Connection, project_uuid: str) -> ProjectRecord | None:
+    """Load a project row by its stable uuid.
+
+    Args:
+        connection: Open SQLite connection.
+        project_uuid: The project's uuid.
+
+    Returns:
+        ProjectRecord if found, otherwise None.
+    """
+
+    row = connection.execute(
+        """
+        SELECT id, name, source_path, source_lang, target_lang, schema_version, uuid
+        FROM projects
+        WHERE uuid = ?
+        """,
+        (project_uuid,),
+    ).fetchone()
+    if row is None:
+        return None
+    return ProjectRecord(
+        id=int(row["id"]),
+        name=str(row["name"]),
+        source_path=str(row["source_path"]),
+        source_lang=str(row["source_lang"]),
+        target_lang=str(row["target_lang"]),
+        schema_version=int(row["schema_version"]),
+        uuid=str(row["uuid"]) if row["uuid"] is not None else None,
     )
