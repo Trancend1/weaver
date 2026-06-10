@@ -30,6 +30,11 @@ def global_layout(active_nav: str) -> dict[str, Any]:
     return {"layout_mode": "global", "active_nav": active_nav}
 
 
+def ws_hub_layout(active_nav: str = "projects") -> dict[str, Any]:
+    """Layout context for the global Workspace hub shell (ws-hub mode)."""
+    return {"layout_mode": "ws-hub", "active_nav": active_nav}
+
+
 def project_layout(
     request: Request,
     name: str,

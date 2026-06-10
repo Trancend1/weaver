@@ -26,7 +26,11 @@
   </header>
 
   <div class="app-shell app-shell--{{ _mode }}">
+    {% if _mode == "ws-hub" %}
+    {% include "partials/_workspace_sidebar.html" %}
+    {% else %}
     {% include "partials/_sidebar.html" %}
+    {% endif %}
     <main class="content" id="content">
       {% block content %}{% endblock %}
     </main>

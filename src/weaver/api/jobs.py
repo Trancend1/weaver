@@ -1042,6 +1042,22 @@ class JobRegistry:
         with self._lock:
             return self._jobs.get(job_id)
 
+    def running_count(self) -> int:
+        """Count all in-memory running jobs across all job types (zero DB access)."""
+
+        with self._lock:
+            return sum(
+                1
+                for jobs in (
+                    self._jobs.values(),
+                    self._batch_jobs.values(),
+                    self._export_jobs.values(),
+                    self._parse_jobs.values(),
+                )
+                for j in jobs
+                if j.status == "running"
+            )
+
     def find_running(self, *, project_name: str, chapter_id: str) -> TranslationJob | None:
         """Return the first running job matching project+chapter, or None.
 

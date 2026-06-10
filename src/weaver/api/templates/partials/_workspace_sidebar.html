@@ -1,0 +1,51 @@
+{% from "partials/_icons.html" import icon %}
+<aside class="sidebar sidebar--ws-hub" aria-label="Workspace navigation">
+  <div class="sidebar__head">
+    <a class="sidebar__project" href="/ui" title="Workspace">
+      <span class="sidebar__mark" aria-hidden="true">{{ icon("brand") }}</span>
+      <span class="sidebar__project-name">Workspace</span>
+    </a>
+  </div>
+
+  <nav class="sidebar__nav" aria-label="Workspace sections">
+
+    <a class="sidebar-item{% if active_nav == 'projects' %} active{% endif %}"
+       href="/ui"
+       {% if active_nav == 'projects' %}aria-current="page"{% endif %}
+       title="Projects">
+      <span class="sidebar-item__icon">{{ icon("project") }}</span>
+      <span class="sidebar-item__label">Projects</span>
+    </a>
+
+    <span class="sidebar-item sidebar-item--disabled" aria-disabled="true"
+          title="Queue — coming in Workspace v2 Q4">
+      <span class="sidebar-item__icon">{{ icon("queue") }}</span>
+      <span class="sidebar-item__label">Queue</span>
+    </span>
+
+    <span class="sidebar-item sidebar-item--disabled" aria-disabled="true"
+          title="Resources — coming in Workspace v2 Q5">
+      <span class="sidebar-item__icon">{{ icon("resources") }}</span>
+      <span class="sidebar-item__label">Resources</span>
+    </span>
+
+    <span class="sidebar-item sidebar-item--disabled" aria-disabled="true"
+          title="Providers — coming in Workspace v2 Q6">
+      <span class="sidebar-item__icon">{{ icon("providers") }}</span>
+      <span class="sidebar-item__label">Providers</span>
+    </span>
+
+    <span class="sidebar-item sidebar-item--disabled" aria-disabled="true"
+          title="Exports — coming in Workspace v2 Q7">
+      <span class="sidebar-item__icon">{{ icon("exports") }}</span>
+      <span class="sidebar-item__label">Exports</span>
+    </span>
+
+    <span class="sidebar-item sidebar-item--disabled" aria-disabled="true"
+          title="Settings — coming in Workspace v2">
+      <span class="sidebar-item__icon">{{ icon("settings") }}</span>
+      <span class="sidebar-item__label">Settings</span>
+    </span>
+
+  </nav>
+</aside>
