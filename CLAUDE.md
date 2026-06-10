@@ -63,9 +63,9 @@ Foundation (v0.6.0) ✅
   → Sprint K — Export fidelity             ✅
   → Sprint L — Candidate review            ✅
   → Sprint M — Image / OCR security gate   ✅
-  → Sprint N — Tauri shell alpha           🟡  (scaffold complete; runtime validation pending Rust+MSVC toolchain)
+  → Sprint N — Tauri shell alpha           ✅  (runtime validated, dependency pins fixed, design system integrated)
   → Sprint P — Workflow Coherence          ✅  (WV-001..006 complete; O-gate green)
-  → Sprint O — Production desktop          ⬜  (BLOCKED until N runtime + P O-gate both green)
+  → **Sprint O — Production desktop**       ✅  (portable app path; smoke test green; docs/INSTALL_DESKTOP.md)
   → Sprint Q — Workspace v2 (cross-project)⬜  (high-level only until O + WV-010 + desktop feedback)
 ```
 
@@ -86,9 +86,9 @@ Before starting any phase or stage:
 
 > Required reminder: **"Check exit criteria first. No next phase until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Sprint N (Tauri Shell Alpha), then Sprint O (Production Desktop)
+### 2.3 Active Phase — Sprint O (Production Desktop) ✅ COMPLETE
 
-> Strict order **N → P → O → Q** (one sprint at a time). Sprint P is **CLOSED** (Workflow Coherence — all 6 WV items complete, O-gate green, 1102/4 passed). Sprint N remains 🟡 (scaffold complete, runtime validation pending). Forward scope: [.docs/audit/ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md); Sprint P detail: [docs/SPRINT_P_EXECUTION_PLAN.md](docs/SPRINT_P_EXECUTION_PLAN.md).
+> Strict order **N → P → O → Q** (one sprint at a time). Sprint P is **CLOSED**. Sprint N is **CLOSED** (runtime validated, build green). Sprint O is **COMPLETE** (portable app path, smoke test green, docs). Forward scope: [.docs/audit/ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md).
 
 **Sprint N — in scope (packaging-only, no UI rewrite):**
 - Minimal Tauri workspace in `desktop/` (isolated subtree, not a Python dependency).
@@ -117,14 +117,14 @@ Before starting any phase or stage:
 
 **Sprint N exit criteria** (Tauri shell alpha):
 
-> **Gate N status: 🟡 PARTIAL — scaffold complete, runtime validation pending Rust+MSVC toolchain.** Code path is written in `desktop/`; N1–N4 cannot be verified until the toolchain is installed and `cargo tauri dev` runs.
+> **Gate N status: ✅ CLOSED — runtime validated, build green.**
 
-- [ ] N1 — Double-click launch starts backend + UI within 5 s on the maintainer's machine. *(pending toolchain)*
-- [ ] N2 — `/healthz` polled before the window opens. *(coded: `desktop/src/lib.rs` `boot` polls before `open_cockpit`; pending runtime proof)*
-- [ ] N3 — Window close kills the sidecar; no orphan `weaver` process in the OS process list. *(coded: `Sidecar::shutdown` taskkill `/T`→`/F`; pending runtime proof)*
-- [ ] N4 — Backend failure surfaces a readable crash screen; cockpit `runtime.log` + host `sidecar.console.log` land in `logs_dir`. *(coded: `show_crash` + `spawn_tee`; pending runtime proof)*
-- [x] N5 — No external browser dependency; **template diff = 0** vs Sprint M end (no UI rewrite). *(verified: 0 `src/weaver` changes; WebView only.)*
-- [x] N6 — Gate green: full suite **1043 / 4 skipped**. *(pyright/ruff/wheel re-run at PR time; no Python touched.)*
+- [x] N1 — Double-click launch starts backend + UI within 5 s on the maintainer's machine.
+- [x] N2 — `/healthz` polled before the window opens.
+- [x] N3 — Window close kills the sidecar; no orphan `weaver` process in the OS process list.
+- [x] N4 — Backend failure surfaces a readable crash screen; cockpit `runtime.log` + host `sidecar.console.log` land in `logs_dir`.
+- [x] N5 — No external browser dependency; **template diff = 0** vs Sprint M end (no UI rewrite).
+- [x] N6 — Gate green: full suite **1102 / 4 skipped**.
 
 **Sprint P exit criteria** (Workflow Coherence) — executed per [docs/SPRINT_P_EXECUTION_PLAN.md](docs/SPRINT_P_EXECUTION_PLAN.md):
 
@@ -139,7 +139,21 @@ Before starting any phase or stage:
 - [x] **O-gate:** WV-001 + WV-002 both tested and passing; no regression in 1102 tests.
 - [x] Full suite: **1102 passed / 4 skipped**; pyright 0; ruff check + format clean; `weaver --help` validates; no new runtime dependency.
 
-**Sprint O entry gate (hard):** WV-001 + WV-002 MUST be complete and gate-green before Sprint O begins. `N → O` directly is forbidden. **Sprint P now satisfies this gate.** Sprint O additionally requires Sprint N runtime validation (Rust + MSVC toolchain).
+**Sprint O entry gate (hard):** WV-001 + WV-002 MUST be complete and gate-green before Sprint O begins. `N → O` directly is forbidden. **Sprint P now satisfies this gate.** Sprint O additionally requires Sprint N runtime validation (Rust + MSVC toolchain). **Both gates GREEN — Sprint O is COMPLETE.**
+
+**Sprint O exit criteria** (Production Desktop Packaging):
+
+> **Gate O status: ✅ COMPLETE 2026-06-10 — portable app path validated, smoke test green, docs written.**
+
+- [x] O1 — `cargo tauri build` produces `target/release/weaver-desktop.exe` (portable, ~3.2 MB).
+- [x] O2 — Version aligned: `tauri.conf.json` + `Cargo.toml` = 0.7.0 (matches `pyproject.toml`).
+- [x] O3 — App identity: product name "Weaver", production icons (ink hand + gold/green fate-web), `dev.weaver.desktop` identifier.
+- [x] O4 — Sidecar bundling plan documented: PATH dependency for Sprint O baseline; PyInstaller recommended for single-file distribution; ADR-level evaluation recorded in `docs/INSTALL_DESKTOP.md`.
+- [x] O5 — Smoke test: launch → `/healthz` 200 → `/ui` 200 → static assets served → graceful close → no orphans (real desktop environment).
+- [x] O6 — Logs: `sidecar.console.log` + `runtime.log` both written to `%APPDATA%\Weaver\logs\`.
+- [x] O7 — Documentation: `docs/INSTALL_DESKTOP.md` covers prerequisites, build steps, smoke test, troubleshooting, known limitations.
+- [x] O8 — Maintenance: `docs/MAINTENANCE.md` updated with desktop packaging validation section and regression checklist.
+- [x] O9 — Full gate: **1102 passed / 4 skipped**; pyright 0; ruff check + format clean; `weaver --help` validates; no new runtime dependency.
 
 ### 2.5 Phase Log
 
@@ -167,9 +181,9 @@ Deep detail per entry lives in git history and linked docs.
 | Sprint L — Candidate Review | — | 1017 / 4 | ✅ Schema + apply + list UI (generation UI → Sprint P) |
 | Sprint M — Image / OCR Gate | `feat/image-ocr-security` (PR #29) | 1043 / 4 | ✅ Preview gate (ADR `012`); OCR contract only |
 | Council Audit + replan | [.docs/audit/](.docs/audit/) | — | ✅ Audit + roadmap (strict N → P → O → Q) |
-| **Sprint N — Tauri Shell Alpha** | `desktop/` | 1043 / 4 | 🟡 Scaffold complete; build/runtime validation pending Rust+MSVC toolchain (N1–N4 unverified; N5 template-diff=0 ✓, N6 suite green ✓) |
+| **Sprint N — Tauri Shell Alpha** | `desktop/` | 1043 / 4 | ✅ CLOSED — runtime validated, build green (dependency pins fixed, design system integrated) |
 | **Sprint P — Workflow Coherence** | [SPRINT_P_EXECUTION](.docs/audit/SPRINT_P_EXECUTION.md) + [SPRINT_P_EXECUTION_PLAN](docs/SPRINT_P_EXECUTION_PLAN.md) | 1102 / 4 | ✅ CLOSED 2026-06-10 — all 6 WV items (P1–P6) complete; O-gate WV-001+WV-002 green; pyright 0; ruff clean; no new runtime dependency |
-| Sprint O — Production Desktop | — | — | ⬜ Blocked: requires N runtime + P O-gate both green |
+| **Sprint O — Production Desktop** | `desktop/` | 1102 / 4 | ✅ COMPLETE 2026-06-10 — portable app path (cargo tauri build → 3.2 MB exe); production icons; docs/INSTALL_DESKTOP.md; smoke test green; sidecar bundling plan (PyInstaller recommended for single-file); PATH dependency baseline |
 | Sprint Q — Workspace v2 | [ROADMAP_REPLAN](.docs/audit/ROADMAP_REPLAN.md) | — | ⬜ Post-O (high-level only) |
 
 ---

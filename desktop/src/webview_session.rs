@@ -28,7 +28,7 @@ pub fn install_session_header(window: &WebviewWindow, token: &str) {
         };
         use webview2_com::WebResourceRequestedEventHandler;
         use windows::core::{w, HSTRING};
-        use windows::Win32::System::WinRT::EventRegistrationToken;
+        // In windows 0.61+, EventRegistrationToken is just i64.
 
         unsafe {
             let core = match webview.controller().CoreWebView2() {
@@ -59,7 +59,7 @@ pub fn install_session_header(window: &WebviewWindow, token: &str) {
                 },
             ));
 
-            let mut token_reg = EventRegistrationToken::default();
+            let mut token_reg: i64 = 0;
             let _ = core.add_WebResourceRequested(&handler, &mut token_reg);
         }
     });

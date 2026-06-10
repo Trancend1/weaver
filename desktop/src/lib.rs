@@ -175,7 +175,7 @@ fn boot(handle: AppHandle, cfg: LaunchConfig) {
 /// close the loading window. Marshalled onto the main thread.
 fn open_cockpit(handle: AppHandle, cfg: LaunchConfig) {
     let _ = handle.clone().run_on_main_thread(move || {
-        let url = match tauri::Url::parse(&cfg.ui_url()) {
+        let cockpit_url = match tauri::Url::parse(&cfg.ui_url()) {
             Ok(url) => url,
             Err(err) => {
                 show_crash(
@@ -192,16 +192,24 @@ fn open_cockpit(handle: AppHandle, cfg: LaunchConfig) {
             }
         };
 
-        let built = WebviewWindowBuilder::new(&handle, "main", WebviewUrl::External(url))
-            .title("Weaver")
-            .inner_size(1280.0, 800.0)
-            .min_inner_size(900.0, 600.0)
-            .center()
-            .build();
+        // Build window with a local page first so navigation does not start
+        // before we register the WebResourceRequested session-header interceptor.
+        let built = WebviewWindowBuilder::new(
+            &handle,
+            "main",
+            WebviewUrl::App("loading.html".into()),
+        )
+        .title("Weaver")
+        .inner_size(1280.0, 800.0)
+        .min_inner_size(900.0, 600.0)
+        .center()
+        .build();
 
         match built {
             Ok(window) => {
                 webview_session::install_session_header(&window, &cfg.token);
+                // Navigate to the cockpit AFTER the interceptor is live.
+                let _ = window.navigate(cockpit_url);
                 if let Some(loading) = handle.get_webview_window("loading") {
                     let _ = loading.close();
                 }
