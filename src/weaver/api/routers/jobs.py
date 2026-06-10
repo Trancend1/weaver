@@ -33,7 +33,7 @@ from weaver.services.job_store import (
     list_jobs_for_project,
 )
 from weaver.services.project_discovery import find_project
-from weaver.storage.db import connect_database
+from weaver.storage.db import connect_readonly_database
 
 router = APIRouter(prefix="/projects", tags=["jobs"])
 
@@ -79,7 +79,7 @@ def list_project_jobs(name: str, request: Request) -> JobListResponse:
     """Return every persisted job for one project, newest first."""
     db_path = _resolve_db(request, name)
     try:
-        with closing(connect_database(db_path)) as conn:
+        with closing(connect_readonly_database(db_path)) as conn:
             rows = list_jobs_for_project(conn)
     except WeaverError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -96,7 +96,7 @@ def get_job_detail(name: str, job_id: str, request: Request) -> JobDetailRespons
     """
     db_path = _resolve_db(request, name)
     try:
-        with closing(connect_database(db_path)) as conn:
+        with closing(connect_readonly_database(db_path)) as conn:
             row = get_job(conn, job_id=job_id)
             if row is None or row.project_name != name:
                 raise HTTPException(

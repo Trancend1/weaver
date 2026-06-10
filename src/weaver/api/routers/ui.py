@@ -42,7 +42,7 @@ from weaver.services.project_tree import project_tree
 from weaver.services.source_browser import list_directory, resolve_source
 from weaver.services.source_intake import resolve_intake_source
 from weaver.services.volume import delete_volume_from_project
-from weaver.storage.db import connect_database
+from weaver.storage.db import connect_readonly_database
 from weaver.storage.volumes import get_volume
 
 router = APIRouter(tags=["ui"], include_in_schema=False)
@@ -201,9 +201,9 @@ def _volume_reference_preview(request: Request, source_path: str) -> HTMLRespons
             continue
         db_path = resolve_database_path(discovered.project_toml, cwd=base)
         try:
-            with closing(connect_database(db_path)) as connection:
+            with closing(connect_readonly_database(db_path)) as connection:
                 get_volume(connection, volume_id)
-        except LookupError:
+        except (LookupError, WeaverError):
             continue
         matches.append((discovered.name, discovered.project_toml))
 

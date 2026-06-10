@@ -40,7 +40,7 @@ from weaver.core.epub_structure import (
 )
 from weaver.errors import WeaverError
 from weaver.readers.epub import PARSER_VERSION
-from weaver.storage.db import connect_database, transaction
+from weaver.storage.db import connect_database, connect_readonly_database, transaction
 
 
 @dataclass(frozen=True)
@@ -219,7 +219,7 @@ def snapshot_status(
     expected_parser_version: int = PARSER_VERSION,
 ) -> SnapshotStatus:
     """Classify the persisted snapshot for ``volume_id`` as missing/fresh/stale."""
-    with closing(connect_database(db_path)) as connection:
+    with closing(connect_readonly_database(db_path)) as connection:
         row = connection.execute(
             """
             SELECT source_hash, parser_version, created_at, updated_at

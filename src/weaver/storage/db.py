@@ -46,7 +46,7 @@ def initialize_database(path: Path) -> sqlite3.Connection:
 
 
 def connect_database(path: Path) -> sqlite3.Connection:
-    """Open an existing writable database and reset interrupted segments.
+    """Open an existing writable database and apply pending migrations.
 
     Args:
         path: Database file path.
@@ -67,7 +67,6 @@ def connect_database(path: Path) -> sqlite3.Connection:
     connection = _open_database(path)
     try:
         apply_migrations(connection, target_version=SCHEMA_VERSION)
-        reset_interrupted_segments(connection)
         connection.commit()
     except sqlite3.Error as exc:
         connection.close()

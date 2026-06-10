@@ -28,6 +28,7 @@ from weaver.storage.projects import ProjectRecord, get_project
 from weaver.storage.segments import (
     SegmentRecord,
     list_segments_for_translation,
+    reset_in_progress_segments,
     sync_document_segments,
     update_segment_status,
 )
@@ -290,6 +291,7 @@ def translate_project(
             sync_document_segments(
                 connection, project_id=project.id, volume_id=volume_id, document=document
             )
+            reset_in_progress_segments(connection)
 
         glossary_terms = list_glossary_terms(connection, project_id=project.id)
         characters = load_character_contexts(connection, project_id=project.id)

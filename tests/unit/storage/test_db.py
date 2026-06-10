@@ -35,7 +35,8 @@ def test_initialize_database_creates_schema_and_enables_wal(tmp_path) -> None:
     assert foreign_keys == 1
 
 
-def test_connect_database_resets_in_progress_segments(tmp_path) -> None:
+def test_connect_database_does_not_reset_in_progress_segments(tmp_path) -> None:
+    """connect_database must NOT reset in_progress segments (R-02 / Q2b)."""
     db_path = tmp_path / "weaver.db"
     with initialize_database(db_path) as connection:
         connection.execute(
@@ -77,7 +78,10 @@ def test_connect_database_resets_in_progress_segments(tmp_path) -> None:
     with connect_database(db_path) as connection:
         status = connection.execute("SELECT status FROM segments WHERE id = 'seg-1'").fetchone()[0]
 
-    assert status == "pending"
+    assert status == "in_progress", (
+        "connect_database must NOT reset in_progress segments (R-02). "
+        "Reset belongs at explicit recovery points only."
+    )
 
 
 def test_foreign_keys_are_enforced(tmp_path) -> None:
