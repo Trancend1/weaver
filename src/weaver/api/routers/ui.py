@@ -13,7 +13,6 @@ ships on ``weaver serve-api`` alongside the JSON API (Flask removed in Sprint 13
 from __future__ import annotations
 
 from contextlib import closing
-from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -21,20 +20,13 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Respon
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from weaver.api.jobs import JobRegistry
-from weaver.api.routers.candidates import (
-    apply_candidate_endpoint,
-    approve_candidate_endpoint,
-    reject_candidate_endpoint,
-)
 from weaver.api.routers.export import _start_export
-from weaver.api.routers.translate import _start_job as _start_translate_job
 from weaver.api.schemas import ExportRequest
 from weaver.api.templating import templates
-from weaver.api.ui_context import global_layout, project_layout, workspace_layout
+from weaver.api.ui_context import global_layout, project_layout
 from weaver.core.global_config import load_global_config, resolve_config_value
 from weaver.errors import (
     ChapterNotFoundError,
-    SegmentNotFoundError,
     VolumeNotFoundError,
     WeaverError,
 )
@@ -42,32 +34,14 @@ from weaver.providers.registry import known_provider_types
 from weaver.services.chapter_workspace import chapter_workspace
 from weaver.services.epub_structure_preview import preview_epub_structure
 from weaver.services.import_source import import_volume
-from weaver.services.job_store import (
-    db_path_for as _resolve_jobs_db_path,
-)
-from weaver.services.job_store import (
-    get_job,
-    list_events_after,
-    list_jobs_for_project,
-)
 from weaver.services.project import delete_project, initialize_project, project_name_exists
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_overview import project_overview
 from weaver.services.project_paths import resolve_database_path
 from weaver.services.project_tree import project_tree
-from weaver.services.reading_preview import (
-    reading_preview_for_chapter,
-    reading_preview_for_volume,
-)
-from weaver.services.segment_history import segment_translation_history
-from weaver.services.segment_review import (
-    list_review_queue,
-    set_segment_review_status,
-)
 from weaver.services.source_browser import list_directory, resolve_source
 from weaver.services.source_intake import resolve_intake_source
 from weaver.services.volume import delete_volume_from_project
-from weaver.services.workspace_edit import save_segment_translation
 from weaver.storage.db import connect_database
 from weaver.storage.volumes import get_volume
 
@@ -100,6 +74,50 @@ def _project_rows(base_dir: Path) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def _resolve_project_toml(request: Request, name: str) -> Path:
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    if dp is None:
+        raise ChapterNotFoundError(f"No project named {name!r} under {base}.")
+    if dp.error:
+        raise WeaverError(dp.error)
+    return dp.project_toml
+
+
+def _job_error(request: Request, message: str, *, panel_id: str) -> HTMLResponse:
+    """Render a job-panel error fragment (keeps the panel id so HTMX swaps it)."""
+    return templates.TemplateResponse(
+        request, "partials/_job_error.html", {"message": message, "panel_id": panel_id}
+    )
+
+
+def _render_translate_job(request: Request, name: str, job_id: str) -> HTMLResponse:
+    job = _jobs(request).get(job_id)
+    if job is None or job.project_name != name:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found for '{name}'.")
+    updated_segments = []
+    updated_segment_ids = set(job.drain_updated_segment_ids())
+    if updated_segment_ids:
+        try:
+            project_toml = _resolve_project_toml(request, name)
+            ws = chapter_workspace(project_toml, job.chapter_id, cwd=_base_dir(request))
+            updated_segments = [seg for seg in ws.segments if seg.id in updated_segment_ids]
+        except WeaverError:
+            updated_segments = []
+    response = templates.TemplateResponse(
+        request,
+        "partials/_job_with_grid.html",
+        {
+            "job": job,
+            "progress": job.snapshot(),
+            "name": name,
+            "chapter_id": job.chapter_id,
+            "updated_segments": updated_segments,
+        },
+    )
+    return response
 
 
 @router.get("/ui", response_class=HTMLResponse)
@@ -245,117 +263,6 @@ def project_view(name: str, request: Request) -> HTMLResponse:
 
 
 # --- jobs (Sprint I6 — unified Job Detail UI) ------------------------------
-
-
-@router.get("/ui/projects/{name}/jobs", response_class=HTMLResponse)
-def project_jobs_page(name: str, request: Request) -> HTMLResponse:
-    """List every persisted job for one project, newest first."""
-    base = _base_dir(request)
-    dp = find_project(base, name)
-    if dp is None:
-        return templates.TemplateResponse(
-            request,
-            "not_found.html",
-            {"message": f"No project named {name!r} under {base}."},
-            status_code=404,
-        )
-    db_path = _resolve_jobs_db_path(base, name)
-    rows = []
-    error: str | None = None
-    if db_path is None:
-        error = "Project database is not resolvable."
-    else:
-        try:
-            from contextlib import closing
-
-            from weaver.storage.db import connect_database
-
-            with closing(connect_database(db_path)) as conn:
-                rows = list_jobs_for_project(conn)
-        except WeaverError as exc:
-            error = str(exc)
-    return templates.TemplateResponse(
-        request,
-        "jobs_list.html",
-        {
-            **project_layout(request, name, active_nav="jobs"),
-            "jobs": rows,
-            "error": error,
-        },
-    )
-
-
-@router.get("/ui/projects/{name}/jobs/{job_id}/detail", response_class=HTMLResponse)
-def job_detail_page(name: str, job_id: str, request: Request) -> HTMLResponse:
-    """Render one job's status, progress, result/error, and event log."""
-    base = _base_dir(request)
-    dp = find_project(base, name)
-    if dp is None:
-        return templates.TemplateResponse(
-            request,
-            "not_found.html",
-            {"message": f"No project named {name!r} under {base}."},
-            status_code=404,
-        )
-    db_path = _resolve_jobs_db_path(base, name)
-    if db_path is None:
-        return templates.TemplateResponse(
-            request,
-            "error.html",
-            {"message": "Project database is not resolvable."},
-            status_code=422,
-        )
-    from contextlib import closing
-
-    from weaver.storage.db import connect_database
-
-    with closing(connect_database(db_path)) as conn:
-        row = get_job(conn, job_id=job_id)
-        if row is None or row.project_name != name:
-            return templates.TemplateResponse(
-                request,
-                "not_found.html",
-                {"message": f"Job '{job_id}' not found for project '{name}'."},
-                status_code=404,
-            )
-        events = list_events_after(conn, job_id=job_id, after_id=0)
-
-    result_payload: dict[str, Any] | None = None
-    if row.result_json:
-        import json as _json
-
-        try:
-            parsed = _json.loads(row.result_json)
-        except _json.JSONDecodeError:
-            parsed = None
-        result_payload = parsed if isinstance(parsed, dict) else None
-
-    return templates.TemplateResponse(
-        request,
-        "job_detail.html",
-        {
-            **project_layout(request, name, active_nav="jobs"),
-            "job": row,
-            "events": events,
-            "result": result_payload,
-        },
-    )
-
-
-@router.post("/ui/projects/{name}/jobs/{job_id}/detail/cancel", response_class=HTMLResponse)
-def job_detail_cancel(name: str, job_id: str, request: Request) -> HTMLResponse:
-    """Cancel any kind of running job and re-render the detail page.
-
-    Distinct from the existing translate-cancel route at
-    ``/ui/projects/{name}/jobs/{job_id}/cancel``, which is specific to the
-    workspace job-panel partial — this one belongs to the unified Job Detail
-    UI (Sprint I6) and renders the full ``job_detail.html`` page back.
-    """
-    jobs = _jobs(request)
-    job = jobs.get(job_id) or jobs.get_batch(job_id) or jobs.get_export(job_id)
-    if job is not None and job.project_name == name:
-        job.request_cancel()
-    return job_detail_page(name, job_id, request)
 
 
 @router.post("/ui/projects/{name}/delete")
@@ -588,103 +495,6 @@ def _render_volume_structure_preview(
     )
 
 
-# --- reading preview (Sprint P2 — WV-002) ------------------------------------
-
-
-@router.get("/ui/projects/{name}/volumes/{volume_id}/preview", response_class=HTMLResponse)
-def ui_volume_reading_preview(
-    name: str,
-    volume_id: int,
-    request: Request,
-    mode: str = Query("reading"),
-) -> HTMLResponse:
-    """Read-only reading preview for one volume."""
-
-    base = _base_dir(request)
-    dp = find_project(base, name)
-    if dp is None:
-        return templates.TemplateResponse(
-            request,
-            "not_found.html",
-            {"message": f"No project named {name!r} under {base}."},
-            status_code=404,
-        )
-    if dp.error:
-        return templates.TemplateResponse(
-            request, "error.html", {"message": dp.error}, status_code=422
-        )
-    try:
-        chapters = reading_preview_for_volume(dp.project_toml, volume_id, cwd=base)
-    except VolumeNotFoundError as exc:
-        return templates.TemplateResponse(
-            request, "not_found.html", {"message": str(exc)}, status_code=404
-        )
-    except WeaverError as exc:
-        return templates.TemplateResponse(
-            request, "error.html", {"message": str(exc)}, status_code=422
-        )
-    return templates.TemplateResponse(
-        request,
-        "reading_preview.html",
-        {
-            **project_layout(request, name, active_nav="project"),
-            "project_name": name,
-            "volume_id": volume_id,
-            "chapter_id": None,
-            "mode": mode,
-            "base_url": request.url.path,
-            "chapters": chapters,
-        },
-    )
-
-
-@router.get("/ui/projects/{name}/chapters/{chapter_id}/preview", response_class=HTMLResponse)
-def ui_chapter_reading_preview(
-    name: str,
-    chapter_id: str,
-    request: Request,
-    mode: str = Query("reading"),
-) -> HTMLResponse:
-    """Read-only reading preview for one chapter."""
-
-    base = _base_dir(request)
-    dp = find_project(base, name)
-    if dp is None:
-        return templates.TemplateResponse(
-            request,
-            "not_found.html",
-            {"message": f"No project named {name!r} under {base}."},
-            status_code=404,
-        )
-    if dp.error:
-        return templates.TemplateResponse(
-            request, "error.html", {"message": dp.error}, status_code=422
-        )
-    try:
-        chapter = reading_preview_for_chapter(dp.project_toml, chapter_id, cwd=base)
-    except ChapterNotFoundError as exc:
-        return templates.TemplateResponse(
-            request, "not_found.html", {"message": str(exc)}, status_code=404
-        )
-    except WeaverError as exc:
-        return templates.TemplateResponse(
-            request, "error.html", {"message": str(exc)}, status_code=422
-        )
-    return templates.TemplateResponse(
-        request,
-        "reading_preview.html",
-        {
-            **project_layout(request, name, active_nav="project"),
-            "project_name": name,
-            "volume_id": None,
-            "chapter_id": chapter_id,
-            "mode": mode,
-            "base_url": request.url.path,
-            "chapters": [chapter],
-        },
-    )
-
-
 # --- create / import (Stage 11B-1) ------------------------------------------
 
 
@@ -791,206 +601,6 @@ def _import_error(request: Request, message: str) -> HTMLResponse:
     return response
 
 
-# --- workspace read / save / history (Stage 11B-2) --------------------------
-
-
-def _resolve_project_toml(request: Request, name: str) -> Path:
-    base = _base_dir(request)
-    dp = find_project(base, name)
-    if dp is None:
-        raise ChapterNotFoundError(f"No project named {name!r} under {base}.")
-    if dp.error:
-        raise WeaverError(dp.error)
-    return dp.project_toml
-
-
-@router.get("/ui/projects/{name}/chapters/{chapter_id}", response_class=HTMLResponse)
-def workspace_view(name: str, chapter_id: str, request: Request) -> HTMLResponse:
-    """Two-column JP/EN workspace for one chapter (read-only render of segments)."""
-    base = _base_dir(request)
-    try:
-        project_toml = _resolve_project_toml(request, name)
-        ws = chapter_workspace(project_toml, chapter_id, cwd=base)
-    except (ChapterNotFoundError, SegmentNotFoundError) as exc:
-        return templates.TemplateResponse(
-            request, "not_found.html", {"message": str(exc)}, status_code=404
-        )
-    except WeaverError as exc:
-        return templates.TemplateResponse(
-            request, "error.html", {"message": str(exc)}, status_code=422
-        )
-    running_job = _jobs(request).find_running(project_name=name, chapter_id=chapter_id)
-    ctx: dict[str, Any] = {
-        **workspace_layout(request, name, active_chapter_id=chapter_id),
-        "ws": ws,
-    }
-    if running_job is not None:
-        ctx["running_job"] = running_job
-        ctx["running_job_progress"] = running_job.snapshot()
-    return templates.TemplateResponse(request, "workspace.html", ctx)
-
-
-def _render_segment(
-    request: Request,
-    name: str,
-    chapter_id: str,
-    segment_id: str,
-    *,
-    saved: bool = False,
-    error: str | None = None,
-) -> HTMLResponse:
-    """Render one segment row from its latest stored state (used after save)."""
-    base = _base_dir(request)
-    project_toml = _resolve_project_toml(request, name)
-    ws = chapter_workspace(project_toml, chapter_id, cwd=base)
-    seg = next((s for s in ws.segments if s.id == segment_id), None)
-    if seg is None:
-        raise SegmentNotFoundError(f"Segment {segment_id!r} not found in chapter {chapter_id!r}.")
-    return templates.TemplateResponse(
-        request,
-        "partials/_segment.html",
-        {"seg": seg, "name": name, "chapter_id": chapter_id, "saved": saved, "error": error},
-    )
-
-
-@router.post(
-    "/ui/projects/{name}/chapters/{chapter_id}/segments/{segment_id}",
-    response_class=HTMLResponse,
-)
-def workspace_save(
-    name: str,
-    chapter_id: str,
-    segment_id: str,
-    request: Request,
-    translated_text: str = Form(...),
-) -> HTMLResponse:
-    """Save one segment's translation (status → manual); return the refreshed row."""
-    base = _base_dir(request)
-    try:
-        project_toml = _resolve_project_toml(request, name)
-        save_segment_translation(project_toml, chapter_id, segment_id, translated_text, cwd=base)
-    except ValueError as exc:
-        return _render_segment(request, name, chapter_id, segment_id, error=str(exc))
-    except (ChapterNotFoundError, SegmentNotFoundError) as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except WeaverError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return _render_segment(request, name, chapter_id, segment_id, saved=True)
-
-
-@router.get(
-    "/ui/projects/{name}/chapters/{chapter_id}/segments/{segment_id}/history",
-    response_class=HTMLResponse,
-)
-def workspace_history(
-    name: str, chapter_id: str, segment_id: str, request: Request
-) -> HTMLResponse:
-    """Render one segment's full translation attempt history (HTMX fragment)."""
-    base = _base_dir(request)
-    try:
-        project_toml = _resolve_project_toml(request, name)
-        history = segment_translation_history(project_toml, chapter_id, segment_id, cwd=base)
-    except (ChapterNotFoundError, SegmentNotFoundError) as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except WeaverError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return templates.TemplateResponse(request, "partials/_history.html", {"history": history})
-
-
-# --- translate / retranslate + job progress (Stage 11B-3) -------------------
-
-
-def _job_error(request: Request, message: str, *, panel_id: str) -> HTMLResponse:
-    """Render a job-panel error fragment (keeps the panel id so HTMX swaps it)."""
-    return templates.TemplateResponse(
-        request, "partials/_job_error.html", {"message": message, "panel_id": panel_id}
-    )
-
-
-def _render_translate_job(request: Request, name: str, job_id: str) -> HTMLResponse:
-    job = _jobs(request).get(job_id)
-    if job is None or job.project_name != name:
-        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found for '{name}'.")
-    updated_segments = []
-    updated_segment_ids = set(job.drain_updated_segment_ids())
-    if updated_segment_ids:
-        try:
-            project_toml = _resolve_project_toml(request, name)
-            ws = chapter_workspace(project_toml, job.chapter_id, cwd=_base_dir(request))
-            updated_segments = [seg for seg in ws.segments if seg.id in updated_segment_ids]
-        except WeaverError:
-            updated_segments = []
-    response = templates.TemplateResponse(
-        request,
-        "partials/_job_with_grid.html",
-        {
-            "job": job,
-            "progress": job.snapshot(),
-            "name": name,
-            "chapter_id": job.chapter_id,
-            "updated_segments": updated_segments,
-        },
-    )
-    return response
-
-
-@router.post("/ui/projects/{name}/chapters/{chapter_id}/translate", response_class=HTMLResponse)
-def ui_translate(name: str, chapter_id: str, request: Request) -> HTMLResponse:
-    """Start a translate job for a chapter's untranslated segments (HTMX panel)."""
-    try:
-        started = _start_translate_job(
-            request,
-            name,
-            chapter_id,
-            segment_ids=None,
-            mode="skip_existing",
-            provider=None,
-            model=None,
-        )
-    except HTTPException as exc:
-        return _job_error(request, str(exc.detail), panel_id="job-panel")
-    return _render_translate_job(request, name, started.job_id)
-
-
-@router.post("/ui/projects/{name}/chapters/{chapter_id}/retranslate", response_class=HTMLResponse)
-def ui_retranslate(
-    name: str, chapter_id: str, request: Request, mode: str = Form("skip_existing")
-) -> HTMLResponse:
-    """Start a retranslate job under an explicit safe mode (HTMX panel)."""
-    try:
-        started = _start_translate_job(
-            request, name, chapter_id, segment_ids=None, mode=mode, provider=None, model=None
-        )
-    except HTTPException as exc:
-        return _job_error(request, str(exc.detail), panel_id="job-panel")
-    return _render_translate_job(request, name, started.job_id)
-
-
-@router.get("/ui/projects/{name}/chapters/{chapter_id}/running-job", response_class=HTMLResponse)
-def ui_running_chapter_job(name: str, chapter_id: str, request: Request) -> HTMLResponse:
-    """Render the active translate job for a chapter, if one is still running."""
-    running_job = _jobs(request).find_running(project_name=name, chapter_id=chapter_id)
-    if running_job is None:
-        return HTMLResponse('<div id="job-panel"></div>')
-    return _render_translate_job(request, name, running_job.id)
-
-
-@router.get("/ui/projects/{name}/jobs/{job_id}", response_class=HTMLResponse)
-def ui_job_status(name: str, job_id: str, request: Request) -> HTMLResponse:
-    """Poll a translate job's status/progress (HTMX self-refresh until terminal)."""
-    return _render_translate_job(request, name, job_id)
-
-
-@router.post("/ui/projects/{name}/jobs/{job_id}/cancel", response_class=HTMLResponse)
-def ui_job_cancel(name: str, job_id: str, request: Request) -> HTMLResponse:
-    """Cooperatively cancel a translate job, then render its current state."""
-    job = _jobs(request).get(job_id)
-    if job is None or job.project_name != name:
-        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found for '{name}'.")
-    job.request_cancel()
-    return _render_translate_job(request, name, job_id)
-
-
 # --- export trigger + job progress (Stage 11B-3) ----------------------------
 
 
@@ -1039,410 +649,3 @@ def ui_export_cancel(name: str, job_id: str, request: Request) -> HTMLResponse:
         )
     job.request_cancel()
     return _render_export_job(request, name, job_id)
-
-
-# --- candidate review UI (Sprint L3 — HTMX surfaces) ------------------------
-
-
-@router.get("/ui/projects/{name}/candidates", response_class=HTMLResponse)
-def ui_candidates_page(name: str, request: Request) -> HTMLResponse:
-    """Translation candidates review page."""
-    return templates.TemplateResponse(
-        request,
-        "candidates.html",
-        {**project_layout(request, name, active_nav="candidates"), "name": name},
-    )
-
-
-@router.get("/ui/projects/{name}/candidates/list", response_class=HTMLResponse)
-def ui_candidates_list(name: str, request: Request) -> HTMLResponse:
-    """HTMX fragment: list of candidates for a project."""
-    from weaver.storage.candidates import list_candidates_for_project
-
-    project_toml = _resolve_project_toml(request, name)
-    db_path = resolve_database_path(project_toml, cwd=_base_dir(request))
-    candidates: list[dict] = []
-    total = 0
-    try:
-        with closing(connect_database(db_path)) as conn:
-            project = conn.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
-            if project is not None:
-                pid = int(project["id"])
-                rows = list_candidates_for_project(conn, project_id=pid, limit=200)
-                total = len(rows)
-                candidates = [_candidate_to_ui_json(r) for r in rows]
-    except WeaverError:
-        pass
-    return templates.TemplateResponse(
-        request,
-        "partials/_candidates_list.html",
-        {"candidates": candidates, "total_count": total, "name": name},
-    )
-
-
-@router.post("/ui/projects/{name}/candidates/{candidate_id}/approve", response_class=HTMLResponse)
-def ui_candidate_approve(name: str, candidate_id: str, request: Request) -> HTMLResponse:
-    """Approve a candidate (HTMX). Re-renders the candidate card."""
-    from contextlib import suppress
-
-    with suppress(HTTPException):
-        approve_candidate_endpoint(name, candidate_id, request)
-    return ui_candidates_rerender_card(request, name, candidate_id)
-
-
-@router.post("/ui/projects/{name}/candidates/{candidate_id}/reject", response_class=HTMLResponse)
-def ui_candidate_reject(name: str, candidate_id: str, request: Request) -> HTMLResponse:
-    """Reject a candidate (HTMX). Re-renders the candidate card."""
-    from contextlib import suppress
-
-    with suppress(HTTPException):
-        reject_candidate_endpoint(name, candidate_id, request)
-    return ui_candidates_rerender_card(request, name, candidate_id)
-
-
-@router.post("/ui/projects/{name}/candidates/{candidate_id}/apply", response_class=HTMLResponse)
-def ui_candidate_apply(name: str, candidate_id: str, request: Request) -> HTMLResponse:
-    """Apply a candidate to its segment (HTMX). Re-renders the candidate card."""
-    from contextlib import suppress
-
-    with suppress(HTTPException):
-        apply_candidate_endpoint(name, candidate_id, request)
-    return ui_candidates_rerender_card(request, name, candidate_id)
-
-
-@router.post(
-    "/ui/projects/{name}/chapters/{chapter_id}/segments/{segment_id}/candidates/generate",
-    response_class=HTMLResponse,
-)
-def ui_candidate_generate(
-    name: str, chapter_id: str, segment_id: str, request: Request
-) -> HTMLResponse:
-    """Generate one AI candidate for a segment (HTMX); render the new card.
-
-    Thin adapter over ``generate_candidate``: the service stores a ``pending``
-    candidate grounded in glossary/character/chapter context and **never**
-    mutates the live translation. A provider call that fails mid-translate is
-    captured by the service as an empty candidate (rendered as a failed card);
-    an unavailable provider or a bad segment raises a ``WeaverError``, which we
-    surface as a safe inline fragment — never a 500.
-    """
-    from weaver.services.candidate_generation import generate_candidate
-
-    project_toml = _resolve_project_toml(request, name)
-    try:
-        record = generate_candidate(
-            project_toml,
-            chapter_id,
-            segment_id,
-            cwd=_base_dir(request),
-        )
-    except WeaverError as exc:
-        return HTMLResponse(
-            f'<div class="error" role="alert">Could not generate a candidate: '
-            f"{escape(str(exc))}</div>"
-        )
-    return templates.TemplateResponse(
-        request,
-        "partials/_candidates_list.html",
-        {"candidates": [_candidate_to_ui_json(record)], "total_count": 1, "name": name},
-    )
-
-
-def ui_candidates_rerender_card(request: Request, name: str, candidate_id: str) -> HTMLResponse:
-    """Re-render one candidate card after a status transition."""
-    from weaver.storage.candidates import get_candidate
-
-    project_toml = _resolve_project_toml(request, name)
-    db_path = resolve_database_path(project_toml, cwd=_base_dir(request))
-    c = None
-    try:
-        with closing(connect_database(db_path)) as conn:
-            c = get_candidate(conn, candidate_id=candidate_id)
-    except (LookupError, WeaverError):
-        return HTMLResponse(
-            f'<div class="error" id="candidate-{candidate_id}">Candidate not found.</div>'
-        )
-    candidate = _candidate_to_ui_json(c)
-    return templates.TemplateResponse(
-        request,
-        "partials/_candidates_list.html",
-        {
-            "candidates": [candidate],
-            "total_count": 1,
-            "name": name,
-        },
-    )
-
-
-def _candidate_to_ui_json(c: Any) -> dict:
-    import json
-
-    prov = c.provenance_json
-    return {
-        "id": c.id,
-        "project_id": c.project_id,
-        "volume_id": c.volume_id,
-        "chapter_id": c.chapter_id,
-        "segment_id": c.segment_id,
-        "source_text": c.source_text,
-        "candidate_text": c.candidate_text,
-        "provider": c.provider,
-        "model": c.model,
-        "status": c.status,
-        "provenance": json.loads(prov) if isinstance(prov, str) else prov,
-        "created_at": c.created_at,
-        "updated_at": c.updated_at,
-    }
-
-
-# --- review status (Sprint P3 — WV-003) ------------------------------------
-
-
-@router.post("/ui/projects/{name}/segments/{segment_id}/review", response_class=HTMLResponse)
-def ui_segment_review(
-    name: str,
-    segment_id: str,
-    request: Request,
-    review_status: str = Query(...),
-) -> HTMLResponse:
-    """Set a segment's review status and re-render the segment row (HTMX)."""
-    base = _base_dir(request)
-    dp = find_project(base, name)
-    if dp is None:
-        raise HTTPException(status_code=404, detail=f"No project named {name!r}.")
-    if dp.error:
-        return _import_error(request, dp.error)
-    try:
-        set_segment_review_status(dp.project_toml, segment_id, review_status, cwd=base)
-    except SegmentNotFoundError as exc:
-        return templates.TemplateResponse(
-            request,
-            "not_found.html",
-            {"message": str(exc)},
-            status_code=404,
-        )
-    except WeaverError as exc:
-        return _import_error(request, str(exc))
-    # Re-render the segment row fresh from workspace service
-    chapter_id: str | None = None
-    try:
-        with closing(connect_database(resolve_database_path(dp.project_toml, cwd=base))) as conn:
-            row = conn.execute(
-                "SELECT chapter_id FROM segments WHERE id = ?", (segment_id,)
-            ).fetchone()
-            if row is not None:
-                chapter_id = str(row["chapter_id"])
-    except Exception:
-        pass
-    if chapter_id is None:
-        return HTMLResponse("")
-    try:
-        ws = chapter_workspace(dp.project_toml, chapter_id, cwd=base)
-    except (ChapterNotFoundError, SegmentNotFoundError) as exc:
-        return templates.TemplateResponse(
-            request, "not_found.html", {"message": str(exc)}, status_code=404
-        )
-    except WeaverError as exc:
-        return templates.TemplateResponse(
-            request, "error.html", {"message": str(exc)}, status_code=422
-        )
-    seg = next((s for s in ws.segments if s.id == segment_id), None)
-    if seg is None:
-        return HTMLResponse("")
-    return templates.TemplateResponse(
-        request,
-        "partials/_segment.html",
-        {
-            "name": name,
-            "chapter_id": chapter_id,
-            "seg": seg,
-            "review_status": review_status,
-        },
-    )
-
-
-@router.get("/ui/projects/{name}/volumes/{volume_id}/review", response_class=HTMLResponse)
-def ui_review_queue(
-    name: str,
-    volume_id: int,
-    request: Request,
-    status_filter: str = Query(""),
-) -> HTMLResponse:
-    """Review queue for one volume."""
-    base = _base_dir(request)
-    dp = find_project(base, name)
-    if dp is None:
-        return templates.TemplateResponse(
-            request,
-            "not_found.html",
-            {"message": f"No project named {name!r} under {base}."},
-            status_code=404,
-        )
-    if dp.error:
-        return _import_error(request, dp.error)
-    from weaver.errors import VolumeNotFoundError
-
-    try:
-        queue = list_review_queue(
-            dp.project_toml,
-            volume_id,
-            status_filter=status_filter or None,
-            cwd=base,
-        )
-    except VolumeNotFoundError as exc:
-        return templates.TemplateResponse(
-            request, "not_found.html", {"message": str(exc)}, status_code=404
-        )
-    except WeaverError as exc:
-        return _import_error(request, str(exc))
-    return templates.TemplateResponse(
-        request,
-        "review_queue.html",
-        {
-            **project_layout(request, name, active_nav="project"),
-            "project_name": name,
-            "volume_id": volume_id,
-            "status_filter": status_filter,
-            "queue": queue,
-        },
-    )
-
-
-# --- character drafts UI (Sprint L4 — HTMX surfaces) ------------------------
-
-
-@router.get("/ui/projects/{name}/character-drafts", response_class=HTMLResponse)
-def ui_drafts_page(name: str, request: Request) -> HTMLResponse:
-    """Character page drafts review page."""
-    return templates.TemplateResponse(
-        request,
-        "character_drafts.html",
-        {**project_layout(request, name, active_nav="drafts"), "name": name},
-    )
-
-
-@router.get("/ui/projects/{name}/drafts/list", response_class=HTMLResponse)
-def ui_drafts_list(name: str, request: Request) -> HTMLResponse:
-    """HTMX fragment: list of character drafts for a project."""
-    from weaver.storage.character_drafts import list_drafts_for_project
-
-    project_toml = _resolve_project_toml(request, name)
-    db_path = resolve_database_path(project_toml, cwd=_base_dir(request))
-    drafts: list[dict] = []
-    total = 0
-    try:
-        with closing(connect_database(db_path)) as conn:
-            project = conn.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
-            if project is not None:
-                pid = int(project["id"])
-                rows = list_drafts_for_project(conn, project_id=pid, limit=200)
-                total = len(rows)
-                for r in rows:
-                    drafts.append(_draft_to_ui_json(r))
-    except WeaverError:
-        pass
-    return templates.TemplateResponse(
-        request,
-        "partials/_drafts_list.html",
-        {"drafts": drafts, "total_count": total, "name": name},
-    )
-
-
-@router.post("/ui/projects/{name}/drafts/generate", response_class=HTMLResponse)
-def ui_draft_generate(name: str, request: Request, chapter_id: str = Form(...)) -> HTMLResponse:
-    """Generate a character-page draft for a chapter (HTMX); render the card.
-
-    Thin adapter over ``generate_character_draft`` (deterministic XHTML text
-    extraction — no OCR, no provider call). Renders the new draft card, a calm
-    "no character content" notice when the chapter has none, or a safe inline
-    error fragment — never a 500. Non-destructive: a new ``draft`` row is added;
-    existing reviewed drafts are untouched.
-    """
-    from weaver.services.character_draft import generate_character_draft
-
-    project_toml = _resolve_project_toml(request, name)
-    try:
-        draft = generate_character_draft(project_toml, chapter_id, cwd=_base_dir(request))
-    except WeaverError as exc:
-        return HTMLResponse(
-            f'<div class="error" role="alert">Could not generate a draft: {escape(str(exc))}</div>'
-        )
-    if draft is None:
-        return HTMLResponse(
-            '<div class="empty empty-state" role="status">No character page content '
-            "detected in this chapter.</div>"
-        )
-    return templates.TemplateResponse(
-        request,
-        "partials/_drafts_list.html",
-        {"drafts": [_draft_to_ui_json(draft)], "total_count": 1, "name": name},
-    )
-
-
-@router.post("/ui/projects/{name}/drafts/{draft_id}/approve", response_class=HTMLResponse)
-def ui_draft_approve(name: str, draft_id: str, request: Request) -> HTMLResponse:
-    """Approve a character draft (HTMX). Re-renders the draft card."""
-    from contextlib import suppress
-
-    from weaver.api.routers.candidates import approve_draft_endpoint
-
-    with suppress(HTTPException):
-        approve_draft_endpoint(name, draft_id, request)
-    return ui_drafts_rerender_card(request, name, draft_id)
-
-
-@router.post("/ui/projects/{name}/drafts/{draft_id}/reject", response_class=HTMLResponse)
-def ui_draft_reject(name: str, draft_id: str, request: Request) -> HTMLResponse:
-    """Reject a character draft (HTMX). Re-renders the draft card."""
-    from contextlib import suppress
-
-    from weaver.api.routers.candidates import reject_draft_endpoint
-
-    with suppress(HTTPException):
-        reject_draft_endpoint(name, draft_id, request)
-    return ui_drafts_rerender_card(request, name, draft_id)
-
-
-def ui_drafts_rerender_card(request: Request, name: str, draft_id: str) -> HTMLResponse:
-    """Re-render one draft card after a status transition."""
-    from weaver.storage.character_drafts import get_draft
-
-    project_toml = _resolve_project_toml(request, name)
-    db_path = resolve_database_path(project_toml, cwd=_base_dir(request))
-    d = None
-    try:
-        with closing(connect_database(db_path)) as conn:
-            d = get_draft(conn, draft_id=draft_id)
-    except (LookupError, WeaverError):
-        return HTMLResponse(f'<div class="error" id="draft-{draft_id}">Draft not found.</div>')
-    draft = _draft_to_ui_json(d)
-    return templates.TemplateResponse(
-        request,
-        "partials/_drafts_list.html",
-        {
-            "drafts": [draft],
-            "total_count": 1,
-            "name": name,
-        },
-    )
-
-
-def _draft_to_ui_json(d: Any) -> dict:
-    import json
-
-    prov = d.provenance_json
-    return {
-        "id": d.id,
-        "project_id": d.project_id,
-        "volume_id": d.volume_id,
-        "chapter_id": d.chapter_id,
-        "segment_id": d.segment_id,
-        "source_text": d.source_text,
-        "draft_text": d.draft_text,
-        "heading": d.heading,
-        "page_identifier": d.page_identifier,
-        "status": d.status,
-        "provenance": json.loads(prov) if isinstance(prov, str) else prov,
-        "created_at": d.created_at,
-        "updated_at": d.updated_at,
-    }
