@@ -70,9 +70,9 @@ Foundation (v0.6.0) ✅
   → Sprint N — Tauri shell alpha           ✅  (runtime validated, dependency pins fixed, design system integrated)
   → Sprint P — Workflow Coherence          ✅  (WV-001..006 complete; O-gate green)
   → Sprint O — Production desktop          ✅  (portable app path; smoke test green; docs/INSTALL_DESKTOP.md)
-  → **Sprint Q — Workspace v2 (cross-project)** 🟡  ACTIVE — Q0 planning ✅; implementation ⛔ not started; next = Q1
+   → **Sprint Q — Workspace v2 (cross-project)** 🟡  ACTIVE — Q0 planning ✅; Q1 implementation ✅ COMPLETE; next = Q2
        Q0 planning              ✅  (deep audit + execution plan + risk register + handoff)
-       Q1 identity + read layer ⬜  ← NEXT (WV-010: projects.uuid migration v10 + read-only workspace_index)
+       Q1 identity + read layer ✅  (WV-010: migration v10 + project_discovery uuid + workspace_index; ships dark)
        Q2 read-path hardening   ⬜  (readonly reads, reset/migration relocation, EPUB-hash fix, error fragments, ui.py split)
        Q3 shell + dashboard     ⬜  · Q4 queue · Q5 resources · Q6 providers · Q7 export gate+ledger · Q8 analytics
        Q9 explorer v2           ⬜  · Q10 editor panel · Q11 validation (WV-007/008/011) · Q12 cleanup + final gate
@@ -95,7 +95,7 @@ Before starting any phase or stage:
 
 > Required reminder: **"Check exit criteria first. No next phase until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Sprint Q (Workspace v2) 🟡 ACTIVE · Q0 planning ✅ · implementation ⛔ not started
+### 2.3 Active Phase — Sprint Q (Workspace v2) 🟡 ACTIVE · Q0 planning ✅ · Q1 implementation ✅ COMPLETE · next = Q2
 
 > Sprints N → P → O are **all CLOSED**. **Sprint Q is the active phase**: the cross-project Workspace command center. **Stage Q0 (planning) is complete**; **no implementation has begun**. Next real stage is **Q1 (WV-010)**. Primary source of truth: [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md); cold-start: [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md).
 
@@ -108,6 +108,15 @@ Before starting any phase or stage:
 - **Q3–Q8 — Hubs** ⬜ — global shell + dashboard, cross-project queue (`stale_running` distinct), Resources, Providers, Export gate + ledger (migration v11; advisory stays default per ADR 008), Analytics.
 - **Q9–Q11 — Per-project surfaces** ⬜ — Content Explorer v2, editor context panel, validation completion (WV-007 structure-QA join, WV-008 4 checks + ADR-013-gated `error` tier, WV-011 `qa_warnings` verdict).
 - **Q12 — Cleanup + final gate** ⬜ — residual dead code, conditional migration v12, full validation matrix + desktop/security/perf smoke.
+
+**Sprint Q PR strategy:**
+- Q0 docs-only PR ✅ (landed on `feat/full-complete-workspace`)
+- Q1 one PR (`feat/workspace-v2-q1`) — WV-010 identity + read layer
+- Q2 split into two PRs — PR-a mechanical `ui.py` split (zero behaviour change); PR-b read-path fixes (readonly, reset relocation, hashing removal, error fragments)
+- Q3–Q8 grouped only if scope kecil (single concern, ≤400 lines diff); otherwise one PR per hub
+- Q9–Q11 one PR per surface (Content Explorer v2, editor panel, validation)
+- Q12 final cleanup PR — full gate matrix
+- Sprint-level PR (all Q stages → main) stays unopened until Q12 is green
 
 **Hard fences for all of Sprint Q (full list in [SPRINT_Q_HANDOFF.md §6](.docs/audit/SPRINT_Q_HANDOFF.md)):**
 - **One project DB = the source of truth for that project. No global mutable store without an ADR.**
@@ -167,10 +176,10 @@ Before starting any phase or stage:
 
 **Sprint Q exit criteria** (Workspace v2) — executed per [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md), each stage gated per §2.2:
 
-> **Gate Q status: 🟡 IN PROGRESS — Q0 planning ✅ complete; Q1–Q12 implementation ⛔ not started.**
+> **Gate Q status: 🟡 IN PROGRESS — Q0 planning ✅ complete; Q1 ✅ COMPLETE; Q2–Q12 ⛔ pending.**
 
 - [x] Q0 — Planning complete: deep audit, execution plan (Q0–Q12), risk register (R-01..23), cold-start handoff — all four `.docs/audit/SPRINT_Q_*` docs landed.
-- [ ] Q1 — WV-010: migration v10 (`projects.uuid`, forward + idempotency tests); `project_discovery` uuid + duplicate detection; `services/workspace_index.py` read-only/mtime-cached/error-isolated/budget-tested; grep-gate test added; **index consumed by zero routes**.
+- [x] Q1 — WV-010: migration v10 (`projects.uuid`, forward + idempotency tests); `project_discovery` uuid + duplicate detection; `services/workspace_index.py` read-only/mtime-cached/error-isolated/budget-tested; grep-gate test added; **index consumed by zero routes**.
 - [ ] Q2 — Read paths use `connect_readonly_database` only; `reset_interrupted_segments`/migration off the read path; zero source-file hashing on any render; approve/apply failures surfaced; `ui.py` split (zero behavior change); router-SQL grep-gate → zero.
 - [ ] Q3–Q8 — Hubs built only on the hardened foundation: global shell + dashboard, cross-project queue (`stale_running` distinct), Resources, Providers, Export gate + ledger (migration v11; advisory default preserved), Analytics — each within performance budget, no SQLite in CLI/web layer, ADR 010 unviolated.
 - [ ] Q9–Q11 — Content Explorer v2; editor context panel; validation completion (WV-007/008/011; `error` tier only after ADR 013).
@@ -206,7 +215,7 @@ Deep detail per entry lives in git history and linked docs.
 | **Sprint N — Tauri Shell Alpha** | `desktop/` | 1043 / 4 | ✅ CLOSED — runtime validated, build green (dependency pins fixed, design system integrated) |
 | **Sprint P — Workflow Coherence** | [SPRINT_P_EXECUTION](.docs/audit/SPRINT_P_EXECUTION.md) + [SPRINT_P_EXECUTION_PLAN](docs/SPRINT_P_EXECUTION_PLAN.md) | 1102 / 4 | ✅ CLOSED 2026-06-10 — all 6 WV items (P1–P6) complete; O-gate WV-001+WV-002 green; pyright 0; ruff clean; no new runtime dependency |
 | **Sprint O — Production Desktop** | `desktop/` | 1102 / 4 | ✅ COMPLETE 2026-06-10 — portable app path (cargo tauri build → 3.2 MB exe); production icons; docs/INSTALL_DESKTOP.md; smoke test green; sidecar bundling plan (PyInstaller recommended for single-file); PATH dependency baseline |
-| **Sprint Q — Workspace v2** | [SPRINT_Q_EXECUTION_PLAN](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [DEEP_AUDIT](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [RISK_REGISTER](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [HANDOFF](.docs/audit/SPRINT_Q_HANDOFF.md) | 1102 / 4 | 🟡 ACTIVE — **Q0 planning ✅ COMPLETE** 2026-06-10 (deep audit QF-01..22/G-01..15, staged plan Q0–Q12, risk register R-01..23, cold-start handoff); **implementation ⛔ not started**; next = **Q1 (WV-010)** identity + read-only `workspace_index` |
+| **Sprint Q — Workspace v2** | [SPRINT_Q_EXECUTION_PLAN](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [DEEP_AUDIT](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [RISK_REGISTER](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [HANDOFF](.docs/audit/SPRINT_Q_HANDOFF.md) | 1131 / 4 | 🟡 ACTIVE — **Q0 planning ✅ COMPLETE** · **Q1 ✅ COMPLETE** (migration v10, project_discovery uuid, workspace_index read-only layer, grep-gate); next = **Q2** read-path hardening |
 
 ---
 

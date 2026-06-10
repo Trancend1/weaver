@@ -7,8 +7,11 @@ CREATE TABLE IF NOT EXISTS projects (
   source_lang TEXT NOT NULL,
   target_lang TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  schema_version INTEGER NOT NULL
+  schema_version INTEGER NOT NULL,
+  uuid TEXT
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_uuid ON projects(uuid);
 
 CREATE TABLE IF NOT EXISTS volumes (
   id INTEGER PRIMARY KEY,

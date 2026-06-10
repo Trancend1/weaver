@@ -58,6 +58,8 @@ class InspectSummary:
     glossary_term_count: int
     output_dir: str
     provider_status: ProviderStatus | None = None
+    uuid: str | None = None
+    schema_version: int = 0
 
 
 def project_exists(source_epub: Path, *, cwd: Path | None = None) -> bool:
@@ -262,6 +264,7 @@ def inspect_project(
 
     with closing(connect_readonly_database(db_path)) as connection:
         counts = _read_counts(connection)
+        schema_version, project_uuid = _read_identity(connection)
 
     status = _run_provider_healthcheck(provider) if run_healthcheck else None
 
@@ -281,6 +284,8 @@ def inspect_project(
         glossary_term_count=counts["glossary_terms"],
         output_dir=str(project["output_dir"]),
         provider_status=status,
+        uuid=project_uuid,
+        schema_version=schema_version,
     )
 
 
@@ -414,6 +419,26 @@ def _read_counts(connection: sqlite3.Connection) -> dict[str, int]:
         "glossary_candidates": _count(connection, "glossary_candidates"),
         "glossary_terms": _count(connection, "glossary_terms"),
     }
+
+
+def _read_identity(connection: sqlite3.Connection) -> tuple[int, str | None]:
+    """Read schema version and project uuid from an open readonly connection.
+
+    Returns:
+        Tuple of (schema_version, uuid_or_none).  uuid is None for databases
+        at schema version < 10 where the ``uuid`` column does not exist.
+    """
+
+    version_row = connection.execute("PRAGMA user_version").fetchone()
+    schema_version = int(version_row[0]) if version_row is not None else 0
+
+    project_uuid: str | None = None
+    if schema_version >= 10:
+        row = connection.execute("SELECT uuid FROM projects ORDER BY id LIMIT 1").fetchone()
+        if row is not None and row["uuid"] is not None:
+            project_uuid = str(row["uuid"])
+
+    return schema_version, project_uuid
 
 
 def _count(connection: sqlite3.Connection, table_name: str) -> int:

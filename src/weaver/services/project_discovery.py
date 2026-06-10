@@ -27,6 +27,7 @@ class DiscoveredProject:
     project_toml: Path
     summary: InspectSummary | None
     error: str | None
+    identity_conflict: bool = False
 
 
 def discover_projects(books_dir: Path) -> list[DiscoveredProject]:
@@ -39,19 +40,21 @@ def discover_projects(books_dir: Path) -> list[DiscoveredProject]:
         Discovered projects sorted by name. Projects whose state cannot be read
         are included with ``summary=None`` and a populated ``error`` so the
         dashboard can surface them instead of silently dropping them.
+        Duplicate uuids caused by directory copies are flagged with
+        ``identity_conflict=True`` on all colliding entries.
     """
 
     weaver_dir = books_dir / ".weaver"
     if not weaver_dir.is_dir():
         return []
 
-    discovered: list[DiscoveredProject] = []
+    raw: list[DiscoveredProject] = []
     for project_toml in sorted(weaver_dir.glob("*/project.toml")):
         name = project_toml.parent.name
         try:
             summary = inspect_project(project_toml, cwd=books_dir)
         except WeaverError as exc:
-            discovered.append(
+            raw.append(
                 DiscoveredProject(
                     name=name,
                     project_toml=project_toml,
@@ -60,7 +63,7 @@ def discover_projects(books_dir: Path) -> list[DiscoveredProject]:
                 )
             )
             continue
-        discovered.append(
+        raw.append(
             DiscoveredProject(
                 name=name,
                 project_toml=project_toml,
@@ -68,7 +71,8 @@ def discover_projects(books_dir: Path) -> list[DiscoveredProject]:
                 error=None,
             )
         )
-    return discovered
+
+    return _flag_duplicate_uuids(raw)
 
 
 def find_project(books_dir: Path, name: str) -> DiscoveredProject | None:
@@ -100,3 +104,82 @@ def find_project(books_dir: Path, name: str) -> DiscoveredProject | None:
         summary=summary,
         error=None,
     )
+
+
+def find_project_by_uuid(books_dir: Path, project_uuid: str) -> DiscoveredProject | None:
+    """Return a discovered project by its stable uuid, or None.
+
+    Args:
+        books_dir: Root directory the cockpit was launched against.
+        project_uuid: The project's stable uuid.
+
+    Returns:
+        The matching DiscoveredProject, or None.
+
+    Raises:
+        ValueError: If more than one project shares the same uuid (duplicate
+            identity). Callers should surface this as an error.
+    """
+
+    weaver_dir = books_dir / ".weaver"
+    if not weaver_dir.is_dir():
+        return None
+
+    matches: list[DiscoveredProject] = []
+    for project_toml in sorted(weaver_dir.glob("*/project.toml")):
+        name = project_toml.parent.name
+        try:
+            summary = inspect_project(project_toml, cwd=books_dir)
+        except WeaverError:
+            continue
+        if summary is not None and summary.uuid == project_uuid:
+            matches.append(
+                DiscoveredProject(
+                    name=name,
+                    project_toml=project_toml,
+                    summary=summary,
+                    error=None,
+                )
+            )
+
+    if len(matches) > 1:
+        raise ValueError(
+            f"Duplicate project identity: uuid {project_uuid} found in "
+            f"{', '.join(m.name for m in matches)}. "
+            "Likely cause: directory copy. "
+            "Next command: resolve the conflict by removing the copied project."
+        )
+    return matches[0] if matches else None
+
+
+def _flag_duplicate_uuids(projects: list[DiscoveredProject]) -> list[DiscoveredProject]:
+    """Flag projects whose uuid collides with another entry.
+
+    Returns a new list where every colliding entry has
+    ``identity_conflict=True``.
+    """
+
+    uuid_to_indices: dict[str, list[int]] = {}
+    for idx, proj in enumerate(projects):
+        if proj.summary is not None and proj.summary.uuid is not None:
+            uuid_to_indices.setdefault(proj.summary.uuid, []).append(idx)
+
+    conflict_indices = {
+        idx for indices in uuid_to_indices.values() if len(indices) > 1 for idx in indices
+    }
+
+    result: list[DiscoveredProject] = []
+    for idx, proj in enumerate(projects):
+        if idx in conflict_indices:
+            result.append(
+                DiscoveredProject(
+                    name=proj.name,
+                    project_toml=proj.project_toml,
+                    summary=proj.summary,
+                    error=proj.error,
+                    identity_conflict=True,
+                )
+            )
+        else:
+            result.append(proj)
+    return result
