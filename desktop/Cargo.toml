@@ -1,6 +1,6 @@
 [package]
 name = "weaver-desktop"
-version = "0.1.0"
+version = "0.7.0"
 description = "Weaver desktop shell — Tauri host that runs the FastAPI cockpit as a sidecar."
 authors = ["Weaver maintainers"]
 edition = "2021"
