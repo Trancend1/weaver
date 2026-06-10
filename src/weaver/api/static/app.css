@@ -282,6 +282,7 @@ textarea:disabled { background: var(--color-surface); color: var(--color-muted);
 .app-shell--global { grid-template-columns: minmax(0, 1fr); }
 .app-shell--project { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
 .app-shell--workspace { grid-template-columns: var(--sidebar-collapsed) minmax(0, 1fr); }
+.app-shell--ws-hub { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
 
 .content {
   width: 100%;
@@ -314,6 +315,8 @@ textarea:disabled { background: var(--color-surface); color: var(--color-muted);
 
 .sidebar--project { width: var(--sidebar-width); }
 .sidebar--workspace { width: var(--sidebar-collapsed); overflow: visible; }
+.sidebar--ws-hub { width: var(--sidebar-width); }
+.sidebar-item--disabled { opacity: 0.4; cursor: default; pointer-events: none; }
 
 .sidebar__head {
   padding: var(--space-md);

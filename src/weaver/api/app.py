@@ -87,6 +87,7 @@ def create_api_app(base_dir: Path | None = None) -> FastAPI:
     app.state.base_dir = base_dir.resolve()
     app.state.app_paths = resolve_app_paths()
     app.state.jobs = JobRegistry(base_dir=app.state.base_dir)
+    app.state.workspace_cache = {}
     app.state.env_mode = env_mode
 
     # Cold-start recovery (Sprint I3, ADR 010): mark every `running` job in any

@@ -3,38 +3,74 @@
 {% block content %}
 <section class="dashboard">
   {% set page_actions %}<a class="btn btn--primary" href="/ui/new">+ New project</a>{% endset %}
-  {% set page_meta %}{{ projects|length }} project{{ "" if projects|length == 1 else "s" }} in <code>{{ books_dir }}</code> · defaults <code>{{ default_provider }}</code> / <code>{{ default_model }}</code>{% endset %}
+  {% set page_meta %}{{ entries|length }} project{{ "" if entries|length == 1 else "s" }} in <code>{{ books_dir }}</code>{% endset %}
   {% set page_title = "Dashboard" %}
   {% include "partials/_page_header.html" %}
 
-  {% if projects %}
-  <div class="project-grid">
-    {% for p in projects %}
-    {% set pct = (100 * p.translated_count / (p.segment_count or 1)) | round | int %}
-    <a class="project-card" href="/ui/projects/{{ p.name }}">
+  {% if identity_conflicts %}
+  <div class="alert bad" role="alert">
+    <strong>Identity conflict:</strong>
+    {{ identity_conflicts|length }} project{{ "" if identity_conflicts|length == 1 else "s" }} share a duplicate UUID —
+    {% for e in identity_conflicts %}<code>{{ e.name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+    Run <code>weaver inspect &lt;project.toml&gt;</code> on each to investigate.
+  </div>
+  {% endif %}
+
+  {% if active_job_count %}
+  <p class="meta dash-active-jobs">
+    <span class="badge info">{{ active_job_count }} job{{ "" if active_job_count == 1 else "s" }} running</span>
+    Navigate to a project to view progress.
+  </p>
+  {% endif %}
+
+  {% if entries %}
+  <div class="project-grid" id="ws-grid">
+    {% for e in entries %}
+    {% set pct = (100 * e.translated_count / (e.segment_count or 1)) | round | int %}
+    {% if e.state in ("error", "identity_conflict") %}
+    <div class="project-card project-card--error">
       <div class="project-card__head">
-        <span class="project-card__name">{{ p.name }}</span>
-        {% if p.error %}<span class="badge bad">error</span>{% else %}<span class="badge ok">ready</span>{% endif %}
+        <span class="project-card__name">{{ e.name }}</span>
+        <span class="badge bad">{{ e.state | replace("_", " ") }}</span>
       </div>
-      <p class="project-card__sub">{{ p.provider or "no provider set" }}{% if p.model %} · {{ p.model }}{% endif %}</p>
-      {% if p.error %}
-      <p class="project-card__error error">{{ p.error }}</p>
-      {% else %}
+      <p class="project-card__error error">{{ e.error or "Unknown error — run weaver inspect." }}</p>
+    </div>
+    {% elif e.state == "needs_upgrade" %}
+    <div class="project-card project-card--warn">
+      <div class="project-card__head">
+        <span class="project-card__name">{{ e.name }}</span>
+        <span class="badge warn">needs upgrade</span>
+      </div>
+      <p class="project-card__sub">Run <code>weaver init &lt;source&gt;</code> in the project directory to upgrade.</p>
+    </div>
+    {% else %}
+    <a class="project-card" href="/ui/projects/{{ e.name }}">
+      <div class="project-card__head">
+        <span class="project-card__name">{{ e.name }}</span>
+        {% if e.job_counts.get("running", 0) > 0 %}
+        <span class="badge info">active</span>
+        {% else %}
+        <span class="badge ok">ready</span>
+        {% endif %}
+      </div>
       <div class="project-card__progress">
-        <progress value="{{ p.translated_count }}" max="{{ p.segment_count or 1 }}"
-          title="{{ p.translated_count }} of {{ p.segment_count }} segments translated"></progress>
+        <progress value="{{ e.translated_count }}" max="{{ e.segment_count or 1 }}"
+          title="{{ e.translated_count }} of {{ e.segment_count }} segments translated"></progress>
         <div class="project-card__pct">
-          <span>{{ p.translated_count }}/{{ p.segment_count }} translated</span>
+          <span>{{ e.translated_count }}/{{ e.segment_count }} translated</span>
           <span>{{ pct }}%</span>
         </div>
       </div>
       <ul class="project-card__stats">
-        <li><b>{{ p.volume_count }}</b><span>volumes</span></li>
-        <li><b>{{ p.chapter_count }}</b><span>chapters</span></li>
-        <li><b>{{ p.pending_count }}</b><span>pending</span></li>
+        <li><b>{{ e.volume_count }}</b><span>vol</span></li>
+        <li><b>{{ e.chapter_count }}</b><span>ch</span></li>
+        <li><b>{{ e.pending_count }}</b><span>pending</span></li>
       </ul>
+      {% if e.last_activity %}
+      <p class="project-card__sub">Last activity {{ e.last_activity[:10] }}</p>
       {% endif %}
     </a>
+    {% endif %}
     {% endfor %}
   </div>
   {% else %}

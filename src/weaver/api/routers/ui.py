@@ -23,8 +23,7 @@ from weaver.api.jobs import JobRegistry
 from weaver.api.routers.export import _start_export
 from weaver.api.schemas import ExportRequest
 from weaver.api.templating import templates
-from weaver.api.ui_context import global_layout, project_layout
-from weaver.core.global_config import load_global_config, resolve_config_value
+from weaver.api.ui_context import global_layout, project_layout, ws_hub_layout
 from weaver.errors import (
     ChapterNotFoundError,
     VolumeNotFoundError,
@@ -42,6 +41,7 @@ from weaver.services.project_tree import project_tree
 from weaver.services.source_browser import list_directory, resolve_source
 from weaver.services.source_intake import resolve_intake_source
 from weaver.services.volume import delete_volume_from_project
+from weaver.services.workspace_index import build_workspace_index
 from weaver.storage.db import connect_readonly_database
 from weaver.storage.volumes import get_volume
 
@@ -54,26 +54,6 @@ def _base_dir(request: Request) -> Path:
 
 def _jobs(request: Request) -> JobRegistry:
     return request.app.state.jobs  # type: ignore[no-any-return]
-
-
-def _project_rows(base_dir: Path) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for dp in discover_projects(base_dir):
-        s = dp.summary
-        rows.append(
-            {
-                "name": dp.name,
-                "provider": s.provider if s else "",
-                "model": s.model if s else "",
-                "volume_count": s.volume_count if s else 0,
-                "chapter_count": s.chapter_count if s else 0,
-                "segment_count": s.segment_count if s else 0,
-                "translated_count": s.translated_count if s else 0,
-                "pending_count": s.pending_count if s else 0,
-                "error": dp.error,
-            }
-        )
-    return rows
 
 
 def _resolve_project_toml(request: Request, name: str) -> Path:
@@ -122,30 +102,26 @@ def _render_translate_job(request: Request, name: str, job_id: str) -> HTMLRespo
 
 @router.get("/ui", response_class=HTMLResponse)
 def dashboard(request: Request) -> HTMLResponse:
-    """Home: list discovered projects + the resolved global provider defaults."""
+    """Home: workspace command center — cross-project index via workspace_index."""
     base = _base_dir(request)
-    global_config = load_global_config()
-    default_provider = resolve_config_value(
-        "default_provider",
-        env_var="WEAVER_DEFAULT_PROVIDER",
-        global_config=global_config,
-        default="deepseek",
+    registry = _jobs(request)
+    index = build_workspace_index(
+        base,
+        registry_live_check=lambda pname, jid: (
+            (job := registry.get(jid)) is not None and job.status == "running"
+        ),
+        cache=request.app.state.workspace_cache,
     )
-    default_model = resolve_config_value(
-        "default_model",
-        env_var="WEAVER_DEFAULT_MODEL",
-        global_config=global_config,
-        default="—",
-    )
+    identity_conflicts = [e for e in index.entries if e.state == "identity_conflict"]
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         {
-            **global_layout("dashboard"),
-            "projects": _project_rows(base),
+            **ws_hub_layout("projects"),
+            "entries": index.entries,
+            "identity_conflicts": identity_conflicts,
+            "active_job_count": registry.running_count(),
             "books_dir": str(base),
-            "default_provider": default_provider,
-            "default_model": default_model,
         },
     )
 
