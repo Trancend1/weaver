@@ -17,6 +17,10 @@
     {% set item_label = 'Quality' %}
     {% set item_key = 'qa' %}
     {% include "partials/_sidebar_item.html" %}
+    {% set item_href = '/ui/projects/' ~ project_name ~ '/jobs' %}
+    {% set item_label = 'Jobs' %}
+    {% set item_key = 'jobs' %}
+    {% include "partials/_sidebar_item.html" %}
     {% set item_href = '/ui/projects/' ~ project_name ~ '/glossary' %}
     {% set item_label = 'Glossary' %}
     {% set item_key = 'glossary' %}

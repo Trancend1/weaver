@@ -23,7 +23,7 @@ from weaver.storage.db import connect_readonly_database
 
 @dataclass(frozen=True)
 class WorkspaceSegment:
-    """One source segment paired with its latest translation, if any."""
+    """One source segment paired with its latest translation and review state."""
 
     id: str
     block_order: int
@@ -31,6 +31,7 @@ class WorkspaceSegment:
     source_text: str
     status: str
     translated_text: str | None
+    review_status: str
 
 
 @dataclass(frozen=True)
@@ -108,13 +109,15 @@ def _chapter_row(connection: sqlite3.Connection, chapter_id: str) -> sqlite3.Row
 
 
 def _workspace_segments(connection: sqlite3.Connection, chapter_id: str) -> list[WorkspaceSegment]:
+    review_col = _review_status_column_sql(connection)
     rows = connection.execute(
-        """
+        f"""
         SELECT s.id AS id,
                s.block_order AS block_order,
                s.kind AS kind,
                s.source_text AS source_text,
                s.status AS status,
+               {review_col},
                (
                  SELECT t.text
                  FROM translations t
@@ -138,6 +141,16 @@ def _workspace_segments(connection: sqlite3.Connection, chapter_id: str) -> list
             translated_text=(
                 None if row["translated_text"] is None else str(row["translated_text"])
             ),
+            review_status=str(row["review_status"]),
         )
         for row in rows
     ]
+
+
+def _review_status_column_sql(connection: sqlite3.Connection) -> str:
+    columns = {
+        str(row["name"]) for row in connection.execute("PRAGMA table_info(segments)").fetchall()
+    }
+    if "review_status" in columns:
+        return "COALESCE(s.review_status, 'not_reviewed') AS review_status"
+    return "'not_reviewed' AS review_status"

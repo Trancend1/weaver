@@ -433,6 +433,42 @@ def _migrate_to_v8(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_to_v9(connection: sqlite3.Connection) -> None:
+    """Add per-segment review status (schema v9, Sprint P3/WV-003).
+
+    The review axis is independent of translation status so a human can
+    review a segment even if the translation is machine-generated. The
+    default is ``not_reviewed`` so every existing segment starts clean.
+    """
+
+    tables = {
+        str(row["name"])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    if "segments" not in tables:
+        return
+
+    columns = {
+        str(row["name"]) for row in connection.execute("PRAGMA table_info(segments)").fetchall()
+    }
+    if "review_status" not in columns:
+        connection.execute(
+            """
+            ALTER TABLE segments
+            ADD COLUMN review_status TEXT NOT NULL DEFAULT 'not_reviewed'
+            CHECK (review_status IN (
+              'not_reviewed',
+              'needs_review',
+              'needs_revision',
+              'approved',
+              'rejected'
+            ))
+            """
+        )
+
+
 _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _migrate_to_v2,
     3: _migrate_to_v3,
@@ -441,4 +477,5 @@ _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     6: _migrate_to_v6,
     7: _migrate_to_v7,
     8: _migrate_to_v8,
+    9: _migrate_to_v9,
 }

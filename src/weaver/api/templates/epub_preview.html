@@ -17,13 +17,13 @@
 {% block content %}
 <section class="panel">
   {% if volume_preview %}
-  <p class="crumbs"><a href="/ui/projects/{{ project_name }}#volume-{{ volume_id }}">Back to project</a> / <span>EPUB preview</span></p>
+    {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ project_name, "label": project_name}, {"href": none, "label": "EPUB preview"}] %}
   {% else %}
-  <p class="crumbs"><a href="/ui">Dashboard</a> / <span>EPUB preview</span></p>
+    {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label": "EPUB preview"}] %}
   {% endif %}
-  <h1>EPUB structure preview</h1>
-  <p class="meta">Read-only inspection of metadata, reading order, navigation, images, and
-    validation readiness. Nothing is imported, translated, or saved.</p>
+  {% set page_title = "EPUB structure preview" %}
+  {% set page_meta = "Read-only inspection of metadata, reading order, navigation, images, and validation readiness. Nothing is imported, translated, or saved." %}
+  {% include "partials/_page_header.html" %}
 
   {% if volume_preview %}
   <div class="workflow-note">

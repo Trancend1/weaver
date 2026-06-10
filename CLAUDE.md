@@ -2,7 +2,7 @@
 
 Offline-capable, glossary-aware **JP→EN** light-novel translation workbench with a **CLI** and local **web cockpit** (web-cockpit-first development). **Not:** SaaS, consumer product, hosted service, complex SPA.
 
-> **Status (2026-06-09):** v0.7.0 stable · Sprints A–M complete · **Active: Sprint N** (Tauri Shell Alpha — 🟡 `desktop/` scaffold complete, build/runtime validation pending Rust+MSVC toolchain) · strict next **N → P → O → Q** — `N → O` is **forbidden**; **WV-001 + WV-002 gate Sprint O** · Last gate: **1043 tests / 4 skipped**, pyright 0 (CI), ruff + format clean, clean wheel build · Roadmap of record: [.docs/audit/ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md); Sprint P execution: [.docs/audit/SPRINT_P_EXECUTION.md](.docs/audit/SPRINT_P_EXECUTION.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
+> **Status (2026-06-10):** v0.7.0 stable · Sprints A–M complete · **Sprint P CLOSED** (Workflow Coherence — 1102 tests / 4 skipped, pyright 0, ruff clean, O-gate WV-001 + WV-002 green) · **Active: Sprint N** (Tauri Shell Alpha — 🟡 `desktop/` scaffold complete, build/runtime validation pending Rust+MSVC toolchain) · strict next **N → P → O → Q** — `N → O` is **forbidden**; **WV-001 + WV-002 gate Sprint O** · Roadmap of record: [.docs/audit/ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md); Sprint P execution: [docs/SPRINT_P_EXECUTION_PLAN.md](docs/SPRINT_P_EXECUTION_PLAN.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
 
 ---
 
@@ -63,10 +63,9 @@ Foundation (v0.6.0) ✅
   → Sprint K — Export fidelity             ✅
   → Sprint L — Candidate review            ✅
   → Sprint M — Image / OCR security gate   ✅
-  → Sprint N — Tauri shell alpha           ⬜  (packaging-only; runs now in desktop/, template-diff-0)
-  → Sprint P — Workflow Coherence          ⬜  (audit P0/P1: generation UI, reading Preview,
-                                                Review/Validation split, nav, Overview, status taxonomy)
-  → Sprint O — Production desktop          ⬜  (BLOCKED until P's O-gate; N → O forbidden)
+  → Sprint N — Tauri shell alpha           🟡  (scaffold complete; runtime validation pending Rust+MSVC toolchain)
+  → Sprint P — Workflow Coherence          ✅  (WV-001..006 complete; O-gate green)
+  → Sprint O — Production desktop          ⬜  (BLOCKED until N runtime + P O-gate both green)
   → Sprint Q — Workspace v2 (cross-project)⬜  (high-level only until O + WV-010 + desktop feedback)
 ```
 
@@ -87,9 +86,9 @@ Before starting any phase or stage:
 
 > Required reminder: **"Check exit criteria first. No next phase until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Sprint N (Tauri Shell Alpha), then Sprint P (Workflow Coherence)
+### 2.3 Active Phase — Sprint N (Tauri Shell Alpha), then Sprint O (Production Desktop)
 
-> Strict order **N → P → O → Q** (one sprint at a time). Forward scope: [.docs/audit/ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md); Sprint P task breakdown: [.docs/audit/SPRINT_P_EXECUTION.md](.docs/audit/SPRINT_P_EXECUTION.md). Sprint N lives in `desktop/` (template-diff = 0); Sprint P then changes `src/weaver/` UI/API/storage on a stable base. **Hard O-gate: Sprint O may not start until WV-001 (Generate Candidate UI) + WV-002 (Reading Preview) are complete; `N → O` directly is forbidden.**
+> Strict order **N → P → O → Q** (one sprint at a time). Sprint P is **CLOSED** (Workflow Coherence — all 6 WV items complete, O-gate green, 1102/4 passed). Sprint N remains 🟡 (scaffold complete, runtime validation pending). Forward scope: [.docs/audit/ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md); Sprint P detail: [docs/SPRINT_P_EXECUTION_PLAN.md](docs/SPRINT_P_EXECUTION_PLAN.md).
 
 **Sprint N — in scope (packaging-only, no UI rewrite):**
 - Minimal Tauri workspace in `desktop/` (isolated subtree, not a Python dependency).
@@ -97,13 +96,14 @@ Before starting any phase or stage:
 - Cockpit writes its own `logs_dir/runtime.log`; host tees the sidecar console to `logs_dir/sidecar.console.log` (a second writer on the cockpit's rotating `runtime.log` is unsafe on Windows). Crash screen on backend-start failure.
 - `WEAVER_ENV=desktop` security baseline already in place from Sprint G.
 
-**Sprint P — Workflow Coherence (queued; the audit's P0/P1 fixes):**
-- WV-001 **(P0)** surface candidate + character-draft **generation** in the cockpit (today: JSON-only, no UI trigger).
-- WV-002 **reading/output Preview** (translated flow + before/after; reuse export renderers, no file write).
-- WV-003 **Review (persistent per-segment human state) vs Validation (automatic QA)** separation.
-- WV-004 **navigation** unification (global Workspace nav + contextual panel; fix Dashboard/Projects label).
-- WV-005 **Project Overview**; WV-006 single **status taxonomy**; WV-007/008 join structure into QA + `error` tier.
-- Full issue list + acceptance: [.docs/audit/ISSUE_BACKLOG.md](.docs/audit/ISSUE_BACKLOG.md). Build target: [.docs/audit/SOURCEOFARCHITECTURE.md](.docs/audit/SOURCEOFARCHITECTURE.md).
+**Sprint P — Workflow Coherence (CLOSED 2026-06-10):**
+- WV-001 **(P0)** ✅ surface candidate + character-draft **generation** in the cockpit (`ui_candidate_generate`, `ui_draft_generate`).
+- WV-002 **reading/output Preview** ✅ (`reading_preview_for_chapter/volume`, `reading_preview.html` with Reading + Before/After modes).
+- WV-003 **Review (persistent per-segment human state) vs Validation (automatic QA)** ✅ (`segments.review_status`, `segment_review.py`, Review Queue UI).
+- WV-004 **navigation** unification ✅ (Dashboard label, Jobs sidebar, subnav removal, breadcrumb roots, back buttons).
+- WV-005 **Project Overview** ✅ (`project_overview.py`, overview cards, volume-grid, next-actions).
+- WV-006 single **status taxonomy** ✅ (`status_labels.py`, dead `reused/tm/memory` branches removed).
+- O-gate: **GREEN** — WV-001 + WV-002 tested and passing.
 
 **Carry-over invariants (unchanged across the roadmap):**
 - `read_epub()` and `DocumentIR` remain the import/export/translation path; `ParsedEpub` is the structural layer — do not merge.
@@ -126,9 +126,20 @@ Before starting any phase or stage:
 - [x] N5 — No external browser dependency; **template diff = 0** vs Sprint M end (no UI rewrite). *(verified: 0 `src/weaver` changes; WebView only.)*
 - [x] N6 — Gate green: full suite **1043 / 4 skipped**. *(pyright/ruff/wheel re-run at PR time; no Python touched.)*
 
-**Sprint P exit criteria** (Workflow Coherence) — full task-level breakdown, build order, reuse map, and per-item acceptance in [.docs/audit/SPRINT_P_EXECUTION.md](.docs/audit/SPRINT_P_EXECUTION.md); per-issue acceptance in [.docs/audit/ISSUE_BACKLOG.md](.docs/audit/ISSUE_BACKLOG.md). Final gate: suite/pyright/ruff/wheel + migrations forward+idempotent + no new dependency.
+**Sprint P exit criteria** (Workflow Coherence) — executed per [docs/SPRINT_P_EXECUTION_PLAN.md](docs/SPRINT_P_EXECUTION_PLAN.md):
 
-**Sprint O entry gate (hard):** WV-001 (Generate Candidate UI) + WV-002 (Reading Preview) MUST be complete and gate-green before Sprint O begins. `N → O` directly is forbidden.
+> **Gate P status: ✅ CLOSED 2026-06-10 — all exit criteria satisfied.**
+
+- [x] P1/WV-001 — Candidate/draft generation in cockpit: `ui_candidate_generate`, `ui_draft_generate` routes; segment-editor + drafts-page buttons; HTMX re-render; non-destructive invariant enforced.
+- [x] P2/WV-002 — Reading Preview: `reading_preview_for_chapter/volume` service (no file writes); `reading_preview.html` with Reading + Before/After modes; publishable rule mirrors export.
+- [x] P3/WV-003 — Review status + queue: Schema v8→v9 additive migration (`segments.review_status`); `segment_review.py` service; Review Queue UI with filters; orthogonal to translation status.
+- [x] P4/WV-004 — Navigation coherence: Dashboard label fix; Jobs sidebar; duplicate subnav removed; Dashboard breadcrumb root on all child pages; back-button consistency.
+- [x] P5/WV-005 — Project Overview: `project_overview.py` cheap-count service; overview cards + volume-grid + next-actions + review counts; no QA-on-render (Gate B1).
+- [x] P6/WV-006 — Status taxonomy: `status_labels.py` helper; dead `reused/tm/memory` branches removed; canonical labels across editor/tree/QA.
+- [x] **O-gate:** WV-001 + WV-002 both tested and passing; no regression in 1102 tests.
+- [x] Full suite: **1102 passed / 4 skipped**; pyright 0; ruff check + format clean; `weaver --help` validates; no new runtime dependency.
+
+**Sprint O entry gate (hard):** WV-001 + WV-002 MUST be complete and gate-green before Sprint O begins. `N → O` directly is forbidden. **Sprint P now satisfies this gate.** Sprint O additionally requires Sprint N runtime validation (Rust + MSVC toolchain).
 
 ### 2.5 Phase Log
 
@@ -157,8 +168,8 @@ Deep detail per entry lives in git history and linked docs.
 | Sprint M — Image / OCR Gate | `feat/image-ocr-security` (PR #29) | 1043 / 4 | ✅ Preview gate (ADR `012`); OCR contract only |
 | Council Audit + replan | [.docs/audit/](.docs/audit/) | — | ✅ Audit + roadmap (strict N → P → O → Q) |
 | **Sprint N — Tauri Shell Alpha** | `desktop/` | 1043 / 4 | 🟡 Scaffold complete; build/runtime validation pending Rust+MSVC toolchain (N1–N4 unverified; N5 template-diff=0 ✓, N6 suite green ✓) |
-| Sprint P — Workflow Coherence | [SPRINT_P_EXECUTION](.docs/audit/SPRINT_P_EXECUTION.md) | — | ⬜ Next (after N) |
-| Sprint O — Production Desktop | — | — | ⬜ Blocked: O-gate WV-001 + WV-002 |
+| **Sprint P — Workflow Coherence** | [SPRINT_P_EXECUTION](.docs/audit/SPRINT_P_EXECUTION.md) + [SPRINT_P_EXECUTION_PLAN](docs/SPRINT_P_EXECUTION_PLAN.md) | 1102 / 4 | ✅ CLOSED 2026-06-10 — all 6 WV items (P1–P6) complete; O-gate WV-001+WV-002 green; pyright 0; ruff clean; no new runtime dependency |
+| Sprint O — Production Desktop | — | — | ⬜ Blocked: requires N runtime + P O-gate both green |
 | Sprint Q — Workspace v2 | [ROADMAP_REPLAN](.docs/audit/ROADMAP_REPLAN.md) | — | ⬜ Post-O (high-level only) |
 
 ---

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Review Queue · {{ project_name }} · Weaver{% endblock %}
+
+{% block content %}
+<section class="panel">
+  {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ project_name, "label": project_name}, {"href": none, "label": "Review queue"}] %}
+  {% set page_title = "Review queue" %}
+  {% set page_meta = "Human review state is independent of translation status." %}
+  {% set page_actions %}
+    <a class="btn btn--secondary" href="/ui/projects/{{ project_name }}">Back to project</a>
+  {% endset %}
+  {% include "partials/_page_header.html" %}
+
+  <div class="toolbar-row modal-actions" aria-label="Filter review queue">
+    <a class="btn{% if not status_filter %} btn--primary{% else %} btn--quiet{% endif %}"
+       href="/ui/projects/{{ project_name }}/volumes/{{ volume_id }}/review">All</a>
+    <a class="btn{% if status_filter == 'not_reviewed' %} btn--primary{% else %} btn--quiet{% endif %}"
+       href="/ui/projects/{{ project_name }}/volumes/{{ volume_id }}/review?status_filter=not_reviewed">Not reviewed</a>
+    <a class="btn{% if status_filter == 'needs_review' %} btn--primary{% else %} btn--quiet{% endif %}"
+       href="/ui/projects/{{ project_name }}/volumes/{{ volume_id }}/review?status_filter=needs_review">Needs review</a>
+    <a class="btn{% if status_filter == 'needs_revision' %} btn--primary{% else %} btn--quiet{% endif %}"
+       href="/ui/projects/{{ project_name }}/volumes/{{ volume_id }}/review?status_filter=needs_revision">Needs revision</a>
+    <a class="btn{% if status_filter == 'approved' %} btn--primary{% else %} btn--quiet{% endif %}"
+       href="/ui/projects/{{ project_name }}/volumes/{{ volume_id }}/review?status_filter=approved">Approved</a>
+    <a class="btn{% if status_filter == 'rejected' %} btn--primary{% else %} btn--quiet{% endif %}"
+       href="/ui/projects/{{ project_name }}/volumes/{{ volume_id }}/review?status_filter=rejected">Rejected</a>
+  </div>
+</section>
+
+<section class="panel">
+  {% if queue %}
+  <div class="table-scroll">
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>Chapter</th>
+          <th>Segment</th>
+          <th>Translation</th>
+          <th>Translation status</th>
+          <th>Review status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in queue %}
+        <tr>
+          <td>{{ item.chapter_title or "—" }}</td>
+          <td><code>{{ item.segment_id }}</code></td>
+          <td>{{ item.translation or "—" }}</td>
+          <td>
+            <span class="badge c-badge {{ badge_class_for_translation(item.translation_status) }}">
+              {{ translation_status_label(item.translation_status) }}
+            </span>
+          </td>
+          <td>
+            <span class="badge c-badge seg-review-status--{{ item.review_status }}">
+              {{ item.review_status }}
+            </span>
+          </td>
+          <td>
+            <a class="link-btn" href="/ui/projects/{{ project_name }}/chapters/{{ item.chapter_id }}">Open</a>
+            <button type="button" class="link-btn"
+                    hx-post="/ui/projects/{{ project_name }}/segments/{{ item.segment_id }}/review?review_status=approved"
+                    hx-target="closest tr" hx-swap="outerHTML">Approve</button>
+            <button type="button" class="link-btn"
+                    hx-post="/ui/projects/{{ project_name }}/segments/{{ item.segment_id }}/review?review_status=needs_revision"
+                    hx-target="closest tr" hx-swap="outerHTML">Needs revision</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><p>No segments match the current filter.</p></div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="toolbar-row modal-actions" aria-label="Queue actions">
+    <a class="btn btn--quiet" href="/ui/projects/{{ project_name }}">Back to project</a>
+  </div>
+</section>
+{% endblock %}

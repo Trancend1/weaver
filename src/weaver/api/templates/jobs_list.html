@@ -30,7 +30,7 @@
       {% for j in jobs %}
       <tr class="jobs-row jobs-row--{{ j.status }}">
         <td>{{ j.kind }}</td>
-        <td><span class="badge job-status job-status--{{ j.status }}">{{ j.status }}</span></td>
+        <td><span class="badge job-status job-status--{{ j.status }}">{{ job_status_label(j.status) }}</span></td>
         <td class="meta">{{ j.scope or "—" }}{% if j.scope_id %} · {{ j.scope_id }}{% endif %}</td>
         <td class="meta">{{ j.done_units }}/{{ j.total_units or "?" }}{% if j.failed_units %} · {{ j.failed_units }} failed{% endif %}</td>
         <td class="meta">{{ j.started_at }}</td>

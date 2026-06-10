@@ -24,7 +24,7 @@
   {% include "partials/_page_header.html" %}
 
   <dl class="job-meta">
-    <dt>Status</dt><dd><span class="badge job-status job-status--{{ job.status }}">{{ job.status }}</span></dd>
+    <dt>Status</dt><dd><span class="badge job-status job-status--{{ job.status }}">{{ job_status_label(job.status) }}</span></dd>
     <dt>Progress</dt><dd>
       {% if job.total_units %}
       <progress value="{{ job.done_units }}" max="{{ job.total_units }}"></progress>

@@ -9,6 +9,26 @@
 
   <div class="drafts-controls">
     <p class="hint">Character page drafts are extracted from XHTML text content. Only pages with actual text content are processed — images are never scanned.</p>
+    {% if sidebar_tree and sidebar_tree.volumes %}
+    <form class="drafts-generate toolbar-row"
+          hx-post="/ui/projects/{{ name }}/drafts/generate"
+          hx-target="#draft-generate-result" hx-swap="innerHTML"
+          hx-indicator="#draft-gen-loader" hx-disabled-elt="find button">
+      <label for="draft-chapter">Generate from chapter</label>
+      <select id="draft-chapter" name="chapter_id" required>
+        {% for v in sidebar_tree.volumes %}
+        <optgroup label="{{ v.title }}">
+          {% for ch in v.chapters %}
+          <option value="{{ ch.id }}">{{ ch.title or ch.id }}</option>
+          {% endfor %}
+        </optgroup>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn-sm btn--primary">Generate character draft</button>
+      <span class="htmx-indicator calm-loader calm-loader--small" id="draft-gen-loader" role="status">Generating…</span>
+    </form>
+    <div id="draft-generate-result" class="draft-generate-result"></div>
+    {% endif %}
   </div>
 
   <div id="drafts-list" hx-get="/ui/projects/{{ name }}/drafts/list" hx-trigger="load" hx-target="#drafts-list" hx-swap="outerHTML">

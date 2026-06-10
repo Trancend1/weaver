@@ -14,11 +14,22 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from weaver.api.status_labels import (
+    badge_class_for_job,
+    badge_class_for_translation,
+    job_status_label,
+    translation_status_label,
+)
+
 _PACKAGE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = _PACKAGE_DIR / "templates"
 STATIC_DIR = _PACKAGE_DIR / "static"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates.env.globals["translation_status_label"] = translation_status_label
+templates.env.globals["job_status_label"] = job_status_label
+templates.env.globals["badge_class_for_translation"] = badge_class_for_translation
+templates.env.globals["badge_class_for_job"] = badge_class_for_job
 
 
 def mount_static(app: FastAPI) -> None:

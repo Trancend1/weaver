@@ -1,6 +1,5 @@
 {% set source_id = "seg-" ~ seg.id ~ "-source" %}
 {% set input_id = "seg-" ~ seg.id ~ "-translation" %}
-{% set status_label = "Manual source of truth" if seg.status == "manual" else "Provider translation" if seg.status == "translated" else "Needs translation" if seg.status == "pending" else "Needs attention" if seg.status in ("failed", "stale") else "Translation memory reuse" if seg.status in ("reused", "tm", "memory") else seg.status %}
 <div class="ws-seg segment-row segment-row--{{ seg.status }}" id="seg-{{ seg.id }}" data-status="{{ seg.status }}"{% if oob_segment %} hx-swap-oob="outerHTML"{% endif %}>
   <div class="ws-src segment-cell segment-cell--source">
     <div class="seg-topline">
@@ -14,13 +13,28 @@
     <form hx-post="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}"
           hx-target="#seg-{{ seg.id }}" hx-swap="outerHTML" class="segment-form">
       <div class="seg-statusline">
-        {% set _badge = 'ok' if seg.status in ('manual', 'translated') else 'bad' if seg.status in ('failed', 'stale') else 'info' if seg.status in ('reused', 'tm', 'memory') else '' %}
-        <span class="badge c-badge seg-status seg-status--{{ seg.status }} {{ _badge }}">{{ seg.status }}</span>
-        <span class="seg-protection">{{ status_label }}{% if seg.status == "manual" %}; protected from normal retranslate{% endif %}</span>
+        {% set _badge = badge_class_for_translation(seg.status) %}
+        <span class="badge c-badge seg-status seg-status--{{ seg.status }} {{ _badge }}">{{ translation_status_label(seg.status) }}</span>
+        <span class="seg-protection">{% if seg.status == "manual" %}Manual source of truth; protected from normal retranslate{% elif seg.status == "translated" %}Provider translation{% elif seg.status == "pending" %}Needs translation{% elif seg.status in ("failed", "stale") %}Needs attention{% else %}{{ translation_status_label(seg.status) }}{% endif %}</span>
+        <span class="badge c-badge seg-review-status seg-review-status--{{ seg.review_status|default('not_reviewed') }}">{{ seg.review_status|default('not_reviewed') }}</span>
       </div>
       <label class="sr-only" for="{{ input_id }}">English translation for segment {{ seg.id }}</label>
       <textarea id="{{ input_id }}" name="translated_text" rows="3" class="seg-input" aria-describedby="seg-{{ seg.id }}-state">{{ seg.translated_text or "" }}</textarea>
       <div class="seg-bar toolbar-row">
+        <div class="seg-review-actions" aria-label="Review controls">
+          <button type="button" class="link-btn"
+                  hx-post="/ui/projects/{{ name }}/segments/{{ seg.id }}/review?review_status=approved"
+                  hx-target="#seg-{{ seg.id }}" hx-swap="outerHTML"
+                  title="Mark reviewed">Mark reviewed</button>
+          <button type="button" class="link-btn"
+                  hx-post="/ui/projects/{{ name }}/segments/{{ seg.id }}/review?review_status=needs_revision"
+                  hx-target="#seg-{{ seg.id }}" hx-swap="outerHTML"
+                  title="Needs revision">Needs revision</button>
+          <button type="button" class="link-btn"
+                  hx-post="/ui/projects/{{ name }}/segments/{{ seg.id }}/review?review_status=not_reviewed"
+                  hx-target="#seg-{{ seg.id }}" hx-swap="outerHTML"
+                  title="Reset review">Reset review</button>
+        </div>
         <button type="submit">Save manual edit</button>
         <button type="button" class="link-btn" data-copy-target="#{{ input_id }}">Copy translation</button>
         <button type="button" class="link-btn danger-link" data-clear-target="#{{ input_id }}">Clear unsaved</button>
@@ -29,10 +43,16 @@
         <button type="button" class="link-btn"
                 hx-get="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/history"
                 hx-target="#seg-{{ seg.id }}-history" hx-swap="innerHTML">History</button>
+        <button type="button" class="link-btn"
+                hx-post="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/candidates/generate"
+                hx-target="#seg-{{ seg.id }}-candidates" hx-swap="innerHTML"
+                hx-indicator="#seg-{{ seg.id }}-gen-loader" hx-disabled-elt="this">Generate candidate</button>
         <a class="link-btn" href="/ui/projects/{{ name }}/candidates?chapter_id={{ chapter_id }}&segment_id={{ seg.id }}">Review candidates</a>
         <span class="htmx-indicator calm-loader calm-loader--small" role="status">Saving</span>
+        <span class="htmx-indicator calm-loader calm-loader--small" id="seg-{{ seg.id }}-gen-loader" role="status">Generating…</span>
       </div>
     </form>
     <div class="seg-history" id="seg-{{ seg.id }}-history"></div>
+    <div class="seg-candidates" id="seg-{{ seg.id }}-candidates"></div>
   </div>
 </div>
