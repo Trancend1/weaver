@@ -13,9 +13,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from weaver.api.jobs import JobRegistry
-from weaver.errors import WeaverError
-from weaver.services.epub_reparse import status_for_volume
 from weaver.services.job_store import list_jobs_for_project
 from weaver.services.project_paths import resolve_database_path
 from weaver.services.project_tree import NovelTree, project_tree
@@ -61,7 +58,7 @@ def project_overview(
     project_toml: Path,
     *,
     cwd: Path | None = None,
-    jobs: JobRegistry | None = None,
+    jobs: Any = None,
 ) -> ProjectOverview:
     """Build a cheap, read-only overview for one project.
 
@@ -80,7 +77,7 @@ def project_overview(
     with closing(
         connect_readonly_database(resolve_database_path(project_toml, cwd=cwd))
     ) as connection:
-        volumes_overview = _volume_overviews(connection, tree, project_toml, cwd=cwd)
+        volumes_overview = _volume_overviews(connection, tree)
         recent_job = _recent_job(connection)
         candidate_count = _count_or_zero(connection, "translation_candidates")
         draft_count = _count_or_zero(connection, "character_page_drafts")
@@ -111,9 +108,6 @@ def project_overview(
 def _volume_overviews(
     connection: sqlite3.Connection,
     tree: NovelTree,
-    project_toml: Path,
-    *,
-    cwd: Path | None = None,
 ) -> list[VolumeOverview]:
     result: list[VolumeOverview] = []
     for v in tree.volumes:
@@ -122,7 +116,7 @@ def _volume_overviews(
         status_counts = _volume_segment_status_counts(connection, v.id)
         review_counts = review_counts_for_volume(connection, volume_id=v.id)
 
-        snapshot = _snapshot_status_safe(project_toml, v.id, cwd=cwd)
+        snapshot = _snapshot_status_from_db(connection, v.id)
         result.append(
             VolumeOverview(
                 id=v.id,
@@ -154,12 +148,16 @@ def _volume_segment_status_counts(connection: sqlite3.Connection, volume_id: int
     return {str(row["status"]): int(row["cnt"]) for row in rows}
 
 
-def _snapshot_status_safe(project_toml: Path, volume_id: int, *, cwd: Path | None = None) -> str:
-    try:
-        status = status_for_volume(project_toml, volume_id, cwd=cwd)
-        return status.state
-    except WeaverError:
-        return "missing"
+def _snapshot_status_from_db(connection: sqlite3.Connection, volume_id: int) -> str:
+    """Return snapshot state from the stored row only — no file access.
+
+    Overview renders must not hash source EPUBs (Gate B1 / QF-05).
+    Full staleness verification is an explicit user action only.
+    """
+    row = connection.execute(
+        "SELECT 1 FROM epub_snapshots WHERE volume_id = ?", (volume_id,)
+    ).fetchone()
+    return "fresh" if row is not None else "missing"
 
 
 def _recent_job(connection: sqlite3.Connection) -> dict[str, Any] | None:

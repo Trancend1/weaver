@@ -120,6 +120,21 @@ def get_project(connection: sqlite3.Connection, project_id: int) -> ProjectRecor
     )
 
 
+def get_first_project_id(connection: sqlite3.Connection) -> int | None:
+    """Return the first project id, or None if the table is empty.
+
+    Args:
+        connection: Open SQLite connection (read-only or writable).
+
+    Returns:
+        The lowest project id, or ``None`` when no projects exist.
+    """
+    row = connection.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
+    if row is None:
+        return None
+    return int(row["id"])
+
+
 def get_project_by_uuid(connection: sqlite3.Connection, project_uuid: str) -> ProjectRecord | None:
     """Load a project row by its stable uuid.
 

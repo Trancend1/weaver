@@ -47,7 +47,8 @@ from weaver.storage.candidates import (
     list_candidates_for_segment,
 )
 from weaver.storage.character_drafts import list_drafts_for_project
-from weaver.storage.db import connect_database
+from weaver.storage.db import connect_readonly_database
+from weaver.storage.projects import get_first_project_id
 
 router = APIRouter(prefix="/projects", tags=["candidates"])
 
@@ -122,11 +123,10 @@ def list_candidates(
     """List translation candidates for a project, optionally filtered."""
     project_toml = _resolve_project_toml(request, name)
     db_path = resolve_database_path(project_toml, cwd=_base_dir(request))
-    with closing(connect_database(db_path)) as connection:
-        project = connection.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
-        if project is None:
+    with closing(connect_readonly_database(db_path)) as connection:
+        pid = get_first_project_id(connection)
+        if pid is None:
             return CandidateListResponse(candidates=[], total_count=0)
-        pid = int(project["id"])
 
         if segment_id is not None:
             rows = list_candidates_for_segment(connection, segment_id=segment_id, status=status)
@@ -253,11 +253,10 @@ def list_drafts(
     """List character page drafts for a project."""
     project_toml = _resolve_project_toml(request, name)
     db_path = resolve_database_path(project_toml, cwd=_base_dir(request))
-    with closing(connect_database(db_path)) as connection:
-        project = connection.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
-        if project is None:
+    with closing(connect_readonly_database(db_path)) as connection:
+        pid = get_first_project_id(connection)
+        if pid is None:
             return CharacterDraftListResponse(drafts=[], total_count=0)
-        pid = int(project["id"])
         rows = list_drafts_for_project(
             connection, project_id=pid, status=status, limit=limit, offset=offset
         )

@@ -7,6 +7,7 @@ volume EPUB. It never mutates, recompresses, or writes image data.
 from __future__ import annotations
 
 import posixpath
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
@@ -14,7 +15,7 @@ from zipfile import BadZipFile, ZipFile
 from weaver.core.epub_structure import ManifestResource
 from weaver.errors import WeaverError
 from weaver.services.epub_snapshot import read_snapshot
-from weaver.storage.db import connect_database
+from weaver.storage.db import connect_readonly_database
 from weaver.storage.volumes import get_volume
 
 ALLOWED_IMAGE_MIME_TYPES = frozenset(
@@ -80,6 +81,18 @@ def read_image_preview(
                     "Next command: inspect metadata only; do not preview this image."
                 )
             data = archive.read(info)
+    except FileNotFoundError as exc:
+        raise WeaverError(
+            "Image preview rejected: source EPUB file is missing. "
+            "Likely cause: the imported file was moved or deleted. "
+            "Next command: re-import the volume or restore the source."
+        ) from exc
+    except PermissionError as exc:
+        raise WeaverError(
+            "Image preview rejected: source EPUB is not readable. "
+            "Likely cause: permission denied on the source file. "
+            "Next command: check file permissions and retry."
+        ) from exc
     except KeyError as exc:
         raise WeaverError(
             "Image preview rejected: manifest image is missing from the EPUB archive. "
@@ -152,7 +165,7 @@ def _safe_archive_path(path_value: str) -> str:
 
 
 def _volume_source_path(db_path: Path, volume_id: int) -> Path:
-    with connect_database(db_path) as connection:
+    with closing(connect_readonly_database(db_path)) as connection:
         try:
             volume = get_volume(connection, volume_id)
         except LookupError as exc:

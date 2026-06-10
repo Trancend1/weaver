@@ -26,7 +26,11 @@ from typing import Any
 from weaver.errors import WeaverError
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_paths import resolve_database_path
-from weaver.storage.db import connect_database, transaction
+from weaver.storage.db import (
+    connect_database,
+    reset_interrupted_segments,
+    transaction,
+)
 
 JOB_KIND_TRANSLATE = "translate"
 JOB_KIND_BATCH = "batch"
@@ -365,6 +369,8 @@ def recover_all_projects(books_dir: Path, *, reason: str = "process restart") ->
             continue
         try:
             with closing(connect_database(db_path)) as connection:
+                reset_interrupted_segments(connection)
+                connection.commit()
                 recovered = recover_interrupted_jobs(connection, reason=reason)
         except (WeaverError, sqlite3.Error):
             # A project DB the runtime can't open should not prevent boot.

@@ -26,7 +26,7 @@ from weaver.services.epub_snapshot import (
     store_snapshot,
 )
 from weaver.services.project_paths import resolve_database_path
-from weaver.storage.db import connect_database
+from weaver.storage.db import connect_database, connect_readonly_database
 from weaver.storage.volumes import get_volume
 
 
@@ -87,7 +87,7 @@ def status_for_volume(
 ) -> SnapshotStatus:
     """Return :class:`SnapshotStatus` for a volume without re-parsing."""
     db_path = resolve_database_path(project_toml, cwd=cwd)
-    with closing(connect_database(db_path)) as connection:
+    with closing(connect_readonly_database(db_path)) as connection:
         try:
             volume = get_volume(connection, volume_id)
         except LookupError as exc:

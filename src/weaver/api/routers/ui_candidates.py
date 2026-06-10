@@ -24,7 +24,8 @@ from weaver.errors import (
     WeaverError,
 )
 from weaver.services.project_paths import resolve_database_path
-from weaver.storage.db import connect_database
+from weaver.storage.db import connect_readonly_database
+from weaver.storage.projects import get_first_project_id
 
 router = APIRouter(tags=["ui"], include_in_schema=False)
 
@@ -51,50 +52,59 @@ def ui_candidates_list(name: str, request: Request) -> HTMLResponse:
     db_path = resolve_database_path(project_toml, cwd=_base_dir(request))
     candidates: list[dict] = []
     total = 0
+    error: str | None = None
     try:
-        with closing(connect_database(db_path)) as conn:
-            project = conn.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
-            if project is not None:
-                pid = int(project["id"])
+        with closing(connect_readonly_database(db_path)) as conn:
+            pid = get_first_project_id(conn)
+            if pid is not None:
                 rows = list_candidates_for_project(conn, project_id=pid, limit=200)
                 total = len(rows)
                 candidates = [_candidate_to_ui_json(r) for r in rows]
-    except WeaverError:
-        pass
+    except WeaverError as exc:
+        error = str(exc)
     return templates.TemplateResponse(
         request,
         "partials/_candidates_list.html",
-        {"candidates": candidates, "total_count": total, "name": name},
+        {"candidates": candidates, "total_count": total, "name": name, "error": error},
     )
 
 
 @router.post("/ui/projects/{name}/candidates/{candidate_id}/approve", response_class=HTMLResponse)
 def ui_candidate_approve(name: str, candidate_id: str, request: Request) -> HTMLResponse:
     """Approve a candidate (HTMX). Re-renders the candidate card."""
-    from contextlib import suppress
-
-    with suppress(HTTPException):
+    try:
         approve_candidate_endpoint(name, candidate_id, request)
+    except HTTPException as exc:
+        return HTMLResponse(
+            f'<div class="error" role="alert" id="candidate-{candidate_id}">'
+            f"Could not approve: {escape(str(exc.detail))}</div>"
+        )
     return ui_candidates_rerender_card(request, name, candidate_id)
 
 
 @router.post("/ui/projects/{name}/candidates/{candidate_id}/reject", response_class=HTMLResponse)
 def ui_candidate_reject(name: str, candidate_id: str, request: Request) -> HTMLResponse:
     """Reject a candidate (HTMX). Re-renders the candidate card."""
-    from contextlib import suppress
-
-    with suppress(HTTPException):
+    try:
         reject_candidate_endpoint(name, candidate_id, request)
+    except HTTPException as exc:
+        return HTMLResponse(
+            f'<div class="error" role="alert" id="candidate-{candidate_id}">'
+            f"Could not reject: {escape(str(exc.detail))}</div>"
+        )
     return ui_candidates_rerender_card(request, name, candidate_id)
 
 
 @router.post("/ui/projects/{name}/candidates/{candidate_id}/apply", response_class=HTMLResponse)
 def ui_candidate_apply(name: str, candidate_id: str, request: Request) -> HTMLResponse:
     """Apply a candidate to its segment (HTMX). Re-renders the candidate card."""
-    from contextlib import suppress
-
-    with suppress(HTTPException):
+    try:
         apply_candidate_endpoint(name, candidate_id, request)
+    except HTTPException as exc:
+        return HTMLResponse(
+            f'<div class="error" role="alert" id="candidate-{candidate_id}">'
+            f"Could not apply: {escape(str(exc.detail))}</div>"
+        )
     return ui_candidates_rerender_card(request, name, candidate_id)
 
 
@@ -144,7 +154,7 @@ def ui_candidates_rerender_card(request: Request, name: str, candidate_id: str) 
     db_path = resolve_database_path(project_toml, cwd=_base_dir(request))
     c = None
     try:
-        with closing(connect_database(db_path)) as conn:
+        with closing(connect_readonly_database(db_path)) as conn:
             c = get_candidate(conn, candidate_id=candidate_id)
     except (LookupError, WeaverError):
         return HTMLResponse(
@@ -205,21 +215,21 @@ def ui_drafts_list(name: str, request: Request) -> HTMLResponse:
     db_path = resolve_database_path(project_toml, cwd=_base_dir(request))
     drafts: list[dict] = []
     total = 0
+    error: str | None = None
     try:
-        with closing(connect_database(db_path)) as conn:
-            project = conn.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
-            if project is not None:
-                pid = int(project["id"])
+        with closing(connect_readonly_database(db_path)) as conn:
+            pid = get_first_project_id(conn)
+            if pid is not None:
                 rows = list_drafts_for_project(conn, project_id=pid, limit=200)
                 total = len(rows)
                 for r in rows:
                     drafts.append(_draft_to_ui_json(r))
-    except WeaverError:
-        pass
+    except WeaverError as exc:
+        error = str(exc)
     return templates.TemplateResponse(
         request,
         "partials/_drafts_list.html",
-        {"drafts": drafts, "total_count": total, "name": name},
+        {"drafts": drafts, "total_count": total, "name": name, "error": error},
     )
 
 
@@ -257,24 +267,30 @@ def ui_draft_generate(name: str, request: Request, chapter_id: str = Form(...)) 
 @router.post("/ui/projects/{name}/drafts/{draft_id}/approve", response_class=HTMLResponse)
 def ui_draft_approve(name: str, draft_id: str, request: Request) -> HTMLResponse:
     """Approve a character draft (HTMX). Re-renders the draft card."""
-    from contextlib import suppress
-
     from weaver.api.routers.candidates import approve_draft_endpoint
 
-    with suppress(HTTPException):
+    try:
         approve_draft_endpoint(name, draft_id, request)
+    except HTTPException as exc:
+        return HTMLResponse(
+            f'<div class="error" role="alert" id="draft-{draft_id}">'
+            f"Could not approve: {escape(str(exc.detail))}</div>"
+        )
     return ui_drafts_rerender_card(request, name, draft_id)
 
 
 @router.post("/ui/projects/{name}/drafts/{draft_id}/reject", response_class=HTMLResponse)
 def ui_draft_reject(name: str, draft_id: str, request: Request) -> HTMLResponse:
     """Reject a character draft (HTMX). Re-renders the draft card."""
-    from contextlib import suppress
-
     from weaver.api.routers.candidates import reject_draft_endpoint
 
-    with suppress(HTTPException):
+    try:
         reject_draft_endpoint(name, draft_id, request)
+    except HTTPException as exc:
+        return HTMLResponse(
+            f'<div class="error" role="alert" id="draft-{draft_id}">'
+            f"Could not reject: {escape(str(exc.detail))}</div>"
+        )
     return ui_drafts_rerender_card(request, name, draft_id)
 
 
@@ -286,7 +302,7 @@ def ui_drafts_rerender_card(request: Request, name: str, draft_id: str) -> HTMLR
     db_path = resolve_database_path(project_toml, cwd=_base_dir(request))
     d = None
     try:
-        with closing(connect_database(db_path)) as conn:
+        with closing(connect_readonly_database(db_path)) as conn:
             d = get_draft(conn, draft_id=draft_id)
     except (LookupError, WeaverError):
         return HTMLResponse(f'<div class="error" id="draft-{draft_id}">Draft not found.</div>')

@@ -26,7 +26,7 @@ from weaver.services.job_store import (
     list_jobs_for_project,
 )
 from weaver.services.project_discovery import find_project
-from weaver.storage.db import connect_database
+from weaver.storage.db import connect_readonly_database
 
 router = APIRouter(tags=["ui"], include_in_schema=False)
 
@@ -53,7 +53,7 @@ def project_jobs_page(name: str, request: Request) -> HTMLResponse:
         error = "Project database is not resolvable."
     else:
         try:
-            with closing(connect_database(db_path)) as conn:
+            with closing(connect_readonly_database(db_path)) as conn:
                 rows = list_jobs_for_project(conn)
         except WeaverError as exc:
             error = str(exc)
@@ -89,7 +89,7 @@ def job_detail_page(name: str, job_id: str, request: Request) -> HTMLResponse:
             status_code=422,
         )
 
-    with closing(connect_database(db_path)) as conn:
+    with closing(connect_readonly_database(db_path)) as conn:
         row = get_job(conn, job_id=job_id)
         if row is None or row.project_name != name:
             return templates.TemplateResponse(

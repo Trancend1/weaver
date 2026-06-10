@@ -30,7 +30,7 @@ from weaver.services.segment_review import (
     list_review_queue,
     set_segment_review_status,
 )
-from weaver.storage.db import connect_database
+from weaver.storage.db import connect_readonly_database
 
 router = APIRouter(tags=["ui"], include_in_schema=False)
 
@@ -162,13 +162,15 @@ def ui_segment_review(
         return _import_error(request, str(exc))
     # Re-render the segment row fresh from workspace service
     chapter_id: str | None = None
+    from weaver.storage.segments import get_segment
+
     try:
-        with closing(connect_database(resolve_database_path(dp.project_toml, cwd=base))) as conn:
-            row = conn.execute(
-                "SELECT chapter_id FROM segments WHERE id = ?", (segment_id,)
-            ).fetchone()
-            if row is not None:
-                chapter_id = str(row["chapter_id"])
+        with closing(
+            connect_readonly_database(resolve_database_path(dp.project_toml, cwd=base))
+        ) as conn:
+            seg_record = get_segment(conn, segment_id)
+            if seg_record is not None:
+                chapter_id = str(seg_record.chapter_id)
     except Exception:
         pass
     if chapter_id is None:
