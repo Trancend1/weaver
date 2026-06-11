@@ -1,9 +1,7 @@
 {% if layout_mode != "global" %}
-{% from "partials/_icons.html" import icon %}
 <aside class="sidebar sidebar--{{ layout_mode }}" aria-label="Project navigation">
   <div class="sidebar__head">
     <a class="sidebar__project" href="/ui/projects/{{ project_name }}" title="{{ project_name }}">
-      <span class="sidebar__mark" aria-hidden="true">{{ icon("brand") }}</span>
       <span class="sidebar__project-name">{{ project_name }}</span>
     </a>
   </div>
