@@ -126,9 +126,7 @@ def test_healthcheck_unknown_project_is_handled(providers_client: TestClient) ->
 # ---------------------------------------------------------------------------
 
 
-def test_secret_value_never_rendered(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_secret_value_never_rendered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     secret_value = "sk-SUPER-SECRET-DO-NOT-RENDER-9999"
     monkeypatch.setenv("DEEPSEEK_API_KEY", secret_value)
     _init(tmp_path, "alpha")
@@ -143,9 +141,7 @@ def test_secret_value_never_rendered(
 # ---------------------------------------------------------------------------
 
 
-def test_no_provider_call_on_hub_get(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_no_provider_call_on_hub_get(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _init(tmp_path, "alpha")
     client = TestClient(create_api_app(tmp_path))
 
@@ -195,9 +191,7 @@ def test_degraded_project_does_not_blank_hub(
         _ = (args, kwargs)
         return WorkspaceProviders(projects=[good], degraded=degraded, generated_at=0.0)
 
-    monkeypatch.setattr(
-        "weaver.api.routers.ui_providers.build_workspace_providers", _fake
-    )
+    monkeypatch.setattr("weaver.api.routers.ui_providers.build_workspace_providers", _fake)
     client = TestClient(create_api_app(tmp_path))
     resp = client.get("/ui/providers")
     assert resp.status_code == 200

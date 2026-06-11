@@ -38,8 +38,14 @@ from weaver.api.schemas import (
     FidelityCheckResponse,
 )
 from weaver.errors import ChapterNotFoundError, VolumeNotFoundError, WeaverError
-from weaver.services.export_book import ExportPlan, prepare_export, run_export
+from weaver.services.export_book import ExportPlan, prepare_export
+from weaver.services.export_gate import evaluate_export_gate
+from weaver.services.export_ledger import run_export_recorded
 from weaver.services.project_discovery import find_project
+from weaver.services.project_paths import resolve_database_path
+
+# HTTP status used when the Draft/Final gate refuses a Final export.
+EXPORT_GATE_BLOCKED_STATUS = 409
 
 router = APIRouter(prefix="/projects", tags=["export"])
 
@@ -84,8 +90,41 @@ def _start_export(
     except WeaverError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    def runner(should_cancel, progress, plan: ExportPlan = plan):  # bind plan per job
-        return run_export(plan, should_cancel=should_cancel, progress_callback=progress)
+    # Draft/Final gate (Q7): Draft is always allowed; a Final export with
+    # require_clean is refused while critical QA issues exist. Advisory default
+    # preserved (ADR 008). Gate runs on this explicit action, never on render.
+    try:
+        decision = evaluate_export_gate(
+            dp.project_toml,
+            kind=options.kind,
+            require_clean=options.require_clean,
+            cwd=base,
+        )
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not decision.allowed:
+        raise HTTPException(status_code=EXPORT_GATE_BLOCKED_STATUS, detail=decision.reason)
+
+    db_path = resolve_database_path(dp.project_toml, cwd=base)
+
+    def runner(
+        should_cancel,
+        progress,
+        plan: ExportPlan = plan,
+        db_path: Path = db_path,
+        kind: str = decision.kind,
+        qa_badge: str | None = decision.qa_badge,
+        version_label: str | None = options.version_label,
+    ):  # bind per job
+        return run_export_recorded(
+            plan,
+            db_path,
+            kind=kind,
+            qa_badge=qa_badge,
+            version_label=version_label,
+            should_cancel=should_cancel,
+            progress_callback=progress,
+        )
 
     job = _jobs(request).submit_export(
         project_name=name,

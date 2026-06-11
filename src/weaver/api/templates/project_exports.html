@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} · Exports · Weaver{% endblock %}
+{% block content %}
+<section class="project-exports">
+  {% set page_title = "Export history" %}
+  {% set page_meta = rows | length ~ " recorded export" ~ ("" if rows | length == 1 else "s") %}
+  {% set page_crumbs = [{"label": "Dashboard", "href": "/ui"}, {"label": name, "href": "/ui/projects/" ~ name}, {"label": "Exports"}] %}
+  {% include "partials/_page_header.html" %}
+
+  {% if rows %}
+  <div class="panel c-panel">
+    <table class="exports-table">
+      <thead>
+        <tr>
+          <th>Artifact</th>
+          <th>Format</th>
+          <th>Kind</th>
+          <th>Result</th>
+          <th>QA</th>
+          <th>Size</th>
+          <th>Version</th>
+          <th>When</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr class="exports-row exports-row--{{ r.status }}">
+          <td class="meta">
+            {% if r.artifact_path %}
+              <code>{{ r.artifact_path }}</code>
+              {% if not r.exists %}<span class="badge warn" title="File no longer on disk">missing</span>{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ r.format }}</td>
+          <td><span class="badge dim">{{ r.kind }}</span></td>
+          <td><span class="badge {{ 'good' if r.status == 'succeeded' else 'bad' }}">{{ r.status }}</span></td>
+          <td>{% if r.qa_badge %}<span class="badge dim">{{ r.qa_badge }}</span>{% else %}<span class="meta">—</span>{% endif %}</td>
+          <td class="meta">{% if r.byte_size is not none %}{{ "{:,}".format(r.byte_size) }} B{% else %}—{% endif %}</td>
+          <td class="meta">{{ r.version_label or "—" }}</td>
+          <td class="meta">{{ r.created_at[:19] | replace("T", " ") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  {% set empty_title = "No exports yet" %}
+  {% set empty_hint = "Run an export from the project page. Draft and Final exports are recorded here, including failures." %}
+  {% include "partials/_empty_state.html" %}
+  {% endif %}
+
+</section>
+{% endblock %}

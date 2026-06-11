@@ -246,9 +246,7 @@ def _read_failures(
     return failed_count, recent
 
 
-def _degraded(
-    name: str, uuid: str | None, state: str, error: str | None
-) -> _ProjectProviderState:
+def _degraded(name: str, uuid: str | None, state: str, error: str | None) -> _ProjectProviderState:
     return _ProjectProviderState(
         summary=None,
         degraded=ProviderDegradedProject(name=name, uuid=uuid, state=state, error=error),

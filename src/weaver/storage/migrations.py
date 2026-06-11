@@ -503,6 +503,37 @@ def _migrate_to_v10(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_uuid ON projects(uuid)")
 
 
+def _migrate_to_v11(connection: sqlite3.Connection) -> None:
+    """Add the project-scoped ``export_history`` ledger (schema v11, Sprint Q7).
+
+    One row per export artifact (success) or attempt (failure), written by the
+    export service — never a router. Purely additive: a fresh table with no rows,
+    so no existing data is touched. Idempotent: only creates the table and its
+    index when absent.
+    """
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS export_history (
+          id TEXT PRIMARY KEY,
+          volume_id INTEGER REFERENCES volumes(id),
+          format TEXT NOT NULL,
+          kind TEXT NOT NULL CHECK (kind IN ('draft', 'final')),
+          status TEXT NOT NULL CHECK (status IN ('succeeded', 'failed')),
+          qa_badge TEXT,
+          artifact_path TEXT,
+          byte_size INTEGER,
+          job_id TEXT,
+          version_label TEXT,
+          created_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_export_history_created ON export_history(created_at)"
+    )
+
+
 _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _migrate_to_v2,
     3: _migrate_to_v3,
@@ -513,4 +544,5 @@ _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     8: _migrate_to_v8,
     9: _migrate_to_v9,
     10: _migrate_to_v10,
+    11: _migrate_to_v11,
 }
