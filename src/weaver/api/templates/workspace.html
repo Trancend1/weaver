@@ -15,9 +15,6 @@
   {% set page_title = ws.chapter_title or "Chapter" %}
   {% set page_meta %}{{ ws.segment_count }} segments · {{ workflow_done }} ready · {{ counts.pending }} pending{% endset %}
   {% set page_actions %}
-    <a class="btn btn--secondary" href="/ui/projects/{{ ws.project_name }}">Back to project</a>
-    <a class="btn btn--secondary" href="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/qa">Chapter QA</a>
-    <a class="btn btn--secondary" href="/ui/projects/{{ ws.project_name }}/candidates">Candidates</a>
     <a class="btn btn--secondary" href="/ui/projects/{{ ws.project_name }}/export/preflight">Export / preflight</a>
   {% endset %}
   {% include "partials/_page_header.html" %}

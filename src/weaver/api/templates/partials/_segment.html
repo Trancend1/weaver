@@ -50,7 +50,6 @@
                 hx-post="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/candidates/generate"
                 hx-target="#seg-{{ seg.id }}-candidates" hx-swap="innerHTML"
                 hx-indicator="#seg-{{ seg.id }}-gen-loader" hx-disabled-elt="this">Generate candidate</button>
-        <a class="link-btn" href="/ui/projects/{{ name }}/candidates?chapter_id={{ chapter_id }}&segment_id={{ seg.id }}">Review candidates</a>
         <span class="htmx-indicator calm-loader calm-loader--small" role="status">Saving</span>
         <span class="htmx-indicator calm-loader calm-loader--small" id="seg-{{ seg.id }}-gen-loader" role="status">Generating…</span>
       </div>
