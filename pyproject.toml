@@ -95,4 +95,5 @@ markers = [
     "requires_ollama: test needs a running Ollama instance",
     "requires_cloud: test needs a cloud-provider API key",
     "slow: long-running test",
+    "perf: performance budget smoke (workspace index timing)",
 ]

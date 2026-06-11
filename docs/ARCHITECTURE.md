@@ -51,6 +51,8 @@ qa (CLI):  storage → qa/checks → services/qa → report (JSON, schema_versio
 qa (web):  storage → qa/{checks,consistency_checks,scope_checks} → services/translation_qa → QAReport (novel/volume/chapter; read-only, schema_version 2) → api/routers/{qa,ui_qa}
 ```
 
+**Export path boundary (QF-15 / WV-012, Q12):** `services/export_book.py` is the **canonical** exporter for every UI/cockpit and FastAPI export surface (per-volume EPUB/TXT/HTML/DOCX via `renderers/*`, plus `services/export_bundle.py` for ZIP bundles). `services/export.py` is a **CLI-only legacy** path (markdown / single-EPUB) retained for the `weaver export` command; it is **not** wired into any web/UI route and is a candidate for removal post-Sprint Q. New export work targets `export_book`; do not add UI callers to `services/export.py`.
+
 Per-project on-disk layout:
 
 ```

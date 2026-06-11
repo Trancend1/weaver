@@ -234,6 +234,7 @@ def translate_project(
     project_config = data["project"]
     provider_config = _merge_provider_config(data["provider"], provider_override)
     translation_config = data["translation"]
+    persist_raw_response = raw_response_logging_enabled(data)
     db_path = _resolve_path(str(project_config["database_path"]), base_dir, project_toml.parent)
     source_path = _resolve_path(str(project_config["source_file"]), base_dir, project_toml.parent)
 
@@ -325,6 +326,7 @@ def translate_project(
                     provider=active_provider,
                     provider_model=provider_model,
                     characters=characters,
+                    persist_raw_response=persist_raw_response,
                 )
             )
             if translated:
@@ -417,6 +419,7 @@ def translate_one_segment(
     provider_model: str,
     characters: Iterable[CharacterContext] = (),
     use_translation_memory: bool = True,
+    persist_raw_response: bool = False,
 ) -> tuple[bool, bool, int | None, int | None]:
     """Translate one segment in a single transaction.
 
@@ -448,6 +451,10 @@ def translate_one_segment(
             calling the provider. Callers pass False for explicit retranslate so
             a fresh provider call is made (the memory is still refreshed on
             success).
+        persist_raw_response: When True, store the provider's raw response on the
+            translation row. Defaults False (QF-07 / SD-9): the verbose raw
+            response is dropped unless ``[logging].raw_response_logging`` opts in,
+            so raw provider payloads do not accumulate by default.
 
     Returns:
         ``(translated, reused_from_memory, input_tokens, output_tokens)``.
@@ -510,7 +517,7 @@ def translate_one_segment(
             source_hash=segment.source_hash,
             provider=provider.name,
             model=provider_model,
-            raw_response=response.raw_response,
+            raw_response=response.raw_response if persist_raw_response else None,
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
         )
@@ -526,6 +533,18 @@ def translate_one_segment(
         )
         update_segment_status(connection, segment_id=segment.id, status="translated")
         return True, False, response.input_tokens, response.output_tokens
+
+
+def raw_response_logging_enabled(config: dict[str, Any]) -> bool:
+    """Read ``[logging].raw_response_logging`` (default False — QF-07 / SD-9).
+
+    When disabled (the default), the provider's verbose raw response is not
+    persisted on translation rows, so raw payloads do not accumulate.
+    """
+    logging_config = config.get("logging", {})
+    if not isinstance(logging_config, dict):
+        return False
+    return bool(logging_config.get("raw_response_logging", False))
 
 
 def _load_single_project(connection: sqlite3.Connection) -> ProjectRecord:

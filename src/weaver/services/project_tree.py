@@ -18,6 +18,7 @@ from weaver.core.config import load_project_config
 from weaver.services.project_paths import resolve_database_path
 from weaver.services.volume_lifecycle import VolumeStatus, derive_volume_status
 from weaver.storage.db import connect_readonly_database
+from weaver.storage.projects import get_first_project_id
 from weaver.storage.volumes import VolumeRecord, list_volumes
 
 
@@ -147,5 +148,4 @@ def _volume_view(
 
 
 def _single_project_id(connection: sqlite3.Connection) -> int:
-    row = connection.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
-    return int(row["id"]) if row is not None else 0
+    return get_first_project_id(connection) or 0

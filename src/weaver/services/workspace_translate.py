@@ -46,6 +46,7 @@ from weaver.services.translation import (
     VALID_HONORIFIC_POLICIES,
     ProgressCallback,
     load_character_contexts,
+    raw_response_logging_enabled,
     translate_one_segment,
 )
 from weaver.storage.db import connect_database, connect_readonly_database
@@ -82,6 +83,7 @@ class TranslationPlan:
     target_segment_ids: tuple[str, ...]
     requested_count: int
     use_translation_memory: bool
+    persist_raw_response: bool
 
 
 @dataclass(frozen=True)
@@ -200,6 +202,7 @@ def prepare_chapter_translation(
         # (retranslate_non_manual / force_selected) must hit the provider so it is
         # not a silent no-op; the memory is still refreshed on success.
         use_translation_memory=(mode == "skip_existing"),
+        persist_raw_response=raw_response_logging_enabled(data),
     )
 
 
@@ -253,6 +256,7 @@ def run_translation(
                 provider_model=plan.provider_model,
                 characters=plan.characters,
                 use_translation_memory=plan.use_translation_memory,
+                persist_raw_response=plan.persist_raw_response,
             )
             if ok:
                 translated += 1

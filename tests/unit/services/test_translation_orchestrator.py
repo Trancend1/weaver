@@ -268,6 +268,45 @@ def _count_translations(db_path: Path) -> int:
         return int(connection.execute("SELECT COUNT(*) FROM translations").fetchone()[0])
 
 
+def _count_persisted_raw_responses(db_path: Path) -> int:
+    with sqlite3.connect(db_path) as connection:
+        return int(
+            connection.execute(
+                "SELECT COUNT(*) FROM translations WHERE raw_response IS NOT NULL"
+            ).fetchone()[0]
+        )
+
+
+def _enable_raw_response_logging(project_toml: Path) -> None:
+    text = project_toml.read_text(encoding="utf-8")
+    text = text.replace("raw_response_logging = false", "raw_response_logging = true")
+    project_toml.write_text(text, encoding="utf-8")
+
+
+def test_translate_project_omits_raw_response_when_logging_disabled(tmp_path, monkeypatch) -> None:
+    # QF-07 / SD-9: the default [logging].raw_response_logging = false must stop
+    # persisting the provider's raw response.
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    provider = CapturingProvider()
+
+    translate_project(init.project_toml, provider=provider)
+
+    assert _count_translations(init.database_path) == 6
+    assert _count_persisted_raw_responses(init.database_path) == 0
+
+
+def test_translate_project_persists_raw_response_when_enabled(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    _enable_raw_response_logging(init.project_toml)
+    provider = CapturingProvider()
+
+    translate_project(init.project_toml, provider=provider)
+
+    assert _count_persisted_raw_responses(init.database_path) == 6
+
+
 def _first_segment_id(db_path: Path) -> str:
     with sqlite3.connect(db_path) as connection:
         return str(

@@ -34,6 +34,7 @@ from weaver.qa.report import (
     QAReport,
     QAScope,
     QAScopeSummary,
+    QASeverity,
     badge_for,
     category_for,
 )
@@ -49,6 +50,7 @@ from weaver.services.project_paths import resolve_database_path
 from weaver.storage.characters import list_characters
 from weaver.storage.db import connect_readonly_database
 from weaver.storage.glossary import list_glossary_terms
+from weaver.storage.projects import get_first_project_id
 from weaver.storage.segments import (
     chapter_exists,
     get_chapter,
@@ -74,7 +76,7 @@ class _ChapterResult:
 # read-only from the preservation snapshot (WV-007) and kept strictly advisory:
 # ``error`` maps to ``warning`` (never ``critical``) so a structural finding never
 # raises the report to "errors" nor blocks a Final export (the gate is Q7-owned).
-_STRUCTURE_SEVERITY_MAP: dict[str, str] = {
+_STRUCTURE_SEVERITY_MAP: dict[str, QASeverity] = {
     "error": "warning",
     "warning": "warning",
     "info": "info",
@@ -100,7 +102,7 @@ def _structure_issues(db_path: Path, volume_ids: Sequence[int]) -> list[QAIssue]
                 QAIssue(
                     rule=issue.code or "structure_issue",
                     category="structure",
-                    severity=severity,  # type: ignore[arg-type]
+                    severity=severity,
                     message=issue.message,
                     segment_id=None,
                     chapter_id=None,
@@ -429,11 +431,11 @@ def _character_names(connection: sqlite3.Connection, project_id: int) -> list[Ch
 
 
 def _single_project_id(connection: sqlite3.Connection) -> int:
-    row = connection.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
-    if row is None:
+    project_id = get_first_project_id(connection)
+    if project_id is None:
         raise ConfigError(
             "Project database has no project row. "
             "Likely cause: database was not initialized by `weaver init`. "
             "Next command: run `weaver init <input.epub>`."
         )
-    return int(row["id"])
+    return project_id

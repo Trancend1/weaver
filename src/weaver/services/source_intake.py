@@ -10,8 +10,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from weaver.errors import ConfigError
+from weaver.errors import ConfigError, SourceTooLargeError
 from weaver.services.source_browser import resolve_source, store_uploaded_source
+
+# Hard cap on uploaded source bytes (QF-08). Light-novel EPUB/TXT/HTML sources
+# are far smaller; this guards against an accidental or hostile oversized upload
+# being buffered to disk. Browsed (on-disk) paths are not re-checked here — they
+# already live inside the sandbox.
+MAX_UPLOAD_BYTES = 256 * 1024 * 1024  # 256 MiB
 
 
 def resolve_intake_source(
@@ -34,10 +40,22 @@ def resolve_intake_source(
     Raises:
         ConfigError: When neither input is provided, or the supplied source is
             outside the sandbox / an unsupported format.
+        SourceTooLargeError: When the uploaded source exceeds
+            :data:`MAX_UPLOAD_BYTES`.
     """
 
     if uploaded is not None:
         filename, data = uploaded
+        if len(data) > MAX_UPLOAD_BYTES:
+            limit_mib = MAX_UPLOAD_BYTES // (1024 * 1024)
+            actual_mib = len(data) / (1024 * 1024)
+            raise SourceTooLargeError(
+                f"Uploaded source {filename!r} is {actual_mib:.0f} MiB, over the "
+                f"{limit_mib} MiB limit. "
+                "Likely cause: the wrong file was selected, or the source bundles "
+                "large media. "
+                "Next command: upload a smaller EPUB, TXT, or HTML source."
+            )
         return store_uploaded_source(base_dir, filename, data)
     if source_path and source_path.strip():
         return resolve_source(base_dir, source_path.strip())

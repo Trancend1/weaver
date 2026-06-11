@@ -5,9 +5,9 @@ Offline-capable, glossary-aware **JP→EN** light-novel translation workbench wi
 > **Operating manual:** This file follows the global agent template `@WORKFLOW.md`. It cites and coordinates the docs in §1; it does not duplicate full strategy content. §5–§10 define how work is split across specialized agents/subagents and gated.
 >
 > **Current Orchestrator:** repo owner (Trancend1) + Claude as Lead Technical Orchestrator.
-> **Active Sprint/Phase:** Sprint Q — Workspace v2 · **stages Q1–Q10 merged to `main`** (Q5–Q8 via PR #41; Q9 via PR #42; Q10 via PR #43) · **Q11 (Validation) built on `feat/validation-improvements`** · **next stage Q12 — cleanup + final gate**.
+> **Active Sprint/Phase:** Sprint Q — Workspace v2 · **stages Q1–Q10 merged to `main`** (Q5–Q8 via PR #41; Q9 via PR #42; Q10 via PR #43) · **Q11 + Q12 built on stacked branches `feat/validation-improvements` → `feat/cleanup-docs-reconciliation-final-integration`** · **Sprint Q code-complete; final gate green; sprint PR pending.**
 >
-> **Status (2026-06-12):** v0.7.0 stable · Sprints A–M + **N, P, O COMPLETE** · **Sprint Q ACTIVE** — Q0 planning ✅, **Q1–Q4 ✅ merged to `main`** · **Q5–Q8 ✅ (PR #41)** · **Q9 (Content Explorer v2) ✅ — PR #42** · **Q10 (Editor Context Panel) ✅ — PR #43** · **Q11 (Validation: WV-007/008/011/014) ✅ built on `feat/validation-improvements` — full suite 1347/4, pyright 0, ruff clean; not yet merged** · next stage Q12 · Source of truth: [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [SPRINT_Q_RISK_REGISTER.md](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
+> **Status (2026-06-12):** v0.7.0 stable · Sprints A–M + **N, P, O COMPLETE** · **Sprint Q code-complete (final gate green; PR pending)** — Q0 planning ✅, **Q1–Q10 ✅ merged to `main`** (PR #41/#42/#43) · **Q11 (Validation: WV-007/008/011/014) ✅** · **Q12 (cleanup + final gate) ✅ — full suite 1351/4, pyright 0, ruff clean, cargo check/build green, security+perf smokes green** · Source of truth: [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [SPRINT_Q_RISK_REGISTER.md](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
 
 ---
 
@@ -87,8 +87,8 @@ Foundation (v0.6.0) ✅
        Q8 analytics             ✅  (deterministic per-project analytics + dashboard rollup)
         Q9 explorer v2           ✅  (Content Explorer tabs; segment listing; render-path hashing removed)
         Q10 editor panel         ✅  (lazy-loaded per-segment context panel; no schema change)
-        Q11 validation           ✅  (structure-QA join; +3 checks; v12 drops qa_warnings; ADR 013; ruby spike) — built on feat/validation-improvements
-        Q12 cleanup + final gate  🟡  NEXT
+        Q11 validation           ✅  (structure-QA join; +3 checks; v12 drops qa_warnings; ADR 013; ruby spike)
+        Q12 cleanup + final gate ✅  (raw_response honored; upload cap; export-path doc; _single_project_id dedup; full gate green) — Sprint Q code-complete, PR pending
 ```
 
 Legend: ✅ complete · 🟡 active · ⬜ pending · 🚫 deferred/blocked
@@ -108,13 +108,23 @@ Before starting any stage:
 
 > Required reminder: **"Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Sprint Q (Workspace v2) 🟡 · Q1–Q10 ✅ merged · Q11 ✅ built (`feat/validation-improvements`) · stage Q12 (final gate) next
+### 2.3 Active Phase — Sprint Q (Workspace v2) 🟢 code-complete · Q1–Q10 merged · Q11+Q12 built (stacked branches) · sprint PR pending
 
-**Sprint focus:** the cross-project Workspace command center plus per-project surfaces. The hardened read foundation (Q1+Q2), all hubs (Q3–Q7), deterministic analytics (Q8), **Content Explorer v2 (Q9)**, **Editor Context Panel (Q10)**, and **Validation completion (Q11)** are built. **Next: Q12 — residual cleanup + final integration gate + sprint PR.**
+**Sprint focus:** the cross-project Workspace command center plus per-project surfaces. The hardened read foundation (Q1+Q2), all hubs (Q3–Q7), deterministic analytics (Q8), **Content Explorer v2 (Q9)**, **Editor Context Panel (Q10)**, **Validation completion (Q11)**, and **residual cleanup + final gate (Q12)** are built. **Sprint Q is code-complete with a green final gate; the only remaining step is the sprint-level PR to `main`.**
 
-**Track(s) active:** T0 (docs — this update). Q11 (T6/T7/T8 validation) done on `feat/validation-improvements`. Next stage Q12 — cleanup + gate.
+**Track(s) active:** none — Sprint Q build is done. Remaining: open the sprint PR (Q11+Q12 stacked onto Q1–Q10).
 
-**Next:** Q12 cleanup + final gate → sprint-level PR to `main`.
+**Next:** sprint-level PR to `main` (`chore(workspace): close Sprint Q with cleanup, docs, and final gate`).
+
+**Q12 — Residual cleanup + final integration gate** ✅ (built on `feat/cleanup-docs-reconciliation-final-integration`, stacked on Q11):
+- **Q12a-1 `raw_response_logging` honored** — `[logging].raw_response_logging` defaults **false**, so the provider raw response is no longer persisted unless opted in. Threaded `persist_raw_response` through `translate_one_segment` → `translate_project` / `workspace_translate` / `batch_translate`. Tests: omitted-when-disabled / persisted-when-enabled. **Behavior change** (privacy-positive).
+- **Q12a-2 upload byte cap** — `services/source_intake.py` `MAX_UPLOAD_BYTES = 256 MiB`; oversize → new `SourceTooLargeError` (→ 422 via existing `except WeaverError`). Tests: over-cap rejected / under-cap accepted.
+- **Q12a-3 export-path boundary** (doc) — `export_book` canonical for UI surfaces; `services/export.py` CLI-only legacy (sole importer `cli/main.py`). ARCHITECTURE.md updated.
+- **Q12a-4 `_single_project_id` dedup** — `translation_qa.py` + `project_tree.py` route through `storage/projects.py:get_first_project_id` (single accessor; semantics preserved — raise vs 0).
+- **Q12a-5/6 docs reconciliation + carried notes** — MAINTENANCE.md carried-issues block; CLAUDE.md §2; ARCHITECTURE.md export boundary; AGENTS.md synced.
+- **Q12b final gate** — full suite **1351/4**, pyright **0**, ruff check + format clean, `weaver --help` OK, `cargo check` 0 errors, `cargo tauri build --no-bundle` release exe built; **security smoke 67** (traversal/secret-grep/desktop-token/path-leak), **perf/render-cost smoke 16** (index budget, no render-time hashing/QA/provider). Interactive desktop GUI runtime smoke = manual maintainer step (host compiles + binary builds; `desktop/` unchanged since Sprint O).
+
+**Non-goals honored for Q12** (scope fence): no new feature; no schema migration (v12 already landed in Q11; Q12 adds none); no provider expansion; no OCR; no desktop behavior rewrite; no SPA/Node/build; no external queue; no global mutable store; no QA scan / provider call / source hashing on hub render.
 
 **Q11 — Validation completion (WV-007/008/011/014)** ✅ (built on `feat/validation-improvements`; full suite **1347/4**, pyright 0, ruff clean — not yet merged):
 - **WV-007 structure-QA join** — `services/translation_qa.py` `_structure_issues` reads persisted snapshot `validation_issues` (via `read_snapshot`, **no re-parse** — spy-tested) into the volume/novel QA report under a new `structure` category + `QAIssue.source` (`translation`|`structure`). EPUB `error` maps to `warning` (never `critical`) → advisory only, never blocks Final export. Chapter scope carries no structure issues. QA page gains a Source column + `structure` category filter.
@@ -192,8 +202,8 @@ Before starting any stage:
 - [x] Q9 — Content Explorer v2: tabbed explorer (Structure/Segments/Assets/Metadata/Warnings) from one surface; segment list with status/review badges + editor jump links; zero reparse/hash/QA/provider on render (spy-tested); missing snapshot degrades safely (Segments tab DB-fed); image gate intact; "preview" naming resolved (SD-7).
 - [x] Q10 — Editor context panel: lazy-loaded per-segment context panel (`partials/_workspace_context.html`); read-only `services/workspace_context.py` (glossary matching, character mentions, candidates, history, deterministic warnings); zero provider/QA/hash calls on render; no schema change.
 - [x] Q11 — Validation completion (WV-007/008/011/014): structure-QA join (no re-parse, advisory, `structure` category + `source`); +3 deterministic checks (`max_length_ratio`/`punctuation_mismatch`/`broken_line_breaks`); `qa_warnings` removed via **conditional migration v12** (`COUNT==0` then DROP; `SCHEMA_VERSION=12`); ADR 013 keeps 3-tier (no `error` tier); WV-014 ruby/vertical spike documented. Full suite **1347/4**, pyright 0, ruff clean. Built on `feat/validation-improvements` — **not yet merged**.
-- [ ] Q12 — Residual cleanup; (migration v12 already landed in Q11); **final gate green** — full suite + pyright 0 + ruff clean + `weaver --help` + `cargo check`/`cargo tauri build`; desktop smoke (≥3 projects, no orphans, both logs); security smoke (traversal rejected, zero key/token in logs/render, no cross-project path leak); performance smoke (index within budget @10 projects, zero render-time hashing). **Carry-forward decisions (from Q7–Q10):** `export_history.job_id` always NULL (registry generates the id after the runner closure — needs a small ADR-010-adjacent API change); v10 projects show `needs_upgrade` in the Exports hub until a writable open migrates them (release-note line); `volume_lifecycle` `exported` overlay — decide keep-deferred vs derive-from-ledger.
-- [ ] Throughout: no new runtime dependency; one stage = one branch + one PR; **sprint PR opened only after Sprint Q is finished**.
+- [x] Q12 — Residual cleanup + final gate: `raw_response_logging` honored (default false stops persisting); 256 MiB upload cap (`SourceTooLargeError`); export-path boundary doc (`export_book` canonical, `services/export.py` CLI-only); `_single_project_id` dedup via `get_first_project_id`; docs reconciled (CLAUDE/AGENTS/MAINTENANCE/ARCHITECTURE) + carried-issues block. **Final gate:** full suite **1351/4**, pyright 0, ruff clean, `weaver --help`, `cargo check` 0 err, `cargo tauri build --no-bundle` release exe; **security smoke 67**, **perf smoke 16**. Interactive desktop GUI runtime smoke = manual (host compiles; `desktop/` unchanged since O). **Carried known issues (documented in MAINTENANCE.md):** `export_history.job_id` NULL (registry id post-closure); v10 `needs_upgrade` until writable migrate; `volume_lifecycle` `exported` overlay kept-deferred (ledger is the honest source); ruby import flatten (WV-014 follow-up). Built on `feat/cleanup-docs-reconciliation-final-integration`.
+- [x] Throughout: no new runtime dependency; Q11+Q12 stacked branches; **sprint PR to be opened now that Sprint Q is code-complete**.
 
 ### 2.5 Phase Log
 
@@ -206,7 +216,7 @@ Deep detail per entry lives in git history and linked docs.
 | Sprint N — Tauri Shell Alpha | `desktop/` | 1043 / 4 | ✅ CLOSED — runtime validated, build green |
 | Sprint P — Workflow Coherence | [SPRINT_P_EXECUTION](.docs/audit/SPRINT_P_EXECUTION.md) | 1102 / 4 | ✅ CLOSED — WV-001..006; O-gate green. *Lesson:* per-project coherence precedes cross-project hubs |
 | Sprint O — Production Desktop | `desktop/` + [INSTALL_DESKTOP](docs/INSTALL_DESKTOP.md) | 1102 / 4 | ✅ COMPLETE — portable 3.2 MB exe; PATH-dependency baseline; PyInstaller recommended for single-file |
-| **Sprint Q — Workspace v2** | [SPRINT_Q_EXECUTION_PLAN](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [DEEP_AUDIT](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [RISK_REGISTER](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [HANDOFF](.docs/audit/SPRINT_Q_HANDOFF.md) | Q11 1347 / 4 | 🟡 ACTIVE — Q0–Q10 ✅ merged; **Q11 ✅ built on `feat/validation-improvements`** (structure-QA join, +3 checks, v12 drops `qa_warnings`, ADR 013, WV-014 spike — not yet merged); **Q12 next**. *Lesson:* the WV-008 "missing checks" were mostly already present — auditing the existing rule set before adding avoided rebuilding glossary/character/empty/repeated checks; the genuinely-new set shrank to three |
+| **Sprint Q — Workspace v2** | [SPRINT_Q_EXECUTION_PLAN](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [DEEP_AUDIT](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [RISK_REGISTER](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [HANDOFF](.docs/audit/SPRINT_Q_HANDOFF.md) | Q12 1351 / 4 | 🟢 CODE-COMPLETE (PR pending) — Q0–Q10 merged; **Q11 ✅** (structure-QA join, +3 checks, v12 drops `qa_warnings`, ADR 013, WV-014 spike); **Q12 ✅** (raw_response honored, upload cap, export-path doc, `_single_project_id` dedup, final gate green: 1351/4 + pyright 0 + ruff + cargo + security/perf smokes). *Lesson:* a Gate-B1-style audit before building pays twice — WV-008's "missing" checks were mostly already present (the new set shrank to three), and the WV-014 spike found the real defect was import-side, not the renderer |
 
 > Test counts are the last full-suite figure verified at each closed stage. Re-run the full suite at each stage gate; do not assume a count without running it.
 

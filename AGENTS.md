@@ -5,9 +5,9 @@ Offline-capable, glossary-aware **JP→EN** light-novel translation workbench wi
 > **Operating manual:** This file follows the global agent template `@WORKFLOW.md`. It cites and coordinates the docs in §1; it does not duplicate full strategy content. §5–§10 define how work is split across specialized agents/subagents and gated.
 >
 > **Current Orchestrator:** repo owner (Trancend1) + Claude as Lead Technical Orchestrator.
-**Active Sprint/Phase:** Sprint Q — Workspace v2 · **stages Q1–Q10 built** (Q1–Q9 merged; Q10 on branch `feat/workspace-context-panel`) · **next stage Q11 — Validation (WV-007/008/011)**.
+**Active Sprint/Phase:** Sprint Q — Workspace v2 · **Q1–Q10 merged to `main`; Q11+Q12 built on stacked branches** (`feat/validation-improvements` → `feat/cleanup-docs-reconciliation-final-integration`) · **Sprint Q code-complete; final gate green; sprint PR pending.**
 >
-> **Status (2026-06-11):** v0.7.0 stable · Sprints A–M + **N, P, O COMPLETE** · **Sprint Q ACTIVE** — Q0 planning ✅, **Q1 (identity + read layer) ✅, Q2 (read-path hardening) ✅, Q3 (shell + dashboard) ✅, Q4 (queue hub) ✅, Q5 (resources hub) ✅, Q6 (providers hub) ✅, Q7 (export gate + ledger) ✅, Q8 (analytics) ✅, Q9 (Content Explorer v2) ✅, Q10 (Editor context panel) ✅ — all merged to `main`** · **next stage Q11 — Validation (WV-007/008/011)** · Source of truth: [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [SPRINT_Q_RISK_REGISTER.md](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
+> **Status (2026-06-12):** v0.7.0 stable · Sprints A–M + **N, P, O COMPLETE** · **Sprint Q code-complete (PR pending)** — Q0 planning ✅, **Q1–Q10 ✅ merged to `main`** (PR #41/#42/#43) · **Q11 (Validation: WV-007/008/011/014) ✅** (structure-QA join, +3 checks, v12 drops `qa_warnings`, ADR 013, ruby spike) · **Q12 (cleanup + final gate) ✅** (raw_response honored, 256 MiB upload cap, export-path doc, `_single_project_id` dedup; full suite **1351/4**, pyright 0, ruff clean, cargo green, security+perf smokes green) · Source of truth: [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [SPRINT_Q_RISK_REGISTER.md](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
 
 ---
 
@@ -87,7 +87,8 @@ Foundation (v0.6.0) ✅
         Q8 analytics             ✅  (deterministic per-project analytics + dashboard rollup)
         Q9 explorer v2           ✅  (tabbed Content Explorer; segment listing; render-path hashing removed)
         Q10 editor panel         ✅  (lazy-loaded per-segment context panel; no schema change)
-        Q11 validation (WV-007/008/011) · Q12 cleanup + final gate  🟡  NEXT
+        Q11 validation           ✅  (structure-QA join; +3 checks; v12 drops qa_warnings; ADR 013; ruby spike)
+        Q12 cleanup + final gate ✅  (raw_response honored; upload cap; export-path doc; _single_project_id dedup; full gate green) — Sprint Q code-complete, PR pending
 ```
 
 Legend: ✅ complete · 🟡 active · ⬜ pending · 🚫 deferred/blocked
@@ -107,13 +108,13 @@ Before starting any stage:
 
 > Required reminder: **"Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Sprint Q (Workspace v2) 🟡 · Q1–Q9 ✅ merged · Q10 ✅ built · stage Q11 (Validation) next
+### 2.3 Active Phase — Sprint Q (Workspace v2) 🟢 code-complete · Q1–Q10 merged · Q11+Q12 built (stacked) · sprint PR pending
 
-**Sprint focus:** the cross-project Workspace command center plus per-project surfaces. The hardened read foundation (Q1+Q2), all hubs (Q3–Q7), deterministic analytics (Q8), **Content Explorer v2 (Q9)**, and **Editor Context Panel (Q10)** are built. **Next: Q11 Validation** (WV-007/008/011).
+**Sprint focus:** the cross-project Workspace command center plus per-project surfaces. Q1–Q10 (foundation, hubs, analytics, Content Explorer v2, Editor Context Panel), **Q11 validation** (structure-QA join, +3 checks, v12 drop of `qa_warnings`, ADR 013, ruby spike), and **Q12 cleanup + final gate** are built. **Sprint Q is code-complete with a green final gate; only the sprint PR remains.**
 
-**Track(s) active:** T0 (docs — this update). Next stage Q11 — validation. Gated by T6/T7/T8 (see §6).
+**Track(s) active:** none — Sprint Q build done. Remaining: open the sprint PR.
 
-**Next:** Q11 validation → Q12 cleanup + final gate + sprint PR.
+**Next:** sprint-level PR to `main` (`chore(workspace): close Sprint Q with cleanup, docs, and final gate`).
 
 **Core premise (why Q is staged the way it is):** one project DB per project is the only source of truth for that project. Cross-project features need a **read-only cross-project read layer** — there is **no global mutable store without an ADR**. Q1 built stable identity (`projects.uuid`) + a read-only, mtime-cached, error-isolated `services/workspace_index.py`; Q2 hardened the existing read paths; Q3+ build hubs on that foundation.
 
