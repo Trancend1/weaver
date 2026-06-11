@@ -25,11 +25,13 @@
       <span class="sidebar-item__label">Queue</span>
     </a>
 
-    <span class="sidebar-item sidebar-item--disabled" aria-disabled="true"
-          title="Resources — coming in Workspace v2 Q5">
+    <a class="sidebar-item{% if active_nav == 'resources' %} active{% endif %}"
+       href="/ui/resources"
+       {% if active_nav == 'resources' %}aria-current="page"{% endif %}
+       title="Resources">
       <span class="sidebar-item__icon">{{ icon("resources") }}</span>
       <span class="sidebar-item__label">Resources</span>
-    </span>
+    </a>
 
     <span class="sidebar-item sidebar-item--disabled" aria-disabled="true"
           title="Providers — coming in Workspace v2 Q6">

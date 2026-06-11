@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Resources · Weaver{% endblock %}
+{% block content %}
+<section class="resources-hub">
+  {% set page_title = "Resources Hub" %}
+  {% set total_glossary = resources.projects | sum(attribute="glossary_term_count") %}
+  {% set total_chars = resources.projects | sum(attribute="character_count") %}
+  {% set total_memory = resources.projects | sum(attribute="memory_entry_count") %}
+  {% set page_meta = resources.degraded | length ~ " degraded · " ~ resources.projects | length ~ " projects · " ~ total_glossary ~ " glossary terms · " ~ total_chars ~ " characters · " ~ total_memory ~ " TM entries" %}
+  {% set page_crumbs = [{"label": "Dashboard", "href": "/ui"}, {"label": "Resources"}] %}
+  {% set page_actions %}
+    <span class="hint">Read-only cross-project resource view.</span>
+  {% endset %}
+  {% include "partials/_page_header.html" %}
+
+  {% if resources.degraded %}
+  <div class="panel c-panel resources-degraded">
+    <h2 class="panel__title">Project issues</h2>
+    <ul class="degraded-list">
+      {% for d in resources.degraded %}
+      <li class="degraded-row degraded-row--{{ d.state }}">
+        <span class="degraded-row__name">{{ d.name }}</span>
+        <span class="badge bad">{{ d.state | replace("_", " ") }}</span>
+        {% if d.error %}<span class="degraded-row__error">{{ d.error }}</span>{% endif %}
+        <span class="degraded-row__note">Resources for this project are unavailable.</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if resources.projects %}
+  <div class="panel c-panel resources-projects">
+    <table class="resources-table">
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>Glossary</th>
+          <th>Characters</th>
+          <th>Translation Memory</th>
+          <th>Prompts</th>
+          <th>Style</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in resources.projects %}
+        <tr class="resources-row">
+          <td>
+            <a href="/ui/projects/{{ p.project_name }}">{{ p.project_name }}</a>
+          </td>
+          <td>
+            {% if p.glossary_term_count > 0 %}
+            <a href="/ui/projects/{{ p.project_name }}/glossary" class="resource-link">
+              <strong>{{ p.glossary_term_count }}</strong> term{{ "s" if p.glossary_term_count != 1 }}
+            </a>
+            {% else %}
+            <span class="meta">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if p.character_count > 0 %}
+            <a href="/ui/projects/{{ p.project_name }}/characters" class="resource-link">
+              <strong>{{ p.character_count }}</strong> character{{ "s" if p.character_count != 1 }}
+            </a>
+            {% else %}
+            <span class="meta">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if p.memory_entry_count > 0 %}
+            <a href="/ui/projects/{{ p.project_name }}/memory" class="resource-link">
+              <strong>{{ p.memory_entry_count }}</strong> entr{{ "ies" if p.memory_entry_count != 1 else "y" }}
+            </a>
+            <span class="meta">· {{ p.memory_reuse_count }} reuse{{ "s" if p.memory_reuse_count != 1 }}</span>
+            {% else %}
+            <span class="meta">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if p.prompt_template_count is not none %}
+            <strong>{{ p.prompt_template_count }}</strong>
+            {% else %}
+            <span class="badge dim">soon</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if p.style_guide_count is not none %}
+            <strong>{{ p.style_guide_count }}</strong>
+            {% else %}
+            <span class="badge dim">soon</span>
+            {% endif %}
+          </td>
+          <td class="resource-actions">
+            <a href="/ui/projects/{{ p.project_name }}/glossary" class="btn btn--small">Glossary</a>
+            <a href="/ui/projects/{{ p.project_name }}/characters" class="btn btn--small">Characters</a>
+            <a href="/ui/projects/{{ p.project_name }}/memory" class="btn btn--small">Memory</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% if not resources.degraded %}
+    {% set empty_title = "No resources to show" %}
+    {% set empty_hint = "Import a project to see its glossary terms, characters, and translation memory. Open a project's resource page to create or manage entries." %}
+    {% include "partials/_empty_state.html" %}
+    {% endif %}
+  {% endif %}
+
+</section>
+{% endblock %}
