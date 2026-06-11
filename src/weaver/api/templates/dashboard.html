@@ -18,7 +18,7 @@
 
   {% if active_job_count %}
   <p class="meta dash-active-jobs">
-    <span class="badge info">{{ active_job_count }} job{{ "" if active_job_count == 1 else "s" }} running</span>
+    <a href="/ui/queue" class="badge info">{{ active_job_count }} job{{ "" if active_job_count == 1 else "s" }} running</a>
     Navigate to a project to view progress.
   </p>
   {% endif %}
