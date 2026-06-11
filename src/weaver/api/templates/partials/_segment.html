@@ -11,7 +11,7 @@
   </div>
   <div class="ws-tx segment-cell segment-cell--translation">
     <form hx-post="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}"
-          hx-target="#seg-statusline-{{ seg.id }}" hx-swap="outerHTML" class="segment-form">
+          hx-target="#seg-{{ seg.id }}" hx-swap="outerHTML" class="segment-form">
       <div class="seg-statusline" id="seg-statusline-{{ seg.id }}">
         {% set _badge = badge_class_for_translation(seg.status) %}
         <span class="badge c-badge seg-status seg-status--{{ seg.status }} {{ _badge }}">{{ translation_status_label(seg.status) }}</span>
@@ -64,14 +64,14 @@
         <div class="seg-tool-actions">
           <button type="button" class="link-btn"
                   hx-get="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/history"
-                  hx-target="#seg-statusline-{{ seg.id }}-history" hx-swap="innerHTML">History</button>
+                  hx-target="#seg-{{ seg.id }}-history" hx-swap="innerHTML">History</button>
           <button type="button" class="link-btn"
                   hx-get="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/context"
                   hx-target="#context-panel" hx-swap="innerHTML">Context</button>
           <button type="button" class="link-btn"
                   hx-post="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/candidates/generate"
-                  hx-target="#seg-statusline-{{ seg.id }}-candidates" hx-swap="innerHTML"
-                  hx-indicator="#seg-statusline-{{ seg.id }}-gen-loader" hx-disabled-elt="this">Generate candidate</button>
+                  hx-target="#seg-{{ seg.id }}-candidates" hx-swap="innerHTML"
+                  hx-indicator="#seg-{{ seg.id }}-gen-loader" hx-disabled-elt="this">Generate candidate</button>
         </div>
         <span class="htmx-indicator calm-loader calm-loader--small" id="seg-{{ seg.id }}-gen-loader" role="status">Generating…</span>
       </div>
