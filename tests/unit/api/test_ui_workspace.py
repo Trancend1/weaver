@@ -207,3 +207,40 @@ def test_workspace_works_for_second_duplicate_volume(ws_client: TestClient) -> N
         r = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}")
         assert r.status_code == 200
         assert "Source (JP)" in r.text
+
+
+# --- Q10 context panel -------------------------------------------------------
+
+
+def test_workspace_renders_context_panel_shell(ws_client: TestClient) -> None:
+    name = _name(ws_client)
+    chapter_id = _first_chapter_id(ws_client, name)
+    page = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}").text
+    assert "context-panel-wrapper" in page
+    assert "context-panel-empty" in page
+    assert "Context" in page  # trigger button in segment row
+
+
+def test_context_fragment_renders_for_segment(ws_client: TestClient) -> None:
+    name = _name(ws_client)
+    chapter_id = _first_chapter_id(ws_client, name)
+    seg_id = _first_segment_id(ws_client, name, chapter_id)
+
+    r = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}/segments/{seg_id}/context")
+    assert r.status_code == 200
+    assert "context-panel" in r.text
+    assert seg_id in r.text
+    assert "Segment context" in r.text
+
+
+def test_context_fragment_404_for_unknown_segment(ws_client: TestClient) -> None:
+    name = _name(ws_client)
+    chapter_id = _first_chapter_id(ws_client, name)
+    r = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}/segments/ghost/context")
+    assert r.status_code == 404
+
+
+def test_context_fragment_404_for_unknown_chapter(ws_client: TestClient) -> None:
+    name = _name(ws_client)
+    r = ws_client.get(f"/ui/projects/{name}/chapters/nope/segments/ghost/context")
+    assert r.status_code == 404

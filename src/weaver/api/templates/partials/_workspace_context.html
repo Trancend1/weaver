@@ -1,0 +1,106 @@
+<aside class="context-panel" id="context-panel" aria-label="Segment context">
+  <div class="context-panel__inner">
+    <h3 class="context-panel__title">Segment context</h3>
+
+    {# --- Current segment summary --- #}
+    <div class="context-section context-summary">
+      <span class="context-label">Segment #{{ ctx.segment_id }}</span>
+      <span class="badge c-badge seg-status seg-status--{{ ctx.status }}">{{ ctx.status }}</span>
+      <span class="badge c-badge seg-review-status seg-review-status--{{ ctx.review_status }}">{{ ctx.review_status }}</span>
+      <p class="context-source" lang="ja">{{ ctx.source_text }}</p>
+      {% if ctx.translated_text %}
+      <p class="context-translation">{{ ctx.translated_text }}</p>
+      {% endif %}
+    </div>
+
+    {# --- Warnings --- #}
+    {% if ctx.warnings %}
+    <div class="context-section context-warnings">
+      <h4 class="context-heading">Warnings</h4>
+      <ul class="warning-list">
+        {% for warning in ctx.warnings %}
+        <li class="warning-item">{{ warning }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {# --- Glossary matches --- #}
+    {% if ctx.glossary_matches %}
+    <div class="context-section context-glossary">
+      <h4 class="context-heading">Glossary matches</h4>
+      <ul class="context-list">
+        {% for term in ctx.glossary_matches %}
+        <li class="context-list__item">
+          <span class="context-term-source" lang="ja">{{ term.source }}</span>
+          <span class="context-arrow">→</span>
+          <span class="context-term-target">{{ term.target }}</span>
+          {% if term.category %}<span class="meta">({{ term.category }})</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {# --- Character mentions --- #}
+    {% if ctx.character_mentions %}
+    <div class="context-section context-characters">
+      <h4 class="context-heading">Characters</h4>
+      <ul class="context-list">
+        {% for char in ctx.character_mentions %}
+        <li class="context-list__item">
+          <span class="context-term-source" lang="ja">{{ char.jp_name }}</span>
+          <span class="context-arrow">→</span>
+          <span class="context-term-target">{{ char.en_name }}</span>
+          {% if char.role %}<span class="meta">({{ char.role }})</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {# --- Candidates --- #}
+    <div class="context-section context-candidates">
+      <h4 class="context-heading">Candidates</h4>
+      {% if ctx.candidates %}
+      <ul class="context-list">
+        {% for c in ctx.candidates %}
+        <li class="context-list__item">
+          <span class="badge c-badge {{ 'ok' if c.status == 'applied' else 'bad' if c.status in ('rejected','failed') else '' }}">{{ c.status }}</span>
+          <span class="meta">{{ c.provider }}/{{ c.model }}</span>
+          <p class="context-candidate-text">{{ c.candidate_text or '<em>empty</em>'|safe }}</p>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="meta">No candidates yet.</p>
+      {% endif %}
+    </div>
+
+    {# --- History summary --- #}
+    <div class="context-section context-history">
+      <h4 class="context-heading">History</h4>
+      {% if ctx.history.attempts_count %}
+      <p class="meta">{{ ctx.history.attempts_count }} attempt(s)</p>
+      {% if ctx.history.last_attempt_text %}
+      <p class="context-last-translation">Last: {{ ctx.history.last_attempt_text }}</p>
+      {% endif %}
+      {% if ctx.history.last_attempt_at %}
+      <p class="meta">At {{ ctx.history.last_attempt_at }}</p>
+      {% endif %}
+      {% else %}
+      <p class="meta">No translations recorded.</p>
+      {% endif %}
+    </div>
+
+    {# --- Quick links --- #}
+    <div class="context-section context-links">
+      <h4 class="context-heading">Quick links</h4>
+      <div class="toolbar-row toolbar-row--wrap">
+        <a class="link-btn" href="/ui/projects/{{ name }}/candidates?chapter_id={{ chapter_id }}&segment_id={{ ctx.segment_id }}">Review candidates</a>
+        <a class="link-btn" href="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/qa">Chapter QA</a>
+        <a class="link-btn" href="/ui/projects/{{ name }}/reading-preview?chapter_id={{ chapter_id }}">Reading preview</a>
+      </div>
+    </div>
+  </div>
+</aside>

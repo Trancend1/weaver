@@ -44,6 +44,9 @@
                 hx-get="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/history"
                 hx-target="#seg-{{ seg.id }}-history" hx-swap="innerHTML">History</button>
         <button type="button" class="link-btn"
+                hx-get="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/context"
+                hx-target="#context-panel" hx-swap="innerHTML">Context</button>
+        <button type="button" class="link-btn"
                 hx-post="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/candidates/generate"
                 hx-target="#seg-{{ seg.id }}-candidates" hx-swap="innerHTML"
                 hx-indicator="#seg-{{ seg.id }}-gen-loader" hx-disabled-elt="this">Generate candidate</button>
