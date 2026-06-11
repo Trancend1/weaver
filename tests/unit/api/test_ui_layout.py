@@ -143,16 +143,9 @@ def test_child_pages_have_dashboard_breadcrumb(ui_client: TestClient) -> None:
 
 
 def test_back_button_consistency(ui_client: TestClient) -> None:
-    """Workspace, preview, and review queue must have a Back-to-project action."""
+    """Preview and review queue must have a Back-to-project action."""
     name = _name(ui_client)
     project_html = ui_client.get(f"/ui/projects/{name}").text
-    m = re.search(rf"/ui/projects/{re.escape(name)}/chapters/([^\"']+)", project_html)
-    if m is None:
-        pytest.skip("fixture project has no chapter to open")
-    chapter_id = m.group(1)
-
-    ws_html = ui_client.get(f"/ui/projects/{name}/chapters/{chapter_id}").text
-    assert "Back to project" in ws_html
 
     # Reading preview (volume scope)
     vol_id_match = re.search(rf"/ui/projects/{re.escape(name)}/volumes/(\d+)/preview", project_html)

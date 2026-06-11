@@ -5,9 +5,9 @@ Offline-capable, glossary-aware **JP→EN** light-novel translation workbench wi
 > **Operating manual:** This file follows the global agent template `@WORKFLOW.md`. It cites and coordinates the docs in §1; it does not duplicate full strategy content. §5–§10 define how work is split across specialized agents/subagents and gated.
 >
 > **Current Orchestrator:** repo owner (Trancend1) + Claude as Lead Technical Orchestrator.
-> **Active Sprint/Phase:** Sprint Q — Workspace v2 · **stages Q5–Q9 built** (Q1–Q4 merged; Q5–Q8 PR #41; Q9 on `feat/content-explorer`) · **next stage Q10 — editor context panel**.
+> **Active Sprint/Phase:** Sprint Q — Workspace v2 · **stages Q1–Q9 merged to `main`** (Q5–Q8 via PR #41; Q9 via PR #42) · **next stage Q10 — Translation Editor context panel**.
 >
-> **Status (2026-06-11):** v0.7.0 stable · Sprints A–M + **N, P, O COMPLETE** · **Sprint Q ACTIVE** — Q0 planning ✅, **Q1–Q4 ✅ merged to `main`** · **Q5–Q8 ✅ (PR #41)** · **Q9 (Content Explorer v2) ✅ — branch `feat/content-explorer`** · next stage Q10 · Source of truth: [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [SPRINT_Q_RISK_REGISTER.md](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
+> **Status (2026-06-11):** v0.7.0 stable · Sprints A–M + **N, P, O COMPLETE** · **Sprint Q ACTIVE** — Q0 planning ✅, **Q1–Q4 ✅ merged to `main`** · **Q5–Q8 ✅ (PR #41)** · **Q9 (Content Explorer v2) ✅ — PR #42 merged to `main`** · next stage Q10 · Source of truth: [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [SPRINT_Q_RISK_REGISTER.md](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
 
 ---
 
@@ -107,11 +107,11 @@ Before starting any stage:
 
 > Required reminder: **"Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Sprint Q (Workspace v2) 🟡 · Q1–Q4 ✅ merged · Q5–Q9 ✅ built · stage Q10 next
+### 2.3 Active Phase — Sprint Q (Workspace v2) 🟡 · Q1–Q9 ✅ merged · stage Q10 next
 
-**Sprint focus:** the cross-project Workspace command center plus per-project surfaces. The hardened read foundation (Q1+Q2), all hubs (Q3–Q7), deterministic analytics (Q8), and the **Content Explorer v2 (Q9)** are built. **Next: Q10 Translation Editor context panel** (WV-013).
+**Sprint focus:** the cross-project Workspace command center plus per-project surfaces. The hardened read foundation (Q1+Q2), all hubs (Q3–Q7), deterministic analytics (Q8), and the **Content Explorer v2 (Q9)** are merged to `main`. **Next: Q10 Translation Editor context panel** (WV-013).
 
-**Track(s) active:** Q9 ran T1 (explorer journey) → T3 (`services/segment_listing` read service + snapshot read hardening) → T2 (tabbed explorer UI) → T6/T7/T8 → T0 (this update). **Next stage Q10 owner:** Frontend Engineer (workspace third column) + Backend Engineer (per-segment fragments), Product Architect consulted.
+**Track(s) active:** T0 (docs — this update). Next stage Q10 — editor context panel. Gated by T6/T7/T8 (see §6).
 
 **Next:** Q10 editor panel → Q11 validation (WV-007/008/011) → Q12 cleanup + final gate + sprint PR.
 
@@ -122,19 +122,15 @@ Before starting any stage:
 - **Q2 — Read-path & failure-visibility hardening** ✅ — `connect_readonly_database` on read paths; `reset_interrupted_segments`/migration off the read path; per-render EPUB hashing removed from Project Overview; swallowed approve/apply failures surfaced; `ui.py` split into `ui_admin`/`ui_candidates`/`ui_jobs`/`ui_qa`/`ui_queue`/`ui_review`/`ui_workspace` (PR-a mechanical, PR-b fixes).
 - **Q3 — Global shell + dashboard** ✅ — `workspace.html` global shell + `dashboard.html` command center; `_workspace_grid`/`_workspace_sidebar` partials; `ui_workspace` router.
 - **Q4 — Queue hub** ✅ — `queue_hub.html` cross-project translation queue (`stale_running` distinct); `ui_queue` router.
-
-**What is built (branch `feat/provider-export-analytics`, PR pending):**
 - **Q5 — Resources hub** ✅ — `services/workspace_resources.py` + `resources_hub.html` + `ui_resources` router; cross-project glossary/character/TM counts, read-only, degraded-isolated.
 - **Q6 — Providers hub** ✅ — `services/workspace_providers.py` + `providers_hub.html` + `ui_providers` router; provider/model routing table, key presence by env-var **name** only, token totals, recent failures; health check is an explicit per-project POST (never on render); secret-leak regression test.
 - **Q7 — Export gate + ledger + Exports hub** ✅ — migration v10→v11 (`export_history`, additive); `storage/export_history.py`; `services/export_gate.py` (Draft always allowed; Final + `require_clean` refuses on critical QA issues — advisory default preserved, ADR `008`); `services/export_ledger.py` (one row per artifact/attempt, service-written); `services/workspace_exports.py` + `/ui/exports` hub (basename-only leak rule) + `/ui/projects/{name}/exports` history (missing artifacts render "missing").
 - **Q8 — Deterministic analytics** ✅ — `services/project_analytics.py` (status/review/token/candidate/export-readiness/activity aggregates; readiness reuses the exporter's publishable predicate); `/ui/projects/{name}/analytics` page + Analytics sidebar item; dashboard "Workspace at a glance" rollup (pure aggregation over the cached index — zero extra DB reads); `workspace_index` entries carry token totals. Current-state framing; no time series, no currency, no QA on render.
-
-**What is built (branch `feat/content-explorer`):**
 - **Q9 — Content Explorer v2** ✅ — `/ui/projects/{name}/volumes/{id}/structure` reframed as a tabbed Content Explorer (Structure · Segments · Assets · Metadata · Warnings) in `ui_explorer.py` + reworked `epub_preview.html`; new read-only `services/segment_listing.py` (chapter rail with status/review counts; filtered, paginated segment table; `#seg-{id}` editor jump links + reading-preview cross-links). **Render-path hardening:** `status_for_volume` (source hashing) removed from the render path — replaced by hash-free `snapshot_info`; `read_snapshot` now opens readonly; snapshot render skips archive-touching excerpts. SD-7 naming: global `/ui/epub-preview` retitled "Inspect a source" (pre-import); ADR 012 image gate untouched (Assets tab links manifest-id-keyed gated endpoint only). No schema change; reading preview stays a distinct, linked surface ("View as reader").
 
-**Non-goals honored for Q6–Q8** (scope fence): no OCR, no provider expansion, no route rewrite, no SPA/Node, no external queue, no `desktop/` changes, no global mutable store, no provider healthcheck/QA scan/source hashing on render, no currency estimates, no time-series store. `volume_lifecycle.py` `exported` overlay intentionally not added (pure derivation preserved; ledger is the honest source — revisit at Q12 if needed).
+**Non-goals honored for Q6–Q9** (scope fence): no OCR, no provider expansion, no route rewrite, no SPA/Node, no external queue, no `desktop/` changes, no global mutable store, no provider healthcheck/QA scan/source hashing on render, no currency estimates, no time-series store, no editable segment table from explorer. `volume_lifecycle.py` `exported` overlay intentionally not added (pure derivation preserved; ledger is the honest source — revisit at Q12 if needed).
 
-**Sprint Q PR strategy:** one stage = one branch + one PR; Q6–Q8 grouped on `feat/provider-export-analytics` per maintainer instruction (2026-06-11) with one commit per stage. **Sprint-level PR to `main` stays unopened until Q12 is green** (maintainer instruction 2026-06-10).
+**Sprint Q PR strategy:** one stage = one branch + one PR. Q5 branch `feat/workspace-resources-hub`. Q6–Q8 grouped on `feat/provider-export-analytics` (PR #41). Q9 branch `feat/content-explorer` (PR #42). **Sprint-level PR to `main` stays unopened until Q12 is green** (maintainer instruction 2026-06-10).
 
 **Hard fences for all of Sprint Q** (full list in [SPRINT_Q_HANDOFF.md §6](.docs/audit/SPRINT_Q_HANDOFF.md)):
 - **One project DB = the source of truth for that project. No global mutable store without an ADR.**
@@ -159,7 +155,7 @@ Before starting any stage:
 
 **Sprint Q** (Workspace v2) — each stage gated per §2.2:
 
-> **Gate Q status: 🟡 IN PROGRESS — Q0 ✅ · Q1 ✅ · Q2 ✅ · Q3 ✅ · Q4 ✅ (merged) · Q5 ✅ · Q6 ✅ · Q7 ✅ · Q8 ✅ (PR #41) · Q9 ✅ (branch) · Q10 next · Q10–Q12 ⬜.**
+> **Gate Q status: 🟡 IN PROGRESS — Q0 ✅ · Q1 ✅ · Q2 ✅ · Q3 ✅ · Q4 ✅ · Q5 ✅ · Q6 ✅ · Q7 ✅ · Q8 ✅ · Q9 ✅ (all merged to `main` via PR #41 + #42) · Q10 next · Q10–Q12 ⬜.**
 
 - [x] Q0 — Planning: deep audit, execution plan Q0–Q12, risk register R-01..23, cold-start handoff.
 - [x] Q1 — WV-010: migration v10 (`projects.uuid`, forward + idempotency tests); `project_discovery` uuid + duplicate detection; `workspace_index.py` read-only/mtime-cached/error-isolated/budget-tested; grep-gate; index consumed by zero routes (shipped dark).
@@ -186,7 +182,7 @@ Deep detail per entry lives in git history and linked docs.
 | Sprint N — Tauri Shell Alpha | `desktop/` | 1043 / 4 | ✅ CLOSED — runtime validated, build green |
 | Sprint P — Workflow Coherence | [SPRINT_P_EXECUTION](.docs/audit/SPRINT_P_EXECUTION.md) | 1102 / 4 | ✅ CLOSED — WV-001..006; O-gate green. *Lesson:* per-project coherence precedes cross-project hubs |
 | Sprint O — Production Desktop | `desktop/` + [INSTALL_DESKTOP](docs/INSTALL_DESKTOP.md) | 1102 / 4 | ✅ COMPLETE — portable 3.2 MB exe; PATH-dependency baseline; PyInstaller recommended for single-file |
-| **Sprint Q — Workspace v2** | [SPRINT_Q_EXECUTION_PLAN](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [DEEP_AUDIT](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [RISK_REGISTER](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [HANDOFF](.docs/audit/SPRINT_Q_HANDOFF.md) | Q4 ≈1131 / 4 | 🟡 ACTIVE — Q0✅ Q1✅ Q2✅ Q3✅ Q4✅ (merged) · Q5✅ Q6✅ Q7✅ Q8✅ (PR #41) · Q9✅ (branch); **Q10 next**. *Lesson:* Gate B1 audits pay off — Q9 found and removed source hashing still living on the structure render path |
+| **Sprint Q — Workspace v2** | [SPRINT_Q_EXECUTION_PLAN](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [DEEP_AUDIT](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [RISK_REGISTER](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [HANDOFF](.docs/audit/SPRINT_Q_HANDOFF.md) | Q9 ≈1317 / 4 | 🟡 ACTIVE — Q0✅ Q1✅ Q2✅ Q3✅ Q4✅ Q5✅ Q6✅ Q7✅ Q8✅ Q9✅ (all merged); **Q10 next**. *Lesson:* Gate B1 audits pay off — Q9 found and removed source hashing still living on the structure render path |
 
 > Test counts are the last full-suite figure verified at each closed stage. Re-run the full suite at each stage gate; do not assume a count without running it.
 
@@ -212,7 +208,7 @@ Deep detail per entry lives in git history and linked docs.
 
 Provider registry: `providers/registry.py`. API keys resolve from env vars or `~/.weaver/secrets.toml` (mode `0o600`, env wins) — never in config, never logged, never rendered.
 
-**Deferred (not in Sprint Q scope):** OCR implementation, provider expansion, route rewrite, Content Explorer v2 / editor panel / validation completion (Q9–Q11).
+**Deferred (not in Sprint Q scope):** OCR implementation, provider expansion, route rewrite, SPA/Node, external queue.
 
 **Banned unless explicitly overridden (ADR required):** Flask · Django · SQLAlchemy · Celery · RQ · Docker · React/Node build · SPA framework · OpenTelemetry · Sentry. asyncio rejected outside the web layer. External job queue / worker daemon / multi-process worker pool rejected (ADR `010`; `api/jobs.py:8-10`). **No global mutable cross-project store without an ADR.**
 
@@ -265,9 +261,9 @@ Build vertically, not horizontally. One polished slice beats several half-finish
 - Build only what the active stage (§2.3) lists. Deferred items get no scaffolding "for later".
 - One PR = one concern. No bundled refactor + feature. **One Sprint Q stage = one branch + one PR.**
 - **Sprint Q (active):** build only the stage named in §2.3 / the execution plan, in order. The cross-project read layer is **read-only**; **no global mutable store without an ADR**; **no source-file hashing on any render path** (Gate B1 extended). Add a **Non-Goals** line per stage (see §2.3) to fence scope.
-- Out of scope for Q9 unless the stage names it: OCR, provider expansion, route rewrite, SPA/Node, external queue, `desktop/` changes. Defer the sprint PR until all of Q is finished.
+- Out of scope for Q10 unless the stage names it: OCR, provider expansion, route rewrite, SPA/Node, external queue, `desktop/` changes. Defer the sprint PR until all of Q is finished.
 
-Build order for Q9: **T1 workflow (explorer journey)** → **T3 read service (segment listing)** → **T2 HTMX tabs surface** → **T6/T7/T8 validation** → **T0 docs + handoff**.
+Build order for Q10: **T1 workflow (editor panel journey)** → **T3 read service (per-segment context fragments)** → **T2 HTMX panel surface** → **T6/T7/T8 validation** → **T0 docs + handoff**.
 
 ### 4.5 Communication
 

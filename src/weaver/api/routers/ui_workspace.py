@@ -27,6 +27,7 @@ from weaver.errors import (
 )
 from weaver.services.chapter_workspace import chapter_workspace
 from weaver.services.segment_history import segment_translation_history
+from weaver.services.workspace_context import build_segment_context
 from weaver.services.workspace_edit import save_segment_translation
 
 router = APIRouter(tags=["ui"], include_in_schema=False)
@@ -186,3 +187,35 @@ def ui_job_cancel(name: str, job_id: str, request: Request) -> HTMLResponse:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found for '{name}'.")
     job.request_cancel()
     return _render_translate_job(request, name, job_id)
+
+
+# --- context panel (Sprint Q10) --------------------------------------------
+
+
+@router.get(
+    "/ui/projects/{name}/chapters/{chapter_id}/segments/{segment_id}/context",
+    response_class=HTMLResponse,
+)
+def workspace_segment_context(
+    name: str,
+    chapter_id: str,
+    segment_id: str,
+    request: Request,
+) -> HTMLResponse:
+    """Render the context panel fragment for one segment (HTMX lazy-load).
+
+    Read-only: no provider call, no QA scan, no source-file hashing.
+    """
+    base = _base_dir(request)
+    try:
+        project_toml = _resolve_project_toml(request, name)
+        ctx = build_segment_context(project_toml, chapter_id, segment_id, cwd=base)
+    except (ChapterNotFoundError, SegmentNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return templates.TemplateResponse(
+        request,
+        "partials/_workspace_context.html",
+        {"ctx": ctx, "name": name, "chapter_id": chapter_id},
+    )

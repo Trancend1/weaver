@@ -91,11 +91,9 @@
 
 <section class="panel">
   <div class="toolbar-row modal-actions" aria-label="Preview actions">
-    <a class="btn btn--quiet" href="/ui/projects/{{ project_name }}">Back to project</a>
     {% if chapter_id is not none %}
     <a class="btn btn--quiet" href="/ui/projects/{{ project_name }}/chapters/{{ chapter_id }}">Back to workspace</a>
     {% endif %}
-    <a class="btn btn--quiet" href="/ui/projects/{{ project_name }}/qa">Continue to QA</a>
     <a class="btn btn--primary" href="/ui/projects/{{ project_name }}/export/preflight">Export preflight</a>
   </div>
 </section>

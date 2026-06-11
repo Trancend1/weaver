@@ -89,9 +89,7 @@ def test_snapshot_status_404_for_unknown_volume(client_with_projects: TestClient
 def test_ui_tree_renders_snapshot_controls(client_with_projects: TestClient) -> None:
     name = _project(client_with_projects)
     page = client_with_projects.get(f"/ui/projects/{name}").text
-    assert "Preview EPUB" in page
     assert "Inspect status" in page
-    assert "Full structure page" in page
     assert "snapshot-vol-" in page
     assert "Reparse EPUB" not in page
 

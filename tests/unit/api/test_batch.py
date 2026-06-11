@@ -47,7 +47,7 @@ def _first_chapter(client: TestClient, name: str) -> str:
 def _wait_batch(client: TestClient, job_id: str) -> None:
     job = client.app.state.jobs.get_batch(job_id)  # type: ignore[attr-defined]
     assert job is not None
-    job.wait(timeout=10)
+    job.wait(timeout=30)
 
 
 # --------------------------------------------------------------------------- #

@@ -76,11 +76,9 @@ def test_workspace_navigation_stays_project_scoped(ws_client: TestClient) -> Non
     name = _name(ws_client)
     chapter_id = _first_chapter_id(ws_client, name)
     page = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}").text
-    assert f'href="/ui/projects/{name}"' in page
-    assert f'href="/ui/projects/{name}/chapters/{chapter_id}/qa"' in page
-    assert f'href="/ui/projects/{name}/candidates"' in page
+    # Only non-redundant actions remain in header (Export has no sidebar equiv)
     assert f'href="/ui/projects/{name}/export/preflight"' in page
-    # Dashboard breadcrumb is intentional global nav; action links remain project-scoped
+    # Sidebar provides Project, Quality, Candidates, etc. — no duplicate CTAs
 
 
 def test_workspace_segment_actions_are_contextual(ws_client: TestClient) -> None:
@@ -93,8 +91,10 @@ def test_workspace_segment_actions_are_contextual(ws_client: TestClient) -> None
     assert "Copy source" in page
     assert "Copy translation" in page
     assert "Clear unsaved" in page
-    assert f"/ui/projects/{name}/candidates?chapter_id={chapter_id}" in page
-    assert f"segment_id={seg_id}" in page
+    # Review candidates link removed — sidebar Candidates covers navigation
+    assert "History" in page
+    assert "Context" in page
+    assert "Generate candidate" in page
 
 
 def test_workspace_has_no_duplicate_ids(ws_client: TestClient) -> None:
@@ -207,3 +207,40 @@ def test_workspace_works_for_second_duplicate_volume(ws_client: TestClient) -> N
         r = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}")
         assert r.status_code == 200
         assert "Source (JP)" in r.text
+
+
+# --- Q10 context panel -------------------------------------------------------
+
+
+def test_workspace_renders_context_panel_shell(ws_client: TestClient) -> None:
+    name = _name(ws_client)
+    chapter_id = _first_chapter_id(ws_client, name)
+    page = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}").text
+    assert "context-panel-wrapper" in page
+    assert "context-panel-empty" in page
+    assert "Context" in page  # trigger button in segment row
+
+
+def test_context_fragment_renders_for_segment(ws_client: TestClient) -> None:
+    name = _name(ws_client)
+    chapter_id = _first_chapter_id(ws_client, name)
+    seg_id = _first_segment_id(ws_client, name, chapter_id)
+
+    r = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}/segments/{seg_id}/context")
+    assert r.status_code == 200
+    assert "context-panel" in r.text
+    assert seg_id in r.text
+    assert "Segment context" in r.text
+
+
+def test_context_fragment_404_for_unknown_segment(ws_client: TestClient) -> None:
+    name = _name(ws_client)
+    chapter_id = _first_chapter_id(ws_client, name)
+    r = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}/segments/ghost/context")
+    assert r.status_code == 404
+
+
+def test_context_fragment_404_for_unknown_chapter(ws_client: TestClient) -> None:
+    name = _name(ws_client)
+    r = ws_client.get(f"/ui/projects/{name}/chapters/nope/segments/ghost/context")
+    assert r.status_code == 404

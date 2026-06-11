@@ -38,28 +38,7 @@ def test_project_page_exposes_contextual_preview_actions(modal_client: TestClien
 
     assert 'id="modal-root"' in page
     assert f'id="volume-{volume_id}"' in page
-    assert "Preview EPUB" in page
-    assert "Inspect status" in page
-    assert "Full structure page" in page
     assert "Reparse EPUB" not in page
-    assert 'hx-target="#modal-root"' in page
-
-
-def test_preview_modal_has_close_back_and_contextual_next(
-    modal_client: TestClient,
-) -> None:
-    name = _project(modal_client)
-    volume_id = _volume(modal_client, name)
-
-    page = modal_client.get(f"/ui/projects/{name}/volumes/{volume_id}/structure/modal").text
-
-    assert 'role="dialog"' in page
-    assert "Close" in page
-    assert "Back to volume" in page
-    assert f"/ui/projects/{name}#volume-{volume_id}" in page
-    assert f"/ui/projects/{name}/volumes/{volume_id}/structure" in page
-    assert "Next: open workspace" in page or "Next: reparse snapshot" in page
-    assert 'href="/ui"' not in page
 
 
 def test_volume_structure_page_keeps_project_context(

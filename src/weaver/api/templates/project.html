@@ -7,10 +7,15 @@
   {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label": tree.project_name}] %}
   {% set page_title = tree.project_name %}
   {% set page_meta = project_meta %}
-  {% set page_actions %}<button class="btn btn--danger" type="button"
-    hx-post="/ui/projects/{{ tree.project_name }}/delete"
-    hx-confirm="Delete &quot;{{ tree.project_name }}&quot;? This permanently removes its translations, history, glossary, and exports. The original source file is not affected."
-    hx-swap="none">Delete project</button>{% endset %}
+  {% set page_actions %}
+    <a class="btn btn--secondary" href="#import-volume">
+      {% if overview.volume_count == 0 %}Import first volume{% else %}Import another volume{% endif %}
+    </a>
+    <button class="btn btn--danger" type="button"
+      hx-post="/ui/projects/{{ tree.project_name }}/delete"
+      hx-confirm="Delete &quot;{{ tree.project_name }}&quot;? This permanently removes its translations, history, glossary, and exports. The original source file is not affected."
+      hx-swap="none">Delete project</button>
+  {% endset %}
   {% include "partials/_page_header.html" %}
 
   <div class="overview-cards">
@@ -59,26 +64,6 @@
     <a class="link-btn" href="/ui/projects/{{ tree.project_name }}/jobs/{{ overview.recent_job.id }}/detail">Detail</a>
   </div>
   {% endif %}
-</section>
-
-{# ── Next actions ───────────────────────────────────────── #}
-<section class="panel c-panel">
-  <h2>Next actions</h2>
-  <div class="toolbar-row actions-row">
-    {% if overview.volume_count == 0 %}
-    <a class="btn btn--primary" href="#import-volume">Import first volume</a>
-    {% else %}
-    <a class="btn btn--secondary" href="#import-volume">Import another volume</a>
-    {% endif %}
-    {% if overview.volumes %}
-    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/chapters/{{ tree.volumes[0].chapters[0].id }}">Open workspace</a>
-    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/candidates">Review candidates</a>
-    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/volumes/{{ tree.volumes[0].id }}/review">Review queue</a>
-    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/qa">Run QA</a>
-    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/volumes/{{ tree.volumes[0].id }}/preview">Reading preview</a>
-    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/export/preflight">Export preflight</a>
-    {% endif %}
-  </div>
 </section>
 
 {# ── Per-volume summary ─────────────────────────────────── #}

@@ -19,7 +19,6 @@ from weaver.errors import (
     VolumeNotFoundError,
     WeaverError,
 )
-from weaver.services.chapter_workspace import chapter_workspace
 from weaver.services.project_discovery import find_project
 from weaver.services.project_paths import resolve_database_path
 from weaver.services.reading_preview import (
@@ -160,41 +159,25 @@ def ui_segment_review(
         )
     except WeaverError as exc:
         return _import_error(request, str(exc))
-    # Re-render the segment row fresh from workspace service
-    chapter_id: str | None = None
+    # Return only the statusline fragment — not the full segment row.
     from weaver.storage.segments import get_segment
 
+    seg_status = "pending"
     try:
         with closing(
             connect_readonly_database(resolve_database_path(dp.project_toml, cwd=base))
         ) as conn:
             seg_record = get_segment(conn, segment_id)
             if seg_record is not None:
-                chapter_id = str(seg_record.chapter_id)
+                seg_status = seg_record.status
     except Exception:
         pass
-    if chapter_id is None:
-        return HTMLResponse("")
-    try:
-        ws = chapter_workspace(dp.project_toml, chapter_id, cwd=base)
-    except (ChapterNotFoundError, SegmentNotFoundError) as exc:
-        return templates.TemplateResponse(
-            request, "not_found.html", {"message": str(exc)}, status_code=404
-        )
-    except WeaverError as exc:
-        return templates.TemplateResponse(
-            request, "error.html", {"message": str(exc)}, status_code=422
-        )
-    seg = next((s for s in ws.segments if s.id == segment_id), None)
-    if seg is None:
-        return HTMLResponse("")
     return templates.TemplateResponse(
         request,
-        "partials/_segment.html",
+        "partials/_segment_statusline.html",
         {
-            "name": name,
-            "chapter_id": chapter_id,
-            "seg": seg,
+            "seg_id": segment_id,
+            "status": seg_status,
             "review_status": review_status,
         },
     )
