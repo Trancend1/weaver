@@ -1154,3 +1154,26 @@ h2 { text-wrap: balance; letter-spacing: -0.025em; }
   .modal-head { align-items: flex-start; flex-direction: column; }
   .preview-frame { height: 68vh; }
 }
+
+/* ── Q8 analytics: stat bars + dashboard rollup ─────────────── */
+.stat-bars { display: grid; gap: var(--space-xs); margin: var(--space-sm) 0 0; padding: 0; list-style: none; }
+.stat-bar { display: grid; grid-template-columns: 8rem 1fr auto; align-items: center; gap: var(--space-sm); }
+.stat-bar__label { font-size: var(--text-xs); color: var(--color-muted); text-transform: capitalize; }
+.stat-bar__track { display: block; height: 0.55rem; border-radius: 999px; background: var(--color-cream-soft); border: 1px solid var(--color-cream-line); overflow: hidden; }
+.stat-bar__fill { display: block; height: 100%; border-radius: inherit; background: var(--color-info); }
+.stat-bar__fill--translated, .stat-bar__fill--manual, .stat-bar__fill--review-approved { background: var(--color-ok); }
+.stat-bar__fill--pending, .stat-bar__fill--review-not_reviewed { background: var(--color-cream-strong); }
+.stat-bar__fill--failed, .stat-bar__fill--review-rejected { background: var(--color-bad); }
+.stat-bar__fill--stale, .stat-bar__fill--in_progress, .stat-bar__fill--review-needs_review, .stat-bar__fill--review-needs_revision { background: var(--color-warn); }
+.stat-bar__value { font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.analytics-table { width: 100%; border-collapse: collapse; margin-top: var(--space-sm); }
+.analytics-table th { text-align: left; font-size: var(--text-xs); color: var(--color-muted); padding: var(--space-xxs) var(--space-sm) var(--space-xxs) 0; border-bottom: 1px solid var(--color-line-soft); }
+.analytics-table td { padding: var(--space-xxs) var(--space-sm) var(--space-xxs) 0; border-bottom: 1px solid var(--color-line-soft); font-size: var(--text-sm); }
+.panel__subtitle { margin: var(--space-md) 0 var(--space-xxs); font-size: var(--text-sm); }
+.dash-rollup__stats { display: flex; flex-wrap: wrap; gap: var(--space-lg); margin: var(--space-sm) 0 0; padding: 0; list-style: none; }
+.dash-rollup__stats li { display: flex; flex-direction: column; gap: 1px; }
+.dash-rollup__stats b { font-size: var(--text-md); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--color-ink); }
+.dash-rollup__stats span { font-size: 0.7rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+@media (max-width: 640px) {
+  .stat-bar { grid-template-columns: 6rem 1fr auto; }
+}

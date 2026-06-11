@@ -34,6 +34,7 @@ from weaver.services.chapter_workspace import chapter_workspace
 from weaver.services.epub_structure_preview import preview_epub_structure
 from weaver.services.import_source import import_volume
 from weaver.services.project import delete_project, initialize_project, project_name_exists
+from weaver.services.project_analytics import build_workspace_rollup
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_overview import project_overview
 from weaver.services.project_paths import resolve_database_path
@@ -122,6 +123,8 @@ def dashboard(request: Request) -> HTMLResponse:
             "identity_conflicts": identity_conflicts,
             "active_job_count": registry.running_count(),
             "books_dir": str(base),
+            # Q8: pure aggregation over the cached index — zero extra DB reads.
+            "rollup": build_workspace_rollup(list(index.entries)),
         },
     )
 
