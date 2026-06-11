@@ -161,9 +161,10 @@ def test_preview_endpoint_does_not_mutate_source_epub(tmp_path: Path) -> None:
 
 
 def test_structure_page_renders_image_preview_affordance(tmp_path: Path) -> None:
+    # Q9: the gated image affordance lives on the Content Explorer's Assets tab.
     client, name, volume_id, _ = _client_with_image_snapshot(tmp_path)
 
-    page = client.get(f"/ui/projects/{name}/volumes/{volume_id}/structure")
+    page = client.get(f"/ui/projects/{name}/volumes/{volume_id}/structure?tab=assets")
 
     assert page.status_code == 200
     assert "Preview image" in page.text
