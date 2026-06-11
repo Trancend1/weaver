@@ -204,7 +204,9 @@ def _volume_reference_preview(request: Request, source_path: str) -> HTMLRespons
         )
 
     project_name, project_toml = matches[0]
-    return _render_volume_structure_preview(request, project_name, volume_id, project_toml)
+    from weaver.api.routers.ui_explorer import render_content_explorer
+
+    return render_content_explorer(request, project_name, volume_id, project_toml)
 
 
 @router.get("/ui/projects/{name}", response_class=HTMLResponse)
@@ -381,23 +383,6 @@ def ui_volume_reparse(name: str, volume_id: int, request: Request) -> HTMLRespon
     )
 
 
-@router.get("/ui/projects/{name}/volumes/{volume_id}/structure", response_class=HTMLResponse)
-def ui_volume_structure(name: str, volume_id: int, request: Request) -> HTMLResponse:
-    """Render the persisted snapshot for a volume as a Phase F preview page.
-
-    Reuses the existing Phase F ``epub_preview.html`` shell so the structure
-    surface is one page, not two. Falls back to "missing snapshot" when the
-    volume has never been parsed.
-    """
-    base = _base_dir(request)
-    dp = find_project(base, name)
-    if dp is None:
-        raise HTTPException(status_code=404, detail=f"No project named {name!r}.")
-    if dp.error:
-        return _import_error(request, dp.error)
-    return _render_volume_structure_preview(request, name, volume_id, dp.project_toml)
-
-
 @router.get("/ui/projects/{name}/volumes/{volume_id}/structure/modal", response_class=HTMLResponse)
 def ui_volume_structure_modal(name: str, volume_id: int, request: Request) -> HTMLResponse:
     """Contextual modal shell for inspecting a volume without leaving the project hub."""
@@ -430,46 +415,6 @@ def ui_volume_structure_modal(name: str, volume_id: int, request: Request) -> HT
             "volume_title": volume.title,
             "snapshot_status": status,
             "first_chapter": first_chapter,
-        },
-    )
-
-
-def _render_volume_structure_preview(
-    request: Request, name: str, volume_id: int, project_toml: Path
-) -> HTMLResponse:
-    """Render one imported volume's persisted EPUB snapshot."""
-
-    from weaver.services.epub_reparse import status_for_volume
-    from weaver.services.epub_snapshot import read_snapshot
-    from weaver.services.epub_structure_preview import serialize_parsed_epub
-
-    base = _base_dir(request)
-    db_path = resolve_database_path(project_toml, cwd=base)
-    parsed = read_snapshot(db_path, volume_id)
-    try:
-        status = status_for_volume(project_toml, volume_id, cwd=base)
-    except WeaverError as exc:
-        return _import_error(request, str(exc))
-    preview: dict[str, Any] | None
-    if parsed is None:
-        preview = None
-    else:
-        try:
-            preview = serialize_parsed_epub(parsed, project_name=name, volume_id=volume_id)
-        except WeaverError as exc:
-            return _import_error(request, str(exc))
-    return templates.TemplateResponse(
-        request,
-        "epub_preview.html",
-        {
-            **project_layout(request, name, active_nav="project"),
-            "source_path": f"volume:{volume_id}",
-            "volume_preview": True,
-            "project_name": name,
-            "volume_id": volume_id,
-            "preview": preview,
-            "snapshot_status": status,
-            "error": None if parsed is not None else "Snapshot missing — click Reparse EPUB.",
         },
     )
 

@@ -1177,3 +1177,24 @@ h2 { text-wrap: balance; letter-spacing: -0.025em; }
 @media (max-width: 640px) {
   .stat-bar { grid-template-columns: 6rem 1fr auto; }
 }
+
+/* ── Q9 Content Explorer: tabs + segment list ───────────────── */
+.explorer-tabs { display: flex; gap: var(--space-xs); flex-wrap: wrap; margin: var(--space-sm) 0; }
+.explorer-tab { padding: var(--space-xxs) var(--space-sm); border: 1px solid var(--color-cream-line); border-radius: 999px; font-size: var(--text-sm); color: var(--color-muted); text-decoration: none; }
+.explorer-tab:hover { color: var(--color-ink); border-color: var(--color-ink); }
+.explorer-tab.active { color: var(--color-ink); border-color: var(--color-ink); font-weight: 600; background: var(--color-cream-soft); }
+.segment-explorer__layout { display: grid; grid-template-columns: minmax(14rem, 18rem) 1fr; gap: var(--space-lg); align-items: start; }
+.segment-explorer__chapters h2, .segment-explorer__list h2 { margin-top: 0; }
+.segment-chapter { padding: var(--space-xxs) 0; }
+.segment-chapter.active > a { font-weight: 700; }
+.segment-chapter__counts { display: block; }
+.segment-explorer__head { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
+.segment-filters { margin: var(--space-sm) 0; }
+.segment-row__actions { display: flex; gap: var(--space-sm); white-space: nowrap; }
+.segment-pager { display: flex; align-items: center; gap: var(--space-sm); margin-top: var(--space-sm); }
+.seg-status--translated, .seg-status--manual { color: var(--color-ok); border-color: var(--fill-ok-line); background: var(--fill-ok); }
+.seg-status--failed { color: var(--color-bad); }
+.seg-status--stale, .seg-status--in_progress { color: var(--color-warn); }
+@media (max-width: 720px) {
+  .segment-explorer__layout { grid-template-columns: 1fr; }
+}

@@ -160,8 +160,12 @@ def store_snapshot(
 
 
 def read_snapshot(db_path: Path, volume_id: int) -> ParsedEpub | None:
-    """Reconstruct a :class:`ParsedEpub` from persisted rows. ``None`` if absent."""
-    with closing(connect_database(db_path)) as connection:
+    """Reconstruct a :class:`ParsedEpub` from persisted rows. ``None`` if absent.
+
+    Pure read: opens the database read-only (Q9 hardening — a snapshot read
+    must never trigger migrations or any other write path).
+    """
+    with closing(connect_readonly_database(db_path)) as connection:
         header = connection.execute(
             """
             SELECT package_path, opf_path, spine_toc,
@@ -246,6 +250,35 @@ def snapshot_status(
         state="fresh" if is_fresh else "stale",
         source_hash=persisted_hash,
         parser_version=persisted_parser,
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
+    )
+
+
+def snapshot_info(db_path: Path, volume_id: int) -> SnapshotStatus | None:
+    """Return the persisted snapshot row's metadata without any freshness check.
+
+    Hash-free by design (Q9 / Gate B1 extended): render paths must never hash
+    the source file, so this reader reports only what the row itself says —
+    ``state`` is ``"recorded"`` when a snapshot exists. Freshness classification
+    (fresh/stale) stays in :func:`snapshot_status`, which is reserved for
+    explicit user actions (snapshot-status button, reparse flow).
+    """
+    with closing(connect_readonly_database(db_path)) as connection:
+        row = connection.execute(
+            """
+            SELECT source_hash, parser_version, created_at, updated_at
+            FROM epub_snapshots WHERE volume_id = ?
+            """,
+            (volume_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    return SnapshotStatus(
+        volume_id=volume_id,
+        state="recorded",
+        source_hash=str(row["source_hash"]),
+        parser_version=int(row["parser_version"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
     )

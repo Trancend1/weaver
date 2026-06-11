@@ -67,7 +67,9 @@ def test_epub_preview_ui_renders_reader_baseline_sections(
     text = response.text
 
     assert response.status_code == 200
-    assert "EPUB structure preview" in text
+    # Q9 (SD-7): the pre-import surface is titled "Inspect a source" so the
+    # word "preview" stops meaning three different pages.
+    assert "Inspect a source" in text
     # Reader-like inspection sections are all present.
     for heading in (
         "Summary",

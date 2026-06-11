@@ -38,15 +38,25 @@ def serialize_parsed_epub(
     *,
     project_name: str | None = None,
     volume_id: int | None = None,
+    include_excerpts: bool = True,
 ) -> dict[str, Any]:
     """Serialize an already-parsed :class:`ParsedEpub` for the preview UI.
 
     Sprint J4 reuses this from the persisted-snapshot path so the EPUB-structure
     page renders the same shape whether the source was an on-demand parse
     (preview upload) or a stored snapshot row.
+
+    ``include_excerpts=False`` skips the chapter-excerpt extraction, which
+    re-opens the source archive — render paths fed by the persisted snapshot
+    must stay archive-free (Q9 / no reparse on render).
     """
 
-    return _preview_dict(parsed, project_name=project_name, volume_id=volume_id)
+    return _preview_dict(
+        parsed,
+        project_name=project_name,
+        volume_id=volume_id,
+        include_excerpts=include_excerpts,
+    )
 
 
 def _preview_dict(
@@ -54,6 +64,7 @@ def _preview_dict(
     *,
     project_name: str | None = None,
     volume_id: int | None = None,
+    include_excerpts: bool = True,
 ) -> dict[str, Any]:
     severity_counts = _severity_counts(parsed.validation_issues)
     return {
@@ -103,7 +114,7 @@ def _preview_dict(
             _image_dict(item, project_name=project_name, volume_id=volume_id)
             for item in parsed.images
         ],
-        "excerpts": _excerpts(parsed),
+        "excerpts": _excerpts(parsed) if include_excerpts else [],
         "validation_issues": [_issue_dict(issue) for issue in parsed.validation_issues],
         "validation_by_scope": _validation_by_scope(parsed.validation_issues),
     }

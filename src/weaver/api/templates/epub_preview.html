@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}EPUB Preview · Weaver{% endblock %}
+{% block title %}{% if volume_preview %}Content Explorer · Weaver{% else %}Inspect a source · Weaver{% endif %}{% endblock %}
 
 {% macro nav_items(items) %}
 {% for item in items %}
@@ -14,29 +14,176 @@
 {% endfor %}
 {% endmacro %}
 
+{% macro toc_section(preview) %}
+<section class="panel" id="toc">
+  <h2>Table of contents</h2>
+  {% set toc = preview.navigation | selectattr("nav_type", "equalto", "toc") | list %}
+  {% if toc %}
+  <ul class="tree epub-nav-tree">{{ nav_items(toc) }}</ul>
+  {% else %}
+  <div class="empty"><p>No table of contents found in NAV or NCX.</p></div>
+  {% endif %}
+
+  {% set landmarks = preview.navigation | selectattr("nav_type", "equalto", "landmarks") | list %}
+  {% if landmarks %}
+  <h3>Landmarks</h3>
+  <ul class="plain-list">
+    {% for item in landmarks %}<li>{{ item.label }} <code>{{ item.href }}</code></li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  {% set pages = preview.navigation | selectattr("nav_type", "equalto", "page-list") | list %}
+  {% if pages %}
+  <h3>Page list</h3>
+  <p class="meta">{{ pages | length }} page targets.</p>
+  {% endif %}
+</section>
+{% endmacro %}
+
+{% macro reading_order_section(preview) %}
+<section class="panel" id="reading-order">
+  <h2>Reading order</h2>
+  <p class="meta">Spine order · direction: {{ preview.page_progression_direction or "ltr (default)" }}.</p>
+  <div class="table-scroll">
+    <table class="grid">
+      <thead><tr><th class="num">#</th><th>Document</th><th>Flow</th><th>Spread</th><th>State</th></tr></thead>
+      <tbody>
+        {% for item in preview.spine %}
+        <tr>
+          <td class="num">{{ item.index }}</td>
+          <td class="cell-clip">{% if item.href %}<code>{{ item.href }}</code>{% else %}<span class="meta">{{ item.idref }}</span>{% endif %}</td>
+          <td>{% if item.linear %}linear{% else %}<span class="badge warn">non-linear</span>{% endif %}</td>
+          <td>{{ item.page_spread or "—" }}</td>
+          <td>
+            {% if not item.exists_in_manifest %}<span class="badge bad">missing in manifest</span>
+            {% elif not item.exists_in_archive %}<span class="badge bad">missing file</span>
+            {% else %}<span class="badge ok">ok</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endmacro %}
+
+{% macro metadata_section(preview) %}
+{% set md = preview.metadata %}
+<section class="panel" id="summary">
+  <h2>{% if volume_preview %}Metadata{% else %}Summary{% endif %}</h2>
+  <table class="grid">
+    <tbody>
+      <tr><th>Title</th><td>{{ md.title }}</td></tr>
+      <tr><th>Author</th><td>{{ md.creator or "—" }}</td></tr>
+      <tr><th>Language</th><td>{{ md.language }}</td></tr>
+      <tr><th>Publisher</th><td>{{ md.publisher or "—" }}</td></tr>
+      <tr><th>Identifier</th><td class="cell-clip">{{ md.identifier or "—" }}</td></tr>
+      {% if md.series %}<tr><th>Series</th><td>{{ md.series }}{% if md.series_index %} · #{{ md.series_index }}{% endif %}</td></tr>{% endif %}
+      <tr><th>Reading direction</th><td>{{ preview.page_progression_direction or "default (ltr)" }}</td></tr>
+      {% if md.description %}<tr><th>Description</th><td>{{ md.description }}</td></tr>{% endif %}
+    </tbody>
+  </table>
+</section>
+{% endmacro %}
+
+{% macro assets_section(preview) %}
+<section class="panel" id="images">
+  <h2>{% if volume_preview %}Assets{% else %}Images{% endif %}</h2>
+  {% if preview.images %}
+  <p class="meta">Image previews are served only through the gated per-manifest endpoint — never by archive path.</p>
+  <div class="table-scroll">
+    <table class="grid">
+      <thead><tr><th>Role</th><th>Kind</th><th>Size</th><th>Bytes</th><th>Used by</th><th>File</th><th>Preview</th></tr></thead>
+      <tbody>
+        {% for image in preview.images %}
+        <tr>
+          <td>{{ image.image_role | replace("_", " ") | capitalize }}</td>
+          <td>{{ image.image_kind }}</td>
+          <td>{% if image.width and image.height %}{{ image.width }}×{{ image.height }}{% else %}—{% endif %}</td>
+          <td class="num">{% if image.byte_size %}{{ (image.byte_size / 1024) | round(1) }} KB{% else %}—{% endif %}</td>
+          <td>{% if image.referenced_by %}{{ image.referenced_by | length }} doc(s){% else %}<span class="meta">unreferenced</span>{% endif %}</td>
+          <td class="cell-clip"><code>{{ image.href }}</code></td>
+          <td>
+            {% if image.preview_url %}
+            <a class="btn btn--quiet" href="{{ image.preview_url }}" target="_blank" rel="noopener" title="Open the extracted image preview in a new tab">Preview image</a>
+            {% elif image.preview_available %}
+            <span class="meta">preview metadata only</span>
+            {% else %}
+            <span class="meta">not previewable</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><p>No images declared in the manifest.</p></div>
+  {% endif %}
+</section>
+{% endmacro %}
+
+{% macro warnings_section(preview) %}
+{% set sc = preview.severity_counts %}
+<section class="panel" id="validation">
+  <h2>{% if volume_preview %}Warnings{% else %}Validation{% endif %}</h2>
+  <div class="qa-summary__status">
+    {% if preview.readiness == "safe" %}
+    <span class="badge ok">Safe to translate</span>
+    {% elif preview.readiness == "warnings" %}
+    <span class="badge warn">Warnings — review before import</span>
+    {% else %}
+    <span class="badge bad">Blocking errors</span>
+    {% endif %}
+    <span class="meta">{{ sc.error }} errors · {{ sc.warning }} warnings · {{ sc.info }} notes</span>
+  </div>
+  <p class="meta">Structural findings recorded in the preservation snapshot at parse time. Errors block safe import/translation; warnings and notes are advisory only.</p>
+  {% if preview.validation_by_scope %}
+  {% for scope, issues in preview.validation_by_scope.items() %}
+  <h3>{{ scope }}</h3>
+  <ul class="plain-list">
+    {% for issue in issues %}
+    <li>
+      {% if issue.severity == "error" %}<span class="badge bad">error</span>
+      {% elif issue.severity == "warning" %}<span class="badge warn">warning</span>
+      {% else %}<span class="badge">note</span>{% endif %}
+      <code>{{ issue.code }}</code> {{ issue.message }}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endfor %}
+  {% else %}
+  <div class="empty"><p>No structural validation issues found. Safe to translate.</p></div>
+  {% endif %}
+</section>
+{% endmacro %}
+
 {% block content %}
 <section class="panel">
   {% if volume_preview %}
-    {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ project_name, "label": project_name}, {"href": none, "label": "EPUB preview"}] %}
+    {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ project_name, "label": project_name}, {"href": none, "label": "Content Explorer"}] %}
+    {% set page_title = "Content Explorer" %}
+    {% set page_meta = "Read-only inspection of structure, segments, assets, metadata, and warnings for one imported volume. Rendered from stored data — the source file is never re-read here." %}
   {% else %}
-    {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label": "EPUB preview"}] %}
+    {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label": "Inspect a source"}] %}
+    {% set page_title = "Inspect a source" %}
+    {% set page_meta = "Pre-import EPUB structure inspection of a sandboxed source path. Nothing is imported, translated, or saved." %}
   {% endif %}
-  {% set page_title = "EPUB structure preview" %}
-  {% set page_meta = "Read-only inspection of metadata, reading order, navigation, images, and validation readiness. Nothing is imported, translated, or saved." %}
   {% include "partials/_page_header.html" %}
 
   {% if volume_preview %}
-  <div class="workflow-note">
-    <strong>Volume snapshot</strong>
-    <span>This structure comes from imported volume {{ volume_id }}. Reparse the volume from the project page to refresh the persisted EPUB snapshot.</span>
-  </div>
-  <div class="toolbar-row modal-actions" aria-label="Volume preview actions">
+  <div class="toolbar-row modal-actions" aria-label="Content Explorer actions">
+    <a class="btn btn--quiet" href="/ui/projects/{{ project_name }}">Back to project</a>
     <a class="btn btn--quiet" href="/ui/projects/{{ project_name }}#volume-{{ volume_id }}">Back to volume</a>
-    {% if snapshot_status and snapshot_status.state != "fresh" %}
-    <a class="btn btn--primary" href="/ui/projects/{{ project_name }}#volume-{{ volume_id }}">Next: inspect / reparse</a>
-    {% endif %}
+    <a class="btn btn--secondary" href="/ui/projects/{{ project_name }}/volumes/{{ volume_id }}/preview">View as reader</a>
   </div>
-  <p class="meta">Source reference: <code>{{ source_path }}</code></p>
+  <p class="meta">
+    Source reference: <code>{{ source_path }}</code>
+    {% if snapshot_info %}
+    · snapshot parsed {{ snapshot_info.updated_at[:19] | replace("T", " ") }} (parser v{{ snapshot_info.parser_version }})
+    · <a href="/ui/projects/{{ project_name }}#volume-{{ volume_id }}">Inspect status / reparse</a>
+    {% endif %}
+  </p>
   {% else %}
   <form method="get" action="/ui/epub-preview" class="inline-form">
     <label for="source_path">Sandbox source path</label>
@@ -51,6 +198,46 @@
   {% endif %}
 </section>
 
+{% if volume_preview %}
+<nav class="subnav explorer-tabs" aria-label="Content Explorer tabs">
+  {% for t in explorer_tabs %}
+  <a href="/ui/projects/{{ project_name }}/volumes/{{ volume_id }}/structure?tab={{ t }}"
+     class="explorer-tab{% if explorer_tab == t %} active{% endif %}"
+     {% if explorer_tab == t %}aria-current="page"{% endif %}>{{ t | capitalize }}</a>
+  {% endfor %}
+</nav>
+
+{% if explorer_tab == "structure" %}
+  <section class="panel">
+    <div class="workflow-note">
+      <strong>Volume snapshot</strong>
+      <span>This structure comes from imported volume {{ volume_id }}. Reparse the volume from the project page to refresh the persisted EPUB snapshot.</span>
+    </div>
+    {% if preview %}
+    <div class="stat-row">
+      <div class="stat"><span class="stat__value">{{ preview.counts.spine }}</span><span class="stat__label">Spine</span></div>
+      <div class="stat"><span class="stat__value">{{ preview.counts.navigation }}</span><span class="stat__label">Nav entries</span></div>
+      <div class="stat"><span class="stat__value">{{ preview.counts.images }}</span><span class="stat__label">Images</span></div>
+      <div class="stat"><span class="stat__value">{{ preview.counts.manifest }}</span><span class="stat__label">Manifest</span></div>
+      <div class="stat {% if preview.severity_counts.error %}is-active stat--bad{% elif preview.severity_counts.warning %}is-active stat--warn{% endif %}"><span class="stat__value">{{ preview.counts.validation_issues }}</span><span class="stat__label">Issues</span></div>
+    </div>
+    {% endif %}
+  </section>
+  {% if preview %}
+  {{ toc_section(preview) }}
+  {{ reading_order_section(preview) }}
+  {% endif %}
+{% elif explorer_tab == "segments" %}
+  {% include "partials/_segment_list.html" %}
+{% elif explorer_tab == "assets" %}
+  {% if preview %}{{ assets_section(preview) }}{% endif %}
+{% elif explorer_tab == "metadata" %}
+  {% if preview %}{{ metadata_section(preview) }}{% endif %}
+{% elif explorer_tab == "warnings" %}
+  {% if preview %}{{ warnings_section(preview) }}{% endif %}
+{% endif %}
+
+{% else %}{# ── source-inspect mode (pre-import, sandboxed path) ── #}
 {% if preview %}
 {% set md = preview.metadata %}
 {% set sc = preview.severity_counts %}
@@ -85,70 +272,9 @@
   </div>
 </section>
 
-<section class="panel" id="summary">
-  <h2>Summary</h2>
-  <table class="grid">
-    <tbody>
-      <tr><th>Title</th><td>{{ md.title }}</td></tr>
-      <tr><th>Author</th><td>{{ md.creator or "—" }}</td></tr>
-      <tr><th>Language</th><td>{{ md.language }}</td></tr>
-      <tr><th>Publisher</th><td>{{ md.publisher or "—" }}</td></tr>
-      <tr><th>Identifier</th><td class="cell-clip">{{ md.identifier or "—" }}</td></tr>
-      {% if md.series %}<tr><th>Series</th><td>{{ md.series }}{% if md.series_index %} · #{{ md.series_index }}{% endif %}</td></tr>{% endif %}
-      <tr><th>Reading direction</th><td>{{ preview.page_progression_direction or "default (ltr)" }}</td></tr>
-      {% if md.description %}<tr><th>Description</th><td>{{ md.description }}</td></tr>{% endif %}
-    </tbody>
-  </table>
-</section>
-
-<section class="panel" id="toc">
-  <h2>Table of contents</h2>
-  {% set toc = preview.navigation | selectattr("nav_type", "equalto", "toc") | list %}
-  {% if toc %}
-  <ul class="tree epub-nav-tree">{{ nav_items(toc) }}</ul>
-  {% else %}
-  <div class="empty"><p>No table of contents found in NAV or NCX.</p></div>
-  {% endif %}
-
-  {% set landmarks = preview.navigation | selectattr("nav_type", "equalto", "landmarks") | list %}
-  {% if landmarks %}
-  <h3>Landmarks</h3>
-  <ul class="plain-list">
-    {% for item in landmarks %}<li>{{ item.label }} <code>{{ item.href }}</code></li>{% endfor %}
-  </ul>
-  {% endif %}
-
-  {% set pages = preview.navigation | selectattr("nav_type", "equalto", "page-list") | list %}
-  {% if pages %}
-  <h3>Page list</h3>
-  <p class="meta">{{ pages | length }} page targets.</p>
-  {% endif %}
-</section>
-
-<section class="panel" id="reading-order">
-  <h2>Reading order</h2>
-  <p class="meta">Spine order · direction: {{ preview.page_progression_direction or "ltr (default)" }}.</p>
-  <div class="table-scroll">
-    <table class="grid">
-      <thead><tr><th class="num">#</th><th>Document</th><th>Flow</th><th>Spread</th><th>State</th></tr></thead>
-      <tbody>
-        {% for item in preview.spine %}
-        <tr>
-          <td class="num">{{ item.index }}</td>
-          <td class="cell-clip">{% if item.href %}<code>{{ item.href }}</code>{% else %}<span class="meta">{{ item.idref }}</span>{% endif %}</td>
-          <td>{% if item.linear %}linear{% else %}<span class="badge warn">non-linear</span>{% endif %}</td>
-          <td>{{ item.page_spread or "—" }}</td>
-          <td>
-            {% if not item.exists_in_manifest %}<span class="badge bad">missing in manifest</span>
-            {% elif not item.exists_in_archive %}<span class="badge bad">missing file</span>
-            {% else %}<span class="badge ok">ok</span>{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
+{{ metadata_section(preview) }}
+{{ toc_section(preview) }}
+{{ reading_order_section(preview) }}
 
 <section class="panel" id="excerpts">
   <h2>Chapter excerpts</h2>
@@ -168,60 +294,8 @@
   {% endif %}
 </section>
 
-<section class="panel" id="images">
-  <h2>Images</h2>
-  {% if preview.images %}
-  <div class="table-scroll">
-    <table class="grid">
-      <thead><tr><th>Role</th><th>Kind</th><th>Size</th><th>Bytes</th><th>Used by</th><th>File</th><th>Preview</th></tr></thead>
-      <tbody>
-        {% for image in preview.images %}
-        <tr>
-          <td>{{ image.image_role | replace("_", " ") | capitalize }}</td>
-          <td>{{ image.image_kind }}</td>
-          <td>{% if image.width and image.height %}{{ image.width }}×{{ image.height }}{% else %}—{% endif %}</td>
-          <td class="num">{% if image.byte_size %}{{ (image.byte_size / 1024) | round(1) }} KB{% else %}—{% endif %}</td>
-          <td>{% if image.referenced_by %}{{ image.referenced_by | length }} doc(s){% else %}<span class="meta">unreferenced</span>{% endif %}</td>
-          <td class="cell-clip"><code>{{ image.href }}</code></td>
-          <td>
-            {% if image.preview_url %}
-            <a class="btn btn--quiet" href="{{ image.preview_url }}" target="_blank" rel="noopener" title="Open the extracted image preview in a new tab">Preview image</a>
-            {% elif image.preview_available %}
-            <span class="meta">preview metadata only</span>
-            {% else %}
-            <span class="meta">not previewable</span>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <div class="empty"><p>No images declared in the manifest.</p></div>
-  {% endif %}
-</section>
-
-<section class="panel" id="validation">
-  <h2>Validation</h2>
-  <p class="meta">Errors block safe import/translation. Warnings and notes are advisory only.</p>
-  {% if preview.validation_by_scope %}
-  {% for scope, issues in preview.validation_by_scope.items() %}
-  <h3>{{ scope }}</h3>
-  <ul class="plain-list">
-    {% for issue in issues %}
-    <li>
-      {% if issue.severity == "error" %}<span class="badge bad">error</span>
-      {% elif issue.severity == "warning" %}<span class="badge warn">warning</span>
-      {% else %}<span class="badge">note</span>{% endif %}
-      <code>{{ issue.code }}</code> {{ issue.message }}
-    </li>
-    {% endfor %}
-  </ul>
-  {% endfor %}
-  {% else %}
-  <div class="empty"><p>No structural validation issues found. Safe to translate.</p></div>
-  {% endif %}
-</section>
+{{ assets_section(preview) }}
+{{ warnings_section(preview) }}
+{% endif %}
 {% endif %}
 {% endblock %}

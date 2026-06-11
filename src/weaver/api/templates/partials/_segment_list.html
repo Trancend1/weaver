@@ -1,0 +1,113 @@
+{# Segments tab of the Content Explorer (Sprint Q9).
+   Context: listing (VolumeSegmentListing) · project_name · volume_id #}
+{% set base_url = "/ui/projects/" ~ project_name ~ "/volumes/" ~ volume_id ~ "/structure" %}
+<section class="panel segment-explorer" id="segments">
+  {% if listing and listing.chapters %}
+  <div class="segment-explorer__layout">
+
+    <aside class="segment-explorer__chapters" aria-label="Chapters">
+      <h2>Chapters</h2>
+      <ul class="plain-list">
+        {% for c in listing.chapters %}
+        <li class="segment-chapter{% if listing.page and listing.page.chapter_id == c.chapter_id %} active{% endif %}">
+          <a href="{{ base_url }}?tab=segments&amp;chapter={{ c.chapter_id }}"
+             {% if listing.page and listing.page.chapter_id == c.chapter_id %}aria-current="true"{% endif %}>
+            {{ c.title or "Chapter " ~ (c.spine_order + 1) }}
+          </a>
+          <span class="segment-chapter__counts meta">
+            {{ c.segment_count }} seg
+            {% if c.status_counts.get("translated", 0) or c.status_counts.get("manual", 0) %}
+            · <span class="badge ok">{{ c.status_counts.get("translated", 0) + c.status_counts.get("manual", 0) }} done</span>
+            {% endif %}
+            {% if c.status_counts.get("failed", 0) %}· <span class="badge bad">{{ c.status_counts.get("failed", 0) }} failed</span>{% endif %}
+            {% if c.status_counts.get("stale", 0) %}· <span class="badge warn">{{ c.status_counts.get("stale", 0) }} stale</span>{% endif %}
+            {% if c.review_counts.get("needs_revision", 0) %}· <span class="badge warn">{{ c.review_counts.get("needs_revision", 0) }} revise</span>{% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+    </aside>
+
+    <div class="segment-explorer__list">
+      {% if listing.page %}
+      {% set p = listing.page %}
+      <div class="segment-explorer__head">
+        <h2>Segments</h2>
+        <span class="meta">{{ p.total }} match{{ "" if p.total == 1 else "es" }} · page {{ p.page }}/{{ p.page_count }}</span>
+        <a class="btn btn--small" href="/ui/projects/{{ project_name }}/chapters/{{ p.chapter_id }}">Open chapter in workspace</a>
+        <a class="btn btn--small btn--quiet" href="/ui/projects/{{ project_name }}/chapters/{{ p.chapter_id }}/preview">Read chapter</a>
+      </div>
+
+      <form method="get" action="{{ base_url }}" class="inline-form form-row segment-filters">
+        <input type="hidden" name="tab" value="segments">
+        <input type="hidden" name="chapter" value="{{ p.chapter_id }}">
+        <label>Status
+          <select name="status">
+            <option value="">all</option>
+            {% for s in ["pending", "in_progress", "translated", "failed", "stale", "skipped", "manual"] %}
+            <option value="{{ s }}" {% if listing.status_filter == s %}selected{% endif %}>{{ s | replace("_", " ") }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Review
+          <select name="review_status">
+            <option value="">all</option>
+            {% for s in ["not_reviewed", "needs_review", "needs_revision", "approved", "rejected"] %}
+            <option value="{{ s }}" {% if listing.review_filter == s %}selected{% endif %}>{{ s | replace("_", " ") }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Kind
+          <select name="kind">
+            <option value="">all</option>
+            {% for k in listing.kinds %}
+            <option value="{{ k }}" {% if listing.kind_filter == k %}selected{% endif %}>{{ k }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit">Filter</button>
+      </form>
+
+      {% if p.rows %}
+      <div class="table-scroll">
+        <table class="grid segment-table">
+          <thead><tr><th class="num">#</th><th>Kind</th><th>Status</th><th>Review</th><th></th></tr></thead>
+          <tbody>
+            {% for seg in p.rows %}
+            <tr class="segment-row segment-row--{{ seg.status }}">
+              <td class="num">{{ seg.block_order }}</td>
+              <td class="meta">{{ seg.kind }}</td>
+              <td><span class="badge seg-status seg-status--{{ seg.status }}">{{ seg.status | replace("_", " ") }}</span></td>
+              <td><span class="badge dim">{{ seg.review_status | replace("_", " ") }}</span></td>
+              <td class="segment-row__actions">
+                <a href="/ui/projects/{{ project_name }}/chapters/{{ seg.chapter_id }}#seg-{{ seg.id }}">Open in editor</a>
+                <a class="meta" href="/ui/projects/{{ project_name }}/chapters/{{ seg.chapter_id }}/preview">Preview</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% set filter_qs = "&amp;status=" ~ listing.status_filter ~ "&amp;review_status=" ~ listing.review_filter ~ "&amp;kind=" ~ listing.kind_filter %}
+      {% if p.page_count > 1 %}
+      <nav class="segment-pager" aria-label="Segment pages">
+        {% if p.has_prev %}
+        <a class="btn btn--small btn--quiet" href="{{ base_url }}?tab=segments&amp;chapter={{ p.chapter_id }}{{ filter_qs }}&amp;page={{ p.page - 1 }}">← Prev</a>
+        {% endif %}
+        <span class="meta">page {{ p.page }} of {{ p.page_count }}</span>
+        {% if p.has_next %}
+        <a class="btn btn--small btn--quiet" href="{{ base_url }}?tab=segments&amp;chapter={{ p.chapter_id }}{{ filter_qs }}&amp;page={{ p.page + 1 }}">Next →</a>
+        {% endif %}
+      </nav>
+      {% endif %}
+      {% else %}
+      <div class="empty"><p>No segments match the current filters.</p></div>
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div class="empty"><p>This volume has no chapters yet. Import a source from the project page first.</p></div>
+  {% endif %}
+</section>
