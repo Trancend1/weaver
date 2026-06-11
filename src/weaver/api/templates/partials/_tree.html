@@ -21,8 +21,6 @@
           <button type="button" class="btn btn--quiet"
                   hx-get="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/snapshot"
                   hx-target="#snapshot-vol-{{ v.id }}" hx-swap="outerHTML">Inspect status</button>
-          <a class="btn btn--quiet"
-             href="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/structure">Full structure page</a>
         </div>
         <div class="vol-head__meta">
           <span class="meta">{{ v.source_format | upper }} · {{ v.chapter_count }} chapters</span>
