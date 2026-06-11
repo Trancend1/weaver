@@ -768,7 +768,22 @@ progress::-moz-progress-bar { background: var(--color-primary); border-radius: v
 .seg-protection { color: var(--color-muted); font-size: var(--text-xs); }
 .seg-source { margin: 0 0 var(--space-sm); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-md); line-height: 1.75; }
 .seg-input { width: 100%; min-height: 112px; resize: vertical; }
-.seg-bar { margin-top: var(--space-sm); align-items: center; }
+/* Segment action rows (replaces .seg-bar) */
+.seg-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs); padding: var(--space-xs) 0; border-bottom: 1px solid var(--color-line-soft); }
+.seg-row:last-child { border-bottom: none; }
+.seg-row--review { padding-top: var(--space-sm); }
+.seg-row--edit { justify-content: space-between; }
+.seg-edit-actions { display: flex; gap: var(--space-xs); align-items: center; flex-wrap: wrap; }
+.seg-status-note { display: flex; gap: var(--space-xs); align-items: center; flex-wrap: wrap; }
+.seg-tool-actions { display: flex; gap: var(--space-xs); align-items: center; flex-wrap: wrap; }
+/* Review pills */
+.seg-review-pills { display: flex; gap: var(--space-xs); flex-wrap: wrap; }
+.review-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border: 1px solid var(--color-line); border-radius: 999px; font-size: var(--text-xs); color: var(--color-muted); background: var(--color-canvas); cursor: pointer; }
+.review-pill:hover { border-color: var(--color-ink); color: var(--color-ink); }
+.review-pill--approved:hover { border-color: var(--color-good); color: var(--color-good); background: rgb(21 128 61 / 0.06); }
+.review-pill--revision:hover { border-color: var(--color-warn); color: var(--color-warn); background: rgb(230 126 34 / 0.06); }
+.review-pill--reset:hover { border-color: var(--color-muted); color: var(--color-muted); background: var(--color-surface); }
+.review-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.5; }
 .seg-copy { padding-left: 0; }
 .danger-link { color: var(--color-bad); }
 .seg-status--pending { background: var(--color-surface); color: var(--color-muted); border: 1px solid var(--color-line); }
@@ -1051,7 +1066,6 @@ h2 { text-wrap: balance; letter-spacing: -0.025em; }
   line-height: 1.68;
   background: #fffefb;
 }
-.seg-bar { align-items: center; }
 .saved-note {
   border-radius: var(--radius-pill);
   padding: 0.15rem 0.55rem;

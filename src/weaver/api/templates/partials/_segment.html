@@ -20,37 +20,59 @@
       </div>
       <label class="sr-only" for="{{ input_id }}">English translation for segment {{ seg.id }}</label>
       <textarea id="{{ input_id }}" name="translated_text" rows="3" class="seg-input" aria-describedby="seg-{{ seg.id }}-state">{{ seg.translated_text or "" }}</textarea>
-      <div class="seg-bar toolbar-row">
-        <div class="seg-review-actions" aria-label="Review controls">
-          <button type="button" class="link-btn"
+
+      {# ── Row 1: Review controls ──────────────────────────── #}
+      <div class="seg-row seg-row--review" aria-label="Review controls">
+        <div class="seg-review-pills">
+          <button type="button" class="review-pill review-pill--approved"
                   hx-post="/ui/projects/{{ name }}/segments/{{ seg.id }}/review?review_status=approved"
                   hx-target="#seg-{{ seg.id }}" hx-swap="outerHTML"
-                  title="Mark reviewed">Mark reviewed</button>
-          <button type="button" class="link-btn"
+                  title="Mark reviewed">
+            <span class="review-dot"></span> Mark reviewed
+          </button>
+          <button type="button" class="review-pill review-pill--revision"
                   hx-post="/ui/projects/{{ name }}/segments/{{ seg.id }}/review?review_status=needs_revision"
                   hx-target="#seg-{{ seg.id }}" hx-swap="outerHTML"
-                  title="Needs revision">Needs revision</button>
-          <button type="button" class="link-btn"
+                  title="Needs revision">
+            <span class="review-dot"></span> Needs revision
+          </button>
+          <button type="button" class="review-pill review-pill--reset"
                   hx-post="/ui/projects/{{ name }}/segments/{{ seg.id }}/review?review_status=not_reviewed"
                   hx-target="#seg-{{ seg.id }}" hx-swap="outerHTML"
-                  title="Reset review">Reset review</button>
+                  title="Reset review">
+            <span class="review-dot"></span> Reset review
+          </button>
         </div>
-        <button type="submit">Save manual edit</button>
-        <button type="button" class="link-btn" data-copy-target="#{{ input_id }}">Copy translation</button>
-        <button type="button" class="link-btn danger-link" data-clear-target="#{{ input_id }}">Clear unsaved</button>
-        {% if saved %}<span class="saved-note" id="seg-{{ seg.id }}-state" role="status">Saved</span>{% else %}<span class="meta" id="seg-{{ seg.id }}-state">Unsaved changes stay local until saved.</span>{% endif %}
-        {% if error %}<span class="error" role="alert">{{ error }}</span>{% endif %}
-        <button type="button" class="link-btn"
-                hx-get="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/history"
-                hx-target="#seg-{{ seg.id }}-history" hx-swap="innerHTML">History</button>
-        <button type="button" class="link-btn"
-                hx-get="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/context"
-                hx-target="#context-panel" hx-swap="innerHTML">Context</button>
-        <button type="button" class="link-btn"
-                hx-post="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/candidates/generate"
-                hx-target="#seg-{{ seg.id }}-candidates" hx-swap="innerHTML"
-                hx-indicator="#seg-{{ seg.id }}-gen-loader" hx-disabled-elt="this">Generate candidate</button>
-        <span class="htmx-indicator calm-loader calm-loader--small" role="status">Saving</span>
+      </div>
+
+      {# ── Row 2: Edit + storage actions ───────────────────── #}
+      <div class="seg-row seg-row--edit" aria-label="Edit actions">
+        <div class="seg-edit-actions">
+          <button type="submit" class="btn btn--primary btn--sm">Save manual edit</button>
+          <button type="button" class="link-btn btn--sm" data-copy-target="#{{ input_id }}">Copy translation</button>
+          <button type="button" class="link-btn link-btn--danger btn--sm" data-clear-target="#{{ input_id }}">Clear unsaved</button>
+        </div>
+        <div class="seg-status-note">
+          {% if saved %}<span class="saved-note" id="seg-{{ seg.id }}-state" role="status">Saved</span>{% else %}<span class="meta" id="seg-{{ seg.id }}-state">Unsaved changes stay local until saved.</span>{% endif %}
+          {% if error %}<span class="error" role="alert">{{ error }}</span>{% endif %}
+          <span class="htmx-indicator calm-loader calm-loader--small" role="status">Saving</span>
+        </div>
+      </div>
+
+      {# ── Row 3: Tool actions ─────────────────────────────── #}
+      <div class="seg-row seg-row--tools" aria-label="Tool actions">
+        <div class="seg-tool-actions">
+          <button type="button" class="link-btn"
+                  hx-get="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/history"
+                  hx-target="#seg-{{ seg.id }}-history" hx-swap="innerHTML">History</button>
+          <button type="button" class="link-btn"
+                  hx-get="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/context"
+                  hx-target="#context-panel" hx-swap="innerHTML">Context</button>
+          <button type="button" class="link-btn"
+                  hx-post="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/candidates/generate"
+                  hx-target="#seg-{{ seg.id }}-candidates" hx-swap="innerHTML"
+                  hx-indicator="#seg-{{ seg.id }}-gen-loader" hx-disabled-elt="this">Generate candidate</button>
+        </div>
         <span class="htmx-indicator calm-loader calm-loader--small" id="seg-{{ seg.id }}-gen-loader" role="status">Generating…</span>
       </div>
     </form>
