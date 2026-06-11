@@ -1,0 +1,22 @@
+<div class="job-panel progress-panel" id="export-panel">
+  <div class="job-head">
+    <strong>Final export blocked</strong>
+    <span class="badge c-badge bad">gated</span>
+    <span class="meta">target: {{ target }}{% if bundle %} · bundle ZIP{% endif %}</span>
+  </div>
+  <p class="error" role="alert">{{ reason }}</p>
+  <p class="meta">A Final export requires clean validation. You can resolve the issues, or
+    export a Draft now — Draft is always allowed and writes source fallback for any
+    segment without a usable translation.</p>
+  <div class="form-row">
+    <form hx-post="/ui/projects/{{ name }}/export"
+          hx-target="#export-panel" hx-swap="outerHTML" class="inline-form">
+      <input type="hidden" name="target" value="{{ target }}">
+      <input type="hidden" name="bundle" value="{{ 'true' if bundle else 'false' }}">
+      <input type="hidden" name="kind" value="draft">
+      <button type="submit">Export as Draft instead</button>
+      <span class="htmx-indicator calm-loader calm-loader--small" role="status">Writing export</span>
+    </form>
+    <a href="/ui/projects/{{ name }}/qa" class="btn btn--secondary">Review the quality report</a>
+  </div>
+</div>

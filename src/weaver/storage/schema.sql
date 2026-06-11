@@ -295,3 +295,22 @@ CREATE TABLE IF NOT EXISTS character_page_drafts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_char_drafts_project ON character_page_drafts(project_id, status);
+
+-- Sprint Q7 (WV-009) — export-history ledger. One row per export artifact on
+-- success and one row per export attempt on failure, written by the export
+-- service (never a router). Additive; no existing data touched.
+CREATE TABLE IF NOT EXISTS export_history (
+  id TEXT PRIMARY KEY,
+  volume_id INTEGER REFERENCES volumes(id),
+  format TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('draft', 'final')),
+  status TEXT NOT NULL CHECK (status IN ('succeeded', 'failed')),
+  qa_badge TEXT,
+  artifact_path TEXT,
+  byte_size INTEGER,
+  job_id TEXT,
+  version_label TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_export_history_created ON export_history(created_at);

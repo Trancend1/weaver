@@ -1,0 +1,19 @@
+<div id="provider-health-{{ name }}" class="provider-health">
+  {% if error %}
+    <span class="badge bad" role="alert" title="{{ error }}">error</span>
+    <span class="provider-health__msg">{{ error }}</span>
+  {% elif status and status.healthy %}
+    <span class="badge good" role="status">healthy</span>
+    {% if status.latency_ms is not none %}<span class="meta">{{ status.latency_ms }} ms</span>{% endif %}
+  {% elif status %}
+    <span class="badge bad" role="alert">unhealthy</span>
+    {% if status.message %}<span class="provider-health__msg">{{ status.message }}</span>{% endif %}
+  {% else %}
+    <span class="badge bad" role="alert">no status</span>
+  {% endif %}
+  <button type="button" class="btn btn--small"
+          hx-post="/ui/providers/{{ name }}/healthcheck"
+          hx-target="#provider-health-{{ name }}"
+          hx-swap="innerHTML"
+          hx-disabled-elt="this">Re-check</button>
+</div>

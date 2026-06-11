@@ -23,6 +23,23 @@
   </p>
   {% endif %}
 
+  {% if entries and rollup.segment_total > 0 %}
+  <div class="panel c-panel dash-rollup" aria-label="Workspace analytics">
+    <h2 class="panel__title">Workspace at a glance</h2>
+    <p class="meta">Current state across {{ rollup.project_count }} project{{ "" if rollup.project_count == 1 else "s" }} — read from stored data, not a time series.</p>
+    <ul class="dash-rollup__stats plain-list">
+      <li><b>{{ "{:,}".format(rollup.translated_total) }}</b><span>translated of {{ "{:,}".format(rollup.segment_total) }} segments</span></li>
+      <li><b>{{ "{:,}".format(rollup.pending_total) }}</b><span>pending</span></li>
+      {% if rollup.failed_total %}<li><b>{{ "{:,}".format(rollup.failed_total) }}</b><span>failed</span></li>{% endif %}
+      {% if rollup.review_totals.get("approved", 0) %}<li><b>{{ "{:,}".format(rollup.review_totals.get("approved", 0)) }}</b><span>approved in review</span></li>{% endif %}
+      {% if rollup.job_totals.get("failed", 0) %}<li><b>{{ rollup.job_totals.get("failed", 0) }}</b><span>failed jobs</span></li>{% endif %}
+      {% if rollup.input_tokens or rollup.output_tokens %}
+      <li><b>{{ "{:,}".format(rollup.input_tokens) }} / {{ "{:,}".format(rollup.output_tokens) }}</b><span>tokens in / out</span></li>
+      {% endif %}
+    </ul>
+  </div>
+  {% endif %}
+
   {% if entries %}
   <div class="project-grid" id="ws-grid">
     {% for e in entries %}

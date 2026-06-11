@@ -33,17 +33,21 @@
       <span class="sidebar-item__label">Resources</span>
     </a>
 
-    <span class="sidebar-item sidebar-item--disabled" aria-disabled="true"
-          title="Providers — coming in Workspace v2 Q6">
+    <a class="sidebar-item{% if active_nav == 'providers' %} active{% endif %}"
+       href="/ui/providers"
+       {% if active_nav == 'providers' %}aria-current="page"{% endif %}
+       title="Providers">
       <span class="sidebar-item__icon">{{ icon("providers") }}</span>
       <span class="sidebar-item__label">Providers</span>
-    </span>
+    </a>
 
-    <span class="sidebar-item sidebar-item--disabled" aria-disabled="true"
-          title="Exports — coming in Workspace v2 Q7">
+    <a class="sidebar-item{% if active_nav == 'exports' %} active{% endif %}"
+       href="/ui/exports"
+       {% if active_nav == 'exports' %}aria-current="page"{% endif %}
+       title="Exports">
       <span class="sidebar-item__icon">{{ icon("exports") }}</span>
       <span class="sidebar-item__label">Exports</span>
-    </span>
+    </a>
 
     <span class="sidebar-item sidebar-item--disabled" aria-disabled="true"
           title="Settings — coming in Workspace v2">

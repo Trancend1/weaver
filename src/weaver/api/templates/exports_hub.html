@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Exports · Weaver{% endblock %}
+{% block content %}
+<section class="exports-hub">
+  {% set page_title = "Exports Hub" %}
+  {% set succeeded = exports.rows | selectattr("status", "equalto", "succeeded") | list | length %}
+  {% set page_meta = exports.degraded | length ~ " degraded · " ~ exports.rows | length ~ " recent exports · " ~ succeeded ~ " succeeded" %}
+  {% set page_crumbs = [{"label": "Dashboard", "href": "/ui"}, {"label": "Exports"}] %}
+  {% set page_actions %}
+    <span class="hint">Read-only cross-project export history. Artifacts are not served here.</span>
+  {% endset %}
+  {% include "partials/_page_header.html" %}
+
+  {% if exports.degraded %}
+  <div class="panel c-panel exports-degraded">
+    <h2 class="panel__title">Project issues</h2>
+    <ul class="degraded-list">
+      {% for d in exports.degraded %}
+      <li class="degraded-row degraded-row--{{ d.state }}">
+        <span class="degraded-row__name">{{ d.name }}</span>
+        <span class="badge bad">{{ d.state | replace("_", " ") }}</span>
+        {% if d.error %}<span class="degraded-row__error">{{ d.error }}</span>{% endif %}
+        <span class="degraded-row__note">Export history for this project is unavailable.</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if exports.rows %}
+  <div class="panel c-panel exports-rows">
+    <table class="exports-table">
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>Artifact</th>
+          <th>Format</th>
+          <th>Kind</th>
+          <th>Result</th>
+          <th>QA</th>
+          <th>Size</th>
+          <th>When</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in exports.rows %}
+        <tr class="exports-row exports-row--{{ r.status }}">
+          <td><a href="/ui/projects/{{ r.project_name }}/exports">{{ r.project_name }}</a></td>
+          <td class="meta">
+            {% if r.artifact_basename %}
+              {{ r.artifact_basename }}
+              {% if not r.exists %}<span class="badge warn" title="File no longer on disk">missing</span>{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ r.format }}</td>
+          <td><span class="badge dim">{{ r.kind }}</span></td>
+          <td>
+            <span class="badge {{ 'good' if r.status == 'succeeded' else 'bad' }}">{{ r.status }}</span>
+          </td>
+          <td>{% if r.qa_badge %}<span class="badge dim">{{ r.qa_badge }}</span>{% else %}<span class="meta">—</span>{% endif %}</td>
+          <td class="meta">{% if r.byte_size is not none %}{{ "{:,}".format(r.byte_size) }} B{% else %}—{% endif %}</td>
+          <td class="meta">{{ r.created_at[:19] | replace("T", " ") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% if not exports.degraded %}
+    {% set empty_title = "No exports yet" %}
+    {% set empty_hint = "Export a project (Draft or Final) from its project page. Completed and failed exports are recorded here automatically." %}
+    {% include "partials/_empty_state.html" %}
+    {% endif %}
+  {% endif %}
+
+</section>
+{% endblock %}

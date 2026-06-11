@@ -38,11 +38,28 @@
   <p><a href="/ui/projects/{{ name }}/qa">Review the quality report</a></p>
   {% endif %}
 
-  <form hx-post="/ui/projects/{{ name }}/export"
-        hx-target="#export-panel" hx-swap="outerHTML" class="inline-form form-row">
-    <input type="hidden" name="target" value="{{ target }}">
-    <input type="hidden" name="bundle" value="{{ 'true' if bundle else 'false' }}">
-    <button type="submit">{% if report is not none and report.total_issues == 0 %}Export clean artifact{% else %}Export with advisories{% endif %}</button>
-    <span class="htmx-indicator calm-loader calm-loader--small" role="status">Writing export</span>
-  </form>
+  <div class="export-actions">
+    <form hx-post="/ui/projects/{{ name }}/export"
+          hx-target="#export-panel" hx-swap="outerHTML" class="inline-form form-row">
+      <input type="hidden" name="target" value="{{ target }}">
+      <input type="hidden" name="bundle" value="{{ 'true' if bundle else 'false' }}">
+      <input type="hidden" name="kind" value="draft">
+      <button type="submit">{% if report is not none and report.total_issues == 0 %}Export Draft (clean){% else %}Export Draft (advisory){% endif %}</button>
+      <span class="htmx-indicator calm-loader calm-loader--small" role="status">Writing export</span>
+    </form>
+
+    <form hx-post="/ui/projects/{{ name }}/export"
+          hx-target="#export-panel" hx-swap="outerHTML" class="inline-form form-row export-final">
+      <input type="hidden" name="target" value="{{ target }}">
+      <input type="hidden" name="bundle" value="{{ 'true' if bundle else 'false' }}">
+      <input type="hidden" name="kind" value="final">
+      <label class="check-inline">
+        <input type="checkbox" name="require_clean" value="true" checked>
+        Require clean validation (block on critical issues)
+      </label>
+      <button type="submit" class="btn btn--secondary">Export Final</button>
+    </form>
+  </div>
+  <p class="meta">Draft is advisory and always allowed. Final with "require clean" refuses
+    while unresolved critical issues exist (your Draft escape hatch stays available).</p>
 </div>

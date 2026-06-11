@@ -333,3 +333,101 @@ def test_apply_migrations_is_idempotent(tmp_path) -> None:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
 
     assert version == SCHEMA_VERSION
+
+
+def test_apply_migrations_upgrades_v10_to_v11_adds_export_history(tmp_path) -> None:
+    db_path = tmp_path / "legacy_v10.db"
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+    connection.executescript(
+        """
+        CREATE TABLE projects (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          source_path TEXT NOT NULL,
+          source_lang TEXT NOT NULL,
+          target_lang TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          schema_version INTEGER NOT NULL,
+          uuid TEXT
+        );
+        """
+    )
+    connection.execute("PRAGMA user_version = 10")
+    connection.commit()
+
+    apply_migrations(connection, target_version=SCHEMA_VERSION)
+
+    tables = {
+        row["name"]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    columns = {
+        str(row["name"])
+        for row in connection.execute("PRAGMA table_info(export_history)").fetchall()
+    }
+    indexes = {
+        str(row["name"])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'export_history'"
+        ).fetchall()
+    }
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    connection.close()
+
+    assert "export_history" in tables
+    assert {
+        "id",
+        "volume_id",
+        "format",
+        "kind",
+        "status",
+        "qa_badge",
+        "artifact_path",
+        "byte_size",
+        "job_id",
+        "version_label",
+        "created_at",
+    } <= columns
+    assert "idx_export_history_created" in indexes
+    assert version == SCHEMA_VERSION
+
+
+def test_apply_migrations_v11_is_idempotent(tmp_path) -> None:
+    db_path = tmp_path / "legacy_v10.db"
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+    connection.executescript(
+        """
+        CREATE TABLE projects (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          source_path TEXT NOT NULL,
+          source_lang TEXT NOT NULL,
+          target_lang TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          schema_version INTEGER NOT NULL,
+          uuid TEXT
+        );
+        """
+    )
+    connection.execute("PRAGMA user_version = 10")
+    connection.commit()
+
+    apply_migrations(connection, target_version=SCHEMA_VERSION)
+    # Insert a row, then re-run migrations: the table (and data) must survive.
+    connection.execute(
+        "INSERT INTO export_history (id, format, kind, status, created_at) "
+        "VALUES ('e1', 'epub', 'draft', 'succeeded', '2025-01-01T00:00:00+00:00')"
+    )
+    connection.commit()
+
+    apply_migrations(connection, target_version=SCHEMA_VERSION)
+    count = connection.execute("SELECT COUNT(*) AS n FROM export_history").fetchone()["n"]
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    connection.close()
+
+    assert count == 1
+    assert version == SCHEMA_VERSION

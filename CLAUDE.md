@@ -5,9 +5,9 @@ Offline-capable, glossary-aware **JP→EN** light-novel translation workbench wi
 > **Operating manual:** This file follows the global agent template `@WORKFLOW.md`. It cites and coordinates the docs in §1; it does not duplicate full strategy content. §5–§10 define how work is split across specialized agents/subagents and gated.
 >
 > **Current Orchestrator:** repo owner (Trancend1) + Claude as Lead Technical Orchestrator.
-> **Active Sprint/Phase:** Sprint Q — Workspace v2 · **stage Q5 — Resources hub** (Q1–Q4 merged).
+> **Active Sprint/Phase:** Sprint Q — Workspace v2 · **stages Q5–Q8 built** (Q1–Q4 merged; Q5–Q8 on `feat/provider-export-analytics`) · **next stage Q9 — Content Explorer v2**.
 >
-> **Status (2026-06-11):** v0.7.0 stable · Sprints A–M + **N, P, O COMPLETE** · **Sprint Q ACTIVE** — Q0 planning ✅, **Q1 (identity + read layer) ✅, Q2 (read-path hardening) ✅, Q3 (shell + dashboard) ✅, Q4 (queue hub) ✅ — all merged to `main`** · **next stage Q5 — Resources hub** (branch `feat/workspace-resources-hub`, not yet started) · Source of truth: [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [SPRINT_Q_RISK_REGISTER.md](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
+> **Status (2026-06-11):** v0.7.0 stable · Sprints A–M + **N, P, O COMPLETE** · **Sprint Q ACTIVE** — Q0 planning ✅, **Q1 (identity + read layer) ✅, Q2 (read-path hardening) ✅, Q3 (shell + dashboard) ✅, Q4 (queue hub) ✅ — merged to `main`** · **Q5 (resources hub) ✅, Q6 (providers hub) ✅, Q7 (export gate + ledger, migration v11) ✅, Q8 (deterministic analytics) ✅ — on branch `feat/provider-export-analytics`, PR pending** · next stage Q9 · Source of truth: [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [SPRINT_Q_RISK_REGISTER.md](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
 
 ---
 
@@ -81,9 +81,12 @@ Foundation (v0.6.0) ✅
        Q2 read-path hardening   ✅  (readonly reads, reset/migration relocation, EPUB-hash fix, error fragments, ui.py split)
        Q3 shell + dashboard     ✅  (global workspace shell + dashboard command center)
        Q4 queue hub             ✅  (global translation queue; stale_running distinct)
-       Q5 resources             🟡  NEXT — cross-project glossary/character/style resources hub
-       Q6 providers · Q7 export gate+ledger · Q8 analytics             ⬜
-       Q9 explorer v2 · Q10 editor panel · Q11 validation (WV-007/008/011) · Q12 cleanup + final gate  ⬜
+       Q5 resources             ✅  (cross-project glossary/character/TM hub; read-only)
+       Q6 providers             ✅  (providers hub; explicit healthcheck; secrets names-only)
+       Q7 export gate+ledger    ✅  (migration v11 export_history; Draft/Final gate; exports hub)
+       Q8 analytics             ✅  (deterministic per-project analytics + dashboard rollup)
+       Q9 explorer v2           🟡  NEXT
+       Q10 editor panel · Q11 validation (WV-007/008/011) · Q12 cleanup + final gate  ⬜
 ```
 
 Legend: ✅ complete · 🟡 active · ⬜ pending · 🚫 deferred/blocked
@@ -103,13 +106,13 @@ Before starting any stage:
 
 > Required reminder: **"Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Sprint Q (Workspace v2) 🟡 · Q1–Q4 ✅ merged · stage Q5 (Resources hub) next
+### 2.3 Active Phase — Sprint Q (Workspace v2) 🟡 · Q1–Q4 ✅ merged · Q5–Q8 ✅ built (PR pending) · stage Q9 next
 
-**Sprint focus:** the cross-project Workspace command center. The hardened read foundation (Q1 identity + read-only index, Q2 read-path hardening) and the first two hubs (Q3 shell+dashboard, Q4 queue) are merged. **Stage Q5 builds the cross-project Resources hub** (glossary / character / style resources surfaced read-only across projects) on the hardened foundation.
+**Sprint focus:** the cross-project Workspace command center. The hardened read foundation (Q1+Q2), all four cross-project hubs (Q3 dashboard, Q4 queue, Q5 resources, Q6 providers, Q7 exports), the Draft/Final export gate + history ledger (migration v11), and deterministic analytics (Q8) are built. **Next: Q9 Content Explorer v2** (per-project surfaces).
 
-**Track(s) active:** T0 (docs — this rewrite), then T1→T2→T3 for Q5 (workflow → HTMX surface → service/read layer), gated by T6/T7/T8 (see §6). **Owner agent:** Backend Engineer (read-layer extension) + Frontend Engineer (hub UI), Product Architect consulted.
+**Track(s) active:** Q6–Q8 ran T3 (read services + gate/ledger) → T2 (hub UI) → T4 (Q7 migration v11) → T6/T7/T8 → T0 (this update). **Next stage Q9 owner:** Frontend Engineer + Backend Engineer (segment-listing read service), Product Architect consulted.
 
-**Next:** after Q5 — Q6 providers, Q7 export gate + ledger (migration v11), Q8 analytics, then per-project surfaces Q9–Q11, then Q12 cleanup + final gate + sprint PR.
+**Next:** Q9 explorer v2 → Q10 editor panel → Q11 validation (WV-007/008/011) → Q12 cleanup + final gate + sprint PR.
 
 **Core premise (why Q is staged the way it is):** one project DB per project is the only source of truth for that project. Cross-project features need a **read-only cross-project read layer** — there is **no global mutable store without an ADR**. Q1 built stable identity (`projects.uuid`) + a read-only, mtime-cached, error-isolated `services/workspace_index.py`; Q2 hardened the existing read paths; Q3+ build hubs on that foundation.
 
@@ -119,12 +122,15 @@ Before starting any stage:
 - **Q3 — Global shell + dashboard** ✅ — `workspace.html` global shell + `dashboard.html` command center; `_workspace_grid`/`_workspace_sidebar` partials; `ui_workspace` router.
 - **Q4 — Queue hub** ✅ — `queue_hub.html` cross-project translation queue (`stale_running` distinct); `ui_queue` router.
 
-**What is next (Q5, this branch):**
-- **Q5 — Resources hub** 🟡 — cross-project glossary/character/style resources, surfaced **read-only** via `workspace_index`. **No global mutable store; no source-file hashing on render.** Scope + acceptance per [SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) stage Q5.
+**What is built (branch `feat/provider-export-analytics`, PR pending):**
+- **Q5 — Resources hub** ✅ — `services/workspace_resources.py` + `resources_hub.html` + `ui_resources` router; cross-project glossary/character/TM counts, read-only, degraded-isolated.
+- **Q6 — Providers hub** ✅ — `services/workspace_providers.py` + `providers_hub.html` + `ui_providers` router; provider/model routing table, key presence by env-var **name** only, token totals, recent failures; health check is an explicit per-project POST (never on render); secret-leak regression test.
+- **Q7 — Export gate + ledger + Exports hub** ✅ — migration v10→v11 (`export_history`, additive); `storage/export_history.py`; `services/export_gate.py` (Draft always allowed; Final + `require_clean` refuses on critical QA issues — advisory default preserved, ADR `008`); `services/export_ledger.py` (one row per artifact/attempt, service-written); `services/workspace_exports.py` + `/ui/exports` hub (basename-only leak rule) + `/ui/projects/{name}/exports` history (missing artifacts render "missing").
+- **Q8 — Deterministic analytics** ✅ — `services/project_analytics.py` (status/review/token/candidate/export-readiness/activity aggregates; readiness reuses the exporter's publishable predicate); `/ui/projects/{name}/analytics` page + Analytics sidebar item; dashboard "Workspace at a glance" rollup (pure aggregation over the cached index — zero extra DB reads); `workspace_index` entries carry token totals. Current-state framing; no time series, no currency, no QA on render.
 
-**Non-goals for Q5** (scope fence): no OCR implementation, no provider expansion, no route rewrite, no SPA/Node, no external queue, no `desktop/` changes, no global mutable resource store, no editing of cross-project resources from the hub (read-only surface this stage).
+**Non-goals honored for Q6–Q8** (scope fence): no OCR, no provider expansion, no route rewrite, no SPA/Node, no external queue, no `desktop/` changes, no global mutable store, no provider healthcheck/QA scan/source hashing on render, no currency estimates, no time-series store. `volume_lifecycle.py` `exported` overlay intentionally not added (pure derivation preserved; ledger is the honest source — revisit at Q12 if needed).
 
-**Sprint Q PR strategy:** one stage = one branch + one PR. Q5 branch `feat/workspace-resources-hub`. Group Q6–Q8 only if scope kecil (single concern, ≤400 lines). **Sprint-level PR to `main` stays unopened until Q12 is green** (maintainer instruction 2026-06-10).
+**Sprint Q PR strategy:** one stage = one branch + one PR; Q6–Q8 grouped on `feat/provider-export-analytics` per maintainer instruction (2026-06-11) with one commit per stage. **Sprint-level PR to `main` stays unopened until Q12 is green** (maintainer instruction 2026-06-10).
 
 **Hard fences for all of Sprint Q** (full list in [SPRINT_Q_HANDOFF.md §6](.docs/audit/SPRINT_Q_HANDOFF.md)):
 - **One project DB = the source of truth for that project. No global mutable store without an ADR.**
@@ -149,15 +155,17 @@ Before starting any stage:
 
 **Sprint Q** (Workspace v2) — each stage gated per §2.2:
 
-> **Gate Q status: 🟡 IN PROGRESS — Q0 ✅ · Q1 ✅ · Q2 ✅ · Q3 ✅ · Q4 ✅ (all merged) · Q5 next · Q6–Q12 ⬜.**
+> **Gate Q status: 🟡 IN PROGRESS — Q0 ✅ · Q1 ✅ · Q2 ✅ · Q3 ✅ · Q4 ✅ (merged) · Q5 ✅ · Q6 ✅ · Q7 ✅ · Q8 ✅ (branch, PR pending) · Q9 next · Q9–Q12 ⬜.**
 
 - [x] Q0 — Planning: deep audit, execution plan Q0–Q12, risk register R-01..23, cold-start handoff.
 - [x] Q1 — WV-010: migration v10 (`projects.uuid`, forward + idempotency tests); `project_discovery` uuid + duplicate detection; `workspace_index.py` read-only/mtime-cached/error-isolated/budget-tested; grep-gate; index consumed by zero routes (shipped dark).
 - [x] Q2 — Read paths use `connect_readonly_database` only; reset/migration off read path; zero source-file hashing on render; approve/apply failures surfaced; `ui.py` split (zero behavior change); router-SQL grep-gate → zero.
 - [x] Q3 — Global shell + dashboard command center on the hardened foundation; performance budget met; no SQLite in CLI/web layer.
 - [x] Q4 — Cross-project queue hub (`stale_running` distinct); ADR `010` unviolated; no provider call / no hashing on render.
-- [ ] Q5 — Resources hub: cross-project glossary/character/style surfaced read-only via `workspace_index`; within performance budget; no global mutable store; no source-file hashing on render; failure-visible per Gate B1.
-- [ ] Q6–Q8 — Providers hub; Export gate + ledger (migration v11; advisory default preserved per ADR `008`); Analytics.
+- [x] Q5 — Resources hub: cross-project glossary/character/TM surfaced read-only; degraded-isolated; no global mutable store; no source-file hashing on render.
+- [x] Q6 — Providers hub: provider/model visible per project; health on explicit demand only; secrets names-only (rendered-HTML secret-grep regression test); zero provider calls on render (spy-tested); token totals + failure summaries.
+- [x] Q7 — Export gate + ledger: migration v11 forward + idempotent; Draft always succeeds with criticals present; Final+require_clean refuses with explanation + Draft escape hatch; ledger row on success and failure; missing artifact renders "missing"; advisory default unchanged (ADR `008`); export fidelity suite green.
+- [x] Q8 — Analytics: aggregates reconcile against direct DB queries on fixtures; zero QA/provider calls on render (spy-tested); rollup across ≥3 projects on dashboard; tokens-not-currency, current-state-not-time-series framing.
 - [ ] Q9–Q11 — Content Explorer v2; editor context panel; validation completion (WV-007/008/011; `error` tier only after ADR `013`).
 - [ ] Q12 — Residual cleanup; conditional migration v12; **final gate green** — full suite + pyright 0 + ruff clean + `weaver --help` + `cargo check`/`cargo tauri build`; desktop smoke (≥3 projects, no orphans, both logs); security smoke (traversal rejected, zero key/token in logs/render, no cross-project path leak); performance smoke (index within budget @10 projects, zero render-time hashing).
 - [ ] Throughout: no new runtime dependency; one stage = one branch + one PR; **sprint PR opened only after Sprint Q is finished**.
@@ -173,7 +181,7 @@ Deep detail per entry lives in git history and linked docs.
 | Sprint N — Tauri Shell Alpha | `desktop/` | 1043 / 4 | ✅ CLOSED — runtime validated, build green |
 | Sprint P — Workflow Coherence | [SPRINT_P_EXECUTION](.docs/audit/SPRINT_P_EXECUTION.md) | 1102 / 4 | ✅ CLOSED — WV-001..006; O-gate green. *Lesson:* per-project coherence precedes cross-project hubs |
 | Sprint O — Production Desktop | `desktop/` + [INSTALL_DESKTOP](docs/INSTALL_DESKTOP.md) | 1102 / 4 | ✅ COMPLETE — portable 3.2 MB exe; PATH-dependency baseline; PyInstaller recommended for single-file |
-| **Sprint Q — Workspace v2** | [SPRINT_Q_EXECUTION_PLAN](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [DEEP_AUDIT](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [RISK_REGISTER](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [HANDOFF](.docs/audit/SPRINT_Q_HANDOFF.md) | Q4 ≈1131 / 4 | 🟡 ACTIVE — Q0✅ Q1✅ Q2✅ Q3✅ Q4✅ (merged); **Q5 Resources next**. *Lesson:* harden the read foundation (Q1+Q2) before any hub |
+| **Sprint Q — Workspace v2** | [SPRINT_Q_EXECUTION_PLAN](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [DEEP_AUDIT](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [RISK_REGISTER](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [HANDOFF](.docs/audit/SPRINT_Q_HANDOFF.md) | Q4 ≈1131 / 4 | 🟡 ACTIVE — Q0✅ Q1✅ Q2✅ Q3✅ Q4✅ (merged) · Q5✅ Q6✅ Q7✅ Q8✅ (branch); **Q9 next**. *Lesson:* one read-only service + one thin router + one template per hub keeps every stage reviewable |
 
 > Test counts are the last full-suite figure verified at each closed stage. Re-run the full suite at each stage gate; do not assume a count without running it.
 
@@ -199,7 +207,7 @@ Deep detail per entry lives in git history and linked docs.
 
 Provider registry: `providers/registry.py`. API keys resolve from env vars or `~/.weaver/secrets.toml` (mode `0o600`, env wins) — never in config, never logged, never rendered.
 
-**Deferred (not in Sprint Q scope):** OCR implementation, provider expansion, route rewrite, Content Explorer v2 / editor panel / validation completion (Q9–Q11), export ledger (Q7), analytics (Q8).
+**Deferred (not in Sprint Q scope):** OCR implementation, provider expansion, route rewrite, Content Explorer v2 / editor panel / validation completion (Q9–Q11).
 
 **Banned unless explicitly overridden (ADR required):** Flask · Django · SQLAlchemy · Celery · RQ · Docker · React/Node build · SPA framework · OpenTelemetry · Sentry. asyncio rejected outside the web layer. External job queue / worker daemon / multi-process worker pool rejected (ADR `010`; `api/jobs.py:8-10`). **No global mutable cross-project store without an ADR.**
 
@@ -251,10 +259,10 @@ Build vertically, not horizontally. One polished slice beats several half-finish
 
 - Build only what the active stage (§2.3) lists. Deferred items get no scaffolding "for later".
 - One PR = one concern. No bundled refactor + feature. **One Sprint Q stage = one branch + one PR.**
-- **Sprint Q (active):** build only the stage named in §2.3 / the execution plan, in order. The cross-project read layer is **read-only**; **no global mutable store without an ADR**; **no source-file hashing on any render path** (Gate B1 extended). Add a **Non-Goals** line per stage (see Q5 in §2.3) to fence scope.
-- Out of scope for Q5 unless the stage names it: OCR, provider expansion, route rewrite, SPA/Node, external queue, `desktop/` changes, editing cross-project resources. Defer the sprint PR until all of Q is finished.
+- **Sprint Q (active):** build only the stage named in §2.3 / the execution plan, in order. The cross-project read layer is **read-only**; **no global mutable store without an ADR**; **no source-file hashing on any render path** (Gate B1 extended). Add a **Non-Goals** line per stage (see §2.3) to fence scope.
+- Out of scope for Q9 unless the stage names it: OCR, provider expansion, route rewrite, SPA/Node, external queue, `desktop/` changes. Defer the sprint PR until all of Q is finished.
 
-Build order for Q5: **T1 workflow (read-only resources journey)** → **T3 read-layer extension (`workspace_index`)** → **T2 HTMX hub surface** → **T6/T7/T8 validation** → **T0 docs + handoff**.
+Build order for Q9: **T1 workflow (explorer journey)** → **T3 read service (segment listing)** → **T2 HTMX tabs surface** → **T6/T7/T8 validation** → **T0 docs + handoff**.
 
 ### 4.5 Communication
 
@@ -317,7 +325,7 @@ A track is owned by exactly one role. Supporting roles review or provide input b
 | T8 | **Performance & Runtime** | Perf Eng | Feature complete → budget met or regression justified; **zero render-path hashing**; no blocking UX; job recovery tested |
 | T9 | **Release & Final Gate** | Release Captain | All tracks done; T6/T7/T8 passed → checklist signed; known gaps + next step clear |
 
-**Sprint Q track note:** every Q stage runs T0 (docs) + the build tracks it needs, always gated by T6/T7/T8. Q5 = T1 → T3 (read-layer) → T2 (hub UI) → T6/T7/T8 → T0. No T4 (no schema change in Q5); T4 returns at Q7 (migration v11).
+**Sprint Q track note:** every Q stage runs T0 (docs) + the build tracks it needs, always gated by T6/T7/T8. Q9 = T1 → T3 (segment-listing read service) → T2 (explorer tabs UI) → T6/T7/T8 → T0. No T4 in Q9 (no schema change); migration v11 shipped at Q7; v12 is conditional at Q12.
 
 ---
 

@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} · Analytics · Weaver{% endblock %}
+{% block content %}
+<section class="project-analytics">
+  {% set page_title = "Analytics" %}
+  {% set page_meta = "Current state, read directly from this project's database — not a time series." %}
+  {% set page_crumbs = [{"label": "Dashboard", "href": "/ui"}, {"label": name, "href": "/ui/projects/" ~ name}, {"label": "Analytics"}] %}
+  {% include "partials/_page_header.html" %}
+
+  {# ── Translation progress ─────────────────────────────── #}
+  <div class="panel c-panel">
+    <h2 class="panel__title">Translation status</h2>
+    {% if a.segment_total > 0 %}
+    <p class="meta">{{ a.segment_total }} segments</p>
+    <ul class="stat-bars plain-list">
+      {% for bucket in ["translated", "manual", "pending", "in_progress", "failed", "stale", "skipped"] %}
+      {% set count = a.status_counts.get(bucket, 0) %}
+      {% if count > 0 %}
+      <li class="stat-bar">
+        <span class="stat-bar__label">{{ bucket | replace("_", " ") }}</span>
+        <span class="stat-bar__track"><span class="stat-bar__fill stat-bar__fill--{{ bucket }}" style="width: {{ (100 * count / a.segment_total) | round | int }}%"></span></span>
+        <span class="stat-bar__value">{{ count }}</span>
+      </li>
+      {% endif %}
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="meta">No segments imported yet.</p>
+    {% endif %}
+  </div>
+
+  {# ── Review status ────────────────────────────────────── #}
+  <div class="panel c-panel">
+    <h2 class="panel__title">Review status</h2>
+    {% if a.segment_total > 0 %}
+    <ul class="stat-bars plain-list">
+      {% for bucket in ["approved", "needs_review", "needs_revision", "rejected", "not_reviewed"] %}
+      {% set count = a.review_counts.get(bucket, 0) %}
+      {% if count > 0 %}
+      <li class="stat-bar">
+        <span class="stat-bar__label">{{ bucket | replace("_", " ") }}</span>
+        <span class="stat-bar__track"><span class="stat-bar__fill stat-bar__fill--review-{{ bucket }}" style="width: {{ (100 * count / a.segment_total) | round | int }}%"></span></span>
+        <span class="stat-bar__value">{{ count }}</span>
+      </li>
+      {% endif %}
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="meta">Nothing to review yet.</p>
+    {% endif %}
+  </div>
+
+  {# ── Token usage ──────────────────────────────────────── #}
+  <div class="panel c-panel">
+    <h2 class="panel__title">Token usage</h2>
+    <p class="meta">Stored token counts per provider/model — tokens, not currency.</p>
+    {% if a.token_usage %}
+    <table class="analytics-table">
+      <thead><tr><th>Provider</th><th>Model</th><th>Attempts</th><th>Input</th><th>Output</th></tr></thead>
+      <tbody>
+        {% for t in a.token_usage %}
+        <tr>
+          <td><span class="badge dim">{{ t.provider }}</span></td>
+          <td class="meta">{{ t.model }}</td>
+          <td>{{ t.attempts }}</td>
+          <td class="meta">{{ "{:,}".format(t.input_tokens) }}</td>
+          <td class="meta">{{ "{:,}".format(t.output_tokens) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="meta">No translation attempts recorded yet.</p>
+    {% endif %}
+  </div>
+
+  {# ── Candidate / draft funnel ─────────────────────────── #}
+  {% if a.candidate_counts or a.draft_counts %}
+  <div class="panel c-panel">
+    <h2 class="panel__title">Candidates &amp; drafts</h2>
+    {% if a.candidate_counts %}
+    <p class="meta">Translation candidates:
+      {% for status, count in a.candidate_counts.items() %}<span class="badge dim">{{ status }} {{ count }}</span> {% endfor %}
+    </p>
+    {% endif %}
+    {% if a.draft_counts %}
+    <p class="meta">Character page drafts:
+      {% for status, count in a.draft_counts.items() %}<span class="badge dim">{{ status }} {{ count }}</span> {% endfor %}
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ── Export readiness + history ───────────────────────── #}
+  <div class="panel c-panel">
+    <h2 class="panel__title">Export readiness</h2>
+    <p class="meta">Publishable under the exporter's rule (translated/manual with a hash-matching attempt).</p>
+    <div class="stat-bar">
+      <span class="stat-bar__label">publishable</span>
+      <span class="stat-bar__track"><span class="stat-bar__fill stat-bar__fill--translated" style="width: {{ a.export_readiness.percent }}%"></span></span>
+      <span class="stat-bar__value">{{ a.export_readiness.publishable }}/{{ a.export_readiness.total }} ({{ a.export_readiness.percent }}%)</span>
+    </div>
+    {% if a.export_history %}
+    <h3 class="panel__subtitle">Recent exports</h3>
+    <ul class="plain-list">
+      {% for e in a.export_history[:5] %}
+      <li class="meta">
+        <span class="badge {{ 'good' if e.status == 'succeeded' else 'bad' }}">{{ e.status }}</span>
+        <span class="badge dim">{{ e.kind }}</span>
+        {{ e.format }} · {{ e.created_at[:19] | replace("T", " ") }}
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="meta"><a href="/ui/projects/{{ name }}/exports">Full export history</a></p>
+    {% else %}
+    <p class="meta">No exports recorded yet. <a href="/ui/projects/{{ name }}">Export from the project page.</a></p>
+    {% endif %}
+  </div>
+
+  {# ── Recent activity ──────────────────────────────────── #}
+  <div class="panel c-panel">
+    <h2 class="panel__title">Recent activity</h2>
+    {% if a.recent_jobs %}
+    <ul class="plain-list">
+      {% for j in a.recent_jobs %}
+      <li class="meta">
+        <span class="badge dim">{{ j.kind }}</span>
+        <span class="badge {{ 'good' if j.status == 'done' else ('bad' if j.status == 'failed' else 'dim') }}">{{ j.status }}</span>
+        {{ j.started_at[:19] | replace("T", " ") }}
+        · <a href="/ui/projects/{{ name }}/jobs/{{ j.job_id }}/detail">detail</a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="meta">No jobs run yet.</p>
+    {% endif %}
+  </div>
+
+</section>
+{% endblock %}

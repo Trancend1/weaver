@@ -664,10 +664,17 @@ class ExportRequest(BaseModel):
     ``html``, and ``docx`` (validated by the export service, not here). When
     ``bundle`` is True, the per-volume artifacts are also packaged into a single
     ``output/<target>/bundle-<target>.zip``. The body is optional; an empty POST
-    uses the defaults."""
+    uses the defaults.
+
+    ``kind`` is ``draft`` (advisory, always allowed) or ``final``. A Final export
+    with ``require_clean`` is refused while unresolved critical QA issues exist
+    (Sprint Q7 / WV-009); the advisory default is preserved (ADR 008)."""
 
     target: str = "epub"
     bundle: bool = False
+    kind: str = "draft"
+    require_clean: bool = False
+    version_label: str | None = None
 
 
 class ExportJobResponse(BaseModel):

@@ -40,6 +40,9 @@ class ProjectIndexEntry:
     review_counts: dict[str, int]
     job_counts: dict[str, int]
     last_activity: str | None
+    # Q8: deterministic token totals (COALESCE sums; cached with the entry).
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 @dataclass(frozen=True)
@@ -189,6 +192,8 @@ def _entry_for_project(
                     review_counts=cached_entry.review_counts,
                     job_counts=cached_entry.job_counts,
                     last_activity=cached_entry.last_activity,
+                    input_tokens=cached_entry.input_tokens,
+                    output_tokens=cached_entry.output_tokens,
                 )
             return cached_entry
 
@@ -233,6 +238,8 @@ def _entry_for_project(
         review_counts=review_counts,
         job_counts=job_counts,
         last_activity=last_activity,
+        input_tokens=counts["input_tokens"],
+        output_tokens=counts["output_tokens"],
     )
 
     if cache_key is not None:
@@ -263,6 +270,10 @@ def _read_counts(connection: sqlite3.Connection) -> dict[str, int]:
             "SELECT status, COUNT(*) AS count FROM segments GROUP BY status"
         ).fetchall()
     }
+    token_row = connection.execute(
+        "SELECT COALESCE(SUM(input_tokens), 0) AS input_total, "
+        "COALESCE(SUM(output_tokens), 0) AS output_total FROM translations"
+    ).fetchone()
     return {
         "volumes": _count(connection, "volumes"),
         "chapters": _count(connection, "chapters"),
@@ -271,6 +282,8 @@ def _read_counts(connection: sqlite3.Connection) -> dict[str, int]:
         "translated": status_counts.get("translated", 0),
         "failed": status_counts.get("failed", 0),
         "stale": status_counts.get("stale", 0),
+        "input_tokens": int(token_row["input_total"]) if token_row is not None else 0,
+        "output_tokens": int(token_row["output_total"]) if token_row is not None else 0,
     }
 
 

@@ -20,7 +20,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Respon
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from weaver.api.jobs import JobRegistry
-from weaver.api.routers.export import _start_export
+from weaver.api.routers.export import EXPORT_GATE_BLOCKED_STATUS, _start_export
 from weaver.api.schemas import ExportRequest
 from weaver.api.templating import templates
 from weaver.api.ui_context import global_layout, project_layout, ws_hub_layout
@@ -34,6 +34,7 @@ from weaver.services.chapter_workspace import chapter_workspace
 from weaver.services.epub_structure_preview import preview_epub_structure
 from weaver.services.import_source import import_volume
 from weaver.services.project import delete_project, initialize_project, project_name_exists
+from weaver.services.project_analytics import build_workspace_rollup
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_overview import project_overview
 from weaver.services.project_paths import resolve_database_path
@@ -122,6 +123,8 @@ def dashboard(request: Request) -> HTMLResponse:
             "identity_conflicts": identity_conflicts,
             "active_job_count": registry.running_count(),
             "books_dir": str(base),
+            # Q8: pure aggregation over the cached index — zero extra DB reads.
+            "rollup": build_workspace_rollup(list(index.entries)),
         },
     )
 
@@ -593,18 +596,36 @@ def _render_export_job(request: Request, name: str, job_id: str) -> HTMLResponse
 
 @router.post("/ui/projects/{name}/export", response_class=HTMLResponse)
 def ui_export(
-    name: str, request: Request, target: str = Form("epub"), bundle: bool = Form(False)
+    name: str,
+    request: Request,
+    target: str = Form("epub"),
+    bundle: bool = Form(False),
+    kind: str = Form("draft"),
+    require_clean: bool = Form(False),
 ) -> HTMLResponse:
-    """Start a novel-scope export job for the chosen target (HTMX panel)."""
+    """Start a novel-scope export job for the chosen target (HTMX panel).
+
+    Draft (default) is always allowed; a Final export with the require-clean
+    toggle is refused while critical QA issues exist (Q7 gate), rendering a
+    blocked fragment with a Draft escape hatch.
+    """
     try:
         started = _start_export(
             request,
             name,
             scope="novel",
             target_id=None,
-            body=ExportRequest(target=target, bundle=bundle),
+            body=ExportRequest(
+                target=target, bundle=bundle, kind=kind, require_clean=require_clean
+            ),
         )
     except HTTPException as exc:
+        if exc.status_code == EXPORT_GATE_BLOCKED_STATUS:
+            return templates.TemplateResponse(
+                request,
+                "partials/_export_gate_blocked.html",
+                {"name": name, "target": target, "bundle": bundle, "reason": str(exc.detail)},
+            )
         return _job_error(request, str(exc.detail), panel_id="export-panel")
     return _render_export_job(request, name, started.job_id)
 
