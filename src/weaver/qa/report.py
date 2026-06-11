@@ -13,7 +13,10 @@ from typing import Literal
 from weaver.qa.checks import Severity
 
 QASeverity = Severity
-QACategory = Literal["completeness", "staleness", "consistency", "quality", "export_readiness"]
+QACategory = Literal[
+    "completeness", "staleness", "consistency", "quality", "export_readiness", "structure"
+]
+QASource = Literal["translation", "structure"]
 QAScope = Literal["chapter", "volume", "novel"]
 QABadge = Literal["clean", "warnings", "errors"]
 
@@ -29,6 +32,9 @@ RULE_CATEGORY: dict[str, QACategory] = {
     "character_name_missing": "consistency",
     "untranslated_japanese": "quality",
     "length_ratio": "quality",
+    "max_length_ratio": "quality",
+    "punctuation_mismatch": "quality",
+    "broken_line_breaks": "quality",
     "repeated_identical_translation": "quality",
     "fallback_heavy_chapter": "export_readiness",
     "mixed_status_chapter": "export_readiness",
@@ -37,7 +43,12 @@ RULE_CATEGORY: dict[str, QACategory] = {
 
 @dataclass(frozen=True)
 class QAIssue:
-    """One QA finding, normalized across per-segment and scope-level rules."""
+    """One QA finding, normalized across per-segment and scope-level rules.
+
+    ``source`` distinguishes translation-content findings (``translation``) from
+    EPUB structural findings joined from the preservation snapshot (``structure``,
+    WV-007). Defaults to ``translation`` so existing call sites are unchanged.
+    """
 
     rule: str
     category: QACategory
@@ -45,6 +56,7 @@ class QAIssue:
     message: str
     segment_id: str | None
     chapter_id: str | None
+    source: QASource = "translation"
 
 
 @dataclass(frozen=True)

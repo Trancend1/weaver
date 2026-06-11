@@ -2,7 +2,7 @@
 
 Today this module hosts one operation: :func:`delete_volume_from_project`, the
 service-layer wrapper that opens a transaction and clears every row a single
-volume owns (qa_warnings, translations, segments, chapters, volume). Future
+volume owns (translations, segments, chapters, snapshot rows, volume). Future
 sprints (J snapshot, K export fidelity, L candidate review) will add their
 volume-scoped lifecycle operations here so the cockpit never reaches into
 SQLite directly.

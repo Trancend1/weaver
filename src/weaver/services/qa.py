@@ -11,7 +11,12 @@ from pathlib import Path
 from weaver.core.config import load_project_config
 from weaver.core.segment import normalize_japanese_text
 from weaver.errors import ConfigError
-from weaver.qa.checks import QAWarning, SegmentInput, run_all_checks
+from weaver.qa.checks import (
+    DEFAULT_MAX_LENGTH_RATIO,
+    QAWarning,
+    SegmentInput,
+    run_all_checks,
+)
 from weaver.storage.db import connect_readonly_database
 from weaver.storage.glossary import list_glossary_terms
 
@@ -33,7 +38,7 @@ class ValidationReport:
 
 
 def validate_project(project_toml: Path, *, cwd: Path | None = None) -> ValidationReport:
-    """Run the six deterministic QA checks against a project.
+    """Run the deterministic QA checks against a project.
 
     Args:
         project_toml: Weaver project file.
@@ -58,6 +63,7 @@ def validate_project(project_toml: Path, *, cwd: Path | None = None) -> Validati
     minimum_length_ratio = float(
         qa_config.get("minimum_length_ratio", DEFAULT_MINIMUM_LENGTH_RATIO)
     )
+    maximum_length_ratio = float(qa_config.get("maximum_length_ratio", DEFAULT_MAX_LENGTH_RATIO))
 
     with closing(connect_readonly_database(db_path)) as connection:
         project_id, project_name = _load_single_project(connection)
@@ -74,6 +80,7 @@ def validate_project(project_toml: Path, *, cwd: Path | None = None) -> Validati
                 detect_japanese=detect_japanese,
                 detect_glossary_mismatch=detect_glossary,
                 minimum_length_ratio=minimum_length_ratio,
+                maximum_length_ratio=maximum_length_ratio,
             )
         )
 
@@ -146,6 +153,9 @@ def qa_report_schema() -> dict[str, object]:
             "empty_translation",
             "untranslated_japanese",
             "length_ratio",
+            "max_length_ratio",
+            "punctuation_mismatch",
+            "broken_line_breaks",
             "glossary_mismatch",
             "failed_segment",
             "stale_segment",

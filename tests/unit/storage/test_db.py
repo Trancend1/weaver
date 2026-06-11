@@ -28,9 +28,10 @@ def test_initialize_database_creates_schema_and_enables_wal(tmp_path) -> None:
         "glossary_candidates",
         "glossary_terms",
         "translation_memory",
-        "qa_warnings",
         "job_events",
     }.issubset(tables)
+    # qa_warnings was dropped in schema v12 (WV-011): a fresh DB never has it.
+    assert "qa_warnings" not in tables
     assert journal_mode == "wal"
     assert foreign_keys == 1
 

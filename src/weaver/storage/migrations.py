@@ -534,6 +534,36 @@ def _migrate_to_v11(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_to_v12(connection: sqlite3.Connection) -> None:
+    """Drop the dead ``qa_warnings`` table (schema v12, Sprint Q11 / WV-011).
+
+    ``qa_warnings`` was declared in the original schema but never written by any
+    code path — QA reports are computed on demand by ``services/translation_qa``
+    and never persisted. The drop is **conditional**: it proceeds only when the
+    table is provably empty, so it can never destroy data. Idempotent — a no-op
+    when the table is already absent (fresh databases install schema.sql without
+    it). See ADR 013 + SD-8.
+    """
+
+    table_exists = (
+        connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='qa_warnings'"
+        ).fetchone()
+        is not None
+    )
+    if not table_exists:
+        return
+    remaining = connection.execute("SELECT COUNT(*) AS n FROM qa_warnings").fetchone()
+    if remaining is not None and int(remaining["n"]) > 0:
+        raise DatabaseError(
+            "Refusing to drop the deprecated qa_warnings table: it is unexpectedly "
+            "non-empty. "
+            "Likely cause: an external tool wrote rows to a table Weaver never uses. "
+            "Next command: back up and clear qa_warnings, then re-open the project."
+        )
+    connection.execute("DROP TABLE qa_warnings")
+
+
 _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _migrate_to_v2,
     3: _migrate_to_v3,
@@ -545,4 +575,5 @@ _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     9: _migrate_to_v9,
     10: _migrate_to_v10,
     11: _migrate_to_v11,
+    12: _migrate_to_v12,
 }

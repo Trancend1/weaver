@@ -9,6 +9,10 @@ class ConfigError(WeaverError):
     """Invalid or unparseable project configuration."""
 
 
+class SourceTooLargeError(WeaverError):
+    """Uploaded/import source exceeds the maximum allowed byte size."""
+
+
 class EpubReadError(WeaverError):
     """Source EPUB cannot be read or is malformed."""
 

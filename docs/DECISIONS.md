@@ -18,6 +18,7 @@ Active ADRs only. Active numbering was reset to `001` during the controlled rese
 | [010](decisions/010-persistent-job-core-sqlite-in-process.md) | Persistent Job Core | SQLite-backed JobRegistry, in-process only. No Celery/Redis/RQ/external worker (`api/jobs.py:8-10` boundary preserved). Locks before Sprint I. |
 | [011](decisions/011-project-terminology-consolidation.md) | Project Terminology Consolidation | Retire user-facing "Novel" label; schema (`projects`/`volumes`) unchanged. Supersedes ADR `006` label only. Locks before Sprint H. |
 | [012](decisions/012-image-preview-ocr-security-gate.md) | Image Preview / OCR Security Gate | Allows read-only manifest-backed image preview with MIME/size/path controls; keeps OCR contract-only until explicit future approval. |
+| [013](decisions/013-qa-error-severity-tier.md) | QA `error` Severity Tier (Rejected/Deferred) | Sprint Q11 keeps the 3-tier `info\|warning\|critical` contract; no `error` tier. Structure findings (WV-007) map EPUB `error`→`warning` (advisory, never block Final export). Re-open point documented. |
 
 ## ADR rules
 

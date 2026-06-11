@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -207,6 +209,85 @@ def test_qa_invalid_config_raises_through_analyze(tmp_path) -> None:
     _set_qa_key(seeded.project_toml, "fallback_heavy_ratio = 2.0")
     with pytest.raises(ConfigError, match="between 0.0 and 1.0"):
         analyze_novel(seeded.project_toml, cwd=tmp_path)
+
+
+def _seed_structure_validation(database_path: Path, volume_id: int) -> None:
+    """Insert a minimal preservation snapshot carrying one error structure issue."""
+    now = datetime.now(UTC).isoformat()
+    with connect_database(database_path) as connection, transaction(connection):
+        connection.execute(
+            """
+            INSERT INTO epub_snapshots (
+                volume_id, source_hash, parser_version, package_path,
+                opf_path, spine_toc, page_progression_direction,
+                metadata_json, preservation_context_json, created_at, updated_at
+            ) VALUES (?, 'deadbeef', 1, 'book.epub', NULL, NULL, NULL, '{}', '{}', ?, ?)
+            """,
+            (volume_id, now, now),
+        )
+        connection.execute(
+            "INSERT INTO epub_snapshot_validation (volume_id, position, data_json) "
+            "VALUES (?, 0, ?)",
+            (
+                volume_id,
+                json.dumps(
+                    {
+                        "severity": "error",
+                        "code": "missing_spine_item",
+                        "message": "A spine item is missing from the manifest.",
+                    }
+                ),
+            ),
+        )
+
+
+def test_structure_validation_joins_into_volume_report(tmp_path) -> None:
+    seeded = _seed_project(tmp_path)
+    _seed_structure_validation(seeded.database_path, seeded.volume_id)
+
+    report = analyze_volume(seeded.project_toml, seeded.volume_id, cwd=tmp_path)
+
+    structure_issues = [issue for issue in report.issues if issue.source == "structure"]
+    assert len(structure_issues) == 1
+    issue = structure_issues[0]
+    assert issue.rule == "missing_spine_item"
+    assert issue.category == "structure"
+    # EPUB 'error' is mapped to advisory 'warning' — never critical (advisory only).
+    assert issue.severity == "warning"
+    assert issue.segment_id is None and issue.chapter_id is None
+
+
+def test_structure_validation_joins_into_novel_report(tmp_path) -> None:
+    seeded = _seed_project(tmp_path)
+    _seed_structure_validation(seeded.database_path, seeded.volume_id)
+
+    report = analyze_novel(seeded.project_toml, cwd=tmp_path)
+
+    assert any(issue.source == "structure" for issue in report.issues)
+
+
+def test_structure_join_does_not_reparse_source(tmp_path, monkeypatch) -> None:
+    seeded = _seed_project(tmp_path)
+    _seed_structure_validation(seeded.database_path, seeded.volume_id)
+
+    import weaver.readers.epub as epub_reader
+
+    def _boom(*_args: object):  # pragma: no cover - must never run
+        raise AssertionError("QA render must not re-parse the EPUB source")
+
+    monkeypatch.setattr(epub_reader, "parse_epub_structure", _boom)
+
+    report = analyze_novel(seeded.project_toml, cwd=tmp_path)
+    assert any(issue.source == "structure" for issue in report.issues)
+
+
+def test_chapter_report_has_no_structure_issues(tmp_path) -> None:
+    seeded = _seed_project(tmp_path)
+    _seed_structure_validation(seeded.database_path, seeded.volume_id)
+
+    report = analyze_chapter(seeded.project_toml, seeded.chapter_id, cwd=tmp_path)
+
+    assert all(issue.source == "translation" for issue in report.issues)
 
 
 def test_qa_is_read_only(tmp_path) -> None:

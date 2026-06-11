@@ -124,10 +124,10 @@ def get_volume(connection: sqlite3.Connection, volume_id: int) -> VolumeRecord:
 def delete_volume(connection: sqlite3.Connection, volume_id: int) -> None:
     """Delete one volume and every row that depends on it (Sprint H3).
 
-    Removes, in dependency order: ``qa_warnings`` → ``translations`` →
-    ``segments`` → ``chapters`` → the ``volume`` row. Project-scoped data
-    (glossary, characters, translation memory) is **not** touched — those live
-    at the project level and survive a single-volume delete.
+    Removes, in dependency order: ``translations`` → ``segments`` →
+    ``chapters`` → the ``volume`` row. Project-scoped data (glossary,
+    characters, translation memory) is **not** touched — those live at the
+    project level and survive a single-volume delete.
 
     The caller is responsible for opening a transaction; this function assumes
     it runs inside one.
@@ -142,8 +142,8 @@ def delete_volume(connection: sqlite3.Connection, volume_id: int) -> None:
     chapter_ids = [str(row["id"]) for row in chapter_rows]
     if chapter_ids:
         placeholders = ",".join("?" for _ in chapter_ids)
-        # qa_warnings ← translations ← segments are referenced via segment_id.
-        # Resolve the segment ids once so each delete uses a small IN list.
+        # translations ← segments are referenced via segment_id. Resolve the
+        # segment ids once so each delete uses a small IN list.
         segment_rows = connection.execute(
             f"SELECT id FROM segments WHERE chapter_id IN ({placeholders})",
             tuple(chapter_ids),
@@ -151,10 +151,6 @@ def delete_volume(connection: sqlite3.Connection, volume_id: int) -> None:
         segment_ids = [str(row["id"]) for row in segment_rows]
         if segment_ids:
             seg_placeholders = ",".join("?" for _ in segment_ids)
-            connection.execute(
-                f"DELETE FROM qa_warnings WHERE segment_id IN ({seg_placeholders})",
-                tuple(segment_ids),
-            )
             connection.execute(
                 f"DELETE FROM translations WHERE segment_id IN ({seg_placeholders})",
                 tuple(segment_ids),
