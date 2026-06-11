@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Providers · Weaver{% endblock %}
+{% block content %}
+<section class="providers-hub">
+  {% set page_title = "Providers Hub" %}
+  {% set total_in = providers.projects | sum(attribute="input_tokens") %}
+  {% set total_out = providers.projects | sum(attribute="output_tokens") %}
+  {% set page_meta = providers.degraded | length ~ " degraded · " ~ providers.projects | length ~ " projects · " ~ total_in ~ " in / " ~ total_out ~ " out tokens" %}
+  {% set page_crumbs = [{"label": "Dashboard", "href": "/ui"}, {"label": "Providers"}] %}
+  {% set page_actions %}
+    <span class="hint">Read-only routing view · config edits stay on each project's Config page.</span>
+  {% endset %}
+  {% include "partials/_page_header.html" %}
+
+  {% if providers.degraded %}
+  <div class="panel c-panel providers-degraded">
+    <h2 class="panel__title">Project issues</h2>
+    <ul class="degraded-list">
+      {% for d in providers.degraded %}
+      <li class="degraded-row degraded-row--{{ d.state }}">
+        <span class="degraded-row__name">{{ d.name }}</span>
+        <span class="badge bad">{{ d.state | replace("_", " ") }}</span>
+        {% if d.error %}<span class="degraded-row__error">{{ d.error }}</span>{% endif %}
+        <span class="degraded-row__note">Provider info for this project is unavailable.</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if providers.projects %}
+  <div class="panel c-panel providers-projects">
+    <table class="providers-table">
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>Provider</th>
+          <th>Model</th>
+          <th>API key</th>
+          <th>Tokens (in / out)</th>
+          <th>Failures</th>
+          <th>Health</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in providers.projects %}
+        <tr class="providers-row">
+          <td><a href="/ui/projects/{{ p.project_name }}">{{ p.project_name }}</a></td>
+          <td><span class="badge dim">{{ p.provider_type }}</span></td>
+          <td class="meta">{{ p.model }}</td>
+          <td>
+            {% if not p.requires_key %}
+              <span class="meta">no key needed</span>
+            {% elif p.secret_present %}
+              <span class="badge good" title="{{ p.api_key_env }} is set (value never shown)">{{ p.api_key_env }} ✓</span>
+            {% else %}
+              <a href="/ui/projects/{{ p.project_name }}/config" class="badge bad"
+                 title="{{ p.api_key_env }} is not set — open Config to add it">{{ p.api_key_env or "key" }} missing</a>
+            {% endif %}
+          </td>
+          <td class="meta">
+            {% if p.input_tokens or p.output_tokens %}
+              {{ "{:,}".format(p.input_tokens) }} / {{ "{:,}".format(p.output_tokens) }}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if p.failed_job_count > 0 %}
+              <details class="provider-failures">
+                <summary><span class="badge bad">{{ p.failed_job_count }}</span></summary>
+                <ul class="provider-failures__list">
+                  {% for f in p.recent_failures %}
+                  <li>
+                    <span class="meta">{{ f.kind }}</span>
+                    {% if f.error_summary %}<span class="provider-failures__msg">{{ f.error_summary }}</span>{% endif %}
+                    {% if f.finished_at %}<span class="meta">· {{ f.finished_at[:19] | replace("T", " ") }}</span>{% endif %}
+                  </li>
+                  {% endfor %}
+                </ul>
+              </details>
+            {% else %}
+              <span class="meta">none</span>
+            {% endif %}
+          </td>
+          <td>
+            <div id="provider-health-{{ p.project_name }}">
+              <button type="button" class="btn btn--small"
+                      hx-post="/ui/providers/{{ p.project_name }}/healthcheck"
+                      hx-target="#provider-health-{{ p.project_name }}"
+                      hx-swap="innerHTML"
+                      hx-disabled-elt="this">Check</button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% if not providers.degraded %}
+    {% set empty_title = "No providers to show" %}
+    {% set empty_hint = "Import a project to see which provider and model it uses, its API-key status, token usage, and recent failures. Configure providers from each project's Config page." %}
+    {% include "partials/_empty_state.html" %}
+    {% endif %}
+  {% endif %}
+
+</section>
+{% endblock %}
