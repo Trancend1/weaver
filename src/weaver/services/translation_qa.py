@@ -44,6 +44,7 @@ from weaver.qa.scope_checks import (
     check_repeated_identical_translation,
 )
 from weaver.qa.thresholds import QAThresholds, load_qa_thresholds
+from weaver.services.epub_snapshot import read_snapshot
 from weaver.services.project_paths import resolve_database_path
 from weaver.storage.characters import list_characters
 from weaver.storage.db import connect_readonly_database
@@ -67,6 +68,46 @@ class _ChapterResult:
     title: str | None
     segment_count: int
     issues: tuple[QAIssue, ...]
+
+
+# Structure findings carry EPUB severities (error/warning/info). They are joined
+# read-only from the preservation snapshot (WV-007) and kept strictly advisory:
+# ``error`` maps to ``warning`` (never ``critical``) so a structural finding never
+# raises the report to "errors" nor blocks a Final export (the gate is Q7-owned).
+_STRUCTURE_SEVERITY_MAP: dict[str, str] = {
+    "error": "warning",
+    "warning": "warning",
+    "info": "info",
+}
+
+
+def _structure_issues(db_path: Path, volume_ids: Sequence[int]) -> list[QAIssue]:
+    """Join persisted EPUB structure validation rows into QA issues.
+
+    Pure read: :func:`read_snapshot` reconstructs the snapshot from stored rows
+    and never re-parses the source EPUB. Volumes without a snapshot are skipped.
+    Issues are novel/volume scoped — they carry no chapter or segment id.
+    """
+
+    issues: list[QAIssue] = []
+    for volume_id in volume_ids:
+        parsed = read_snapshot(db_path, volume_id)
+        if parsed is None:
+            continue
+        for issue in parsed.validation_issues:
+            severity = _STRUCTURE_SEVERITY_MAP.get(issue.severity, "warning")
+            issues.append(
+                QAIssue(
+                    rule=issue.code or "structure_issue",
+                    category="structure",
+                    severity=severity,  # type: ignore[arg-type]
+                    message=issue.message,
+                    segment_id=None,
+                    chapter_id=None,
+                    source="structure",
+                )
+            )
+    return issues
 
 
 def analyze_chapter(project_toml: Path, chapter_id: str, *, cwd: Path | None = None) -> QAReport:
@@ -136,6 +177,7 @@ def analyze_volume(project_toml: Path, volume_id: int, *, cwd: Path | None = Non
         include_chapter_summary=True,
         include_volume_summary=False,
         volume_titles={volume.id: volume.title},
+        extra_issues=_structure_issues(db_path, [volume_id]),
     )
 
 
@@ -169,6 +211,7 @@ def analyze_novel(project_toml: Path, *, cwd: Path | None = None) -> QAReport:
         include_chapter_summary=True,
         include_volume_summary=True,
         volume_titles=volume_titles,
+        extra_issues=_structure_issues(db_path, list(volume_titles)),
     )
 
 
@@ -228,10 +271,14 @@ def _build_report(
     include_chapter_summary: bool,
     include_volume_summary: bool,
     volume_titles: dict[int, str],
+    extra_issues: Sequence[QAIssue] = (),
 ) -> QAReport:
     all_issues: list[QAIssue] = []
     for result in results:
         all_issues.extend(result.issues)
+    # Structure issues (WV-007) are novel/volume scoped — appended to the report
+    # totals and the filterable issue list, but not the per-chapter rollups.
+    all_issues.extend(extra_issues)
     info_count, warning_count, critical_count = _counts(all_issues)
 
     summary_by_category: dict[QACategory, int] = {}

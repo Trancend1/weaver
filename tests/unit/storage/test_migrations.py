@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import sqlite3
 
+import pytest
+
+from weaver.errors import DatabaseError
 from weaver.storage.db import SCHEMA_VERSION, initialize_database
 from weaver.storage.migrations import apply_migrations
 
@@ -431,3 +434,80 @@ def test_apply_migrations_v11_is_idempotent(tmp_path) -> None:
 
     assert count == 1
     assert version == SCHEMA_VERSION
+
+
+_LEGACY_QA_WARNINGS = """
+    CREATE TABLE qa_warnings (
+      id INTEGER PRIMARY KEY,
+      segment_id TEXT,
+      check_name TEXT NOT NULL,
+      severity TEXT NOT NULL,
+      message TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+"""
+
+
+def _seed_v11_with_qa_warnings(db_path) -> sqlite3.Connection:
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+    connection.executescript(
+        """
+        CREATE TABLE projects (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          source_path TEXT NOT NULL,
+          source_lang TEXT NOT NULL,
+          target_lang TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          schema_version INTEGER NOT NULL,
+          uuid TEXT
+        );
+        """
+        + _LEGACY_QA_WARNINGS
+    )
+    connection.execute("PRAGMA user_version = 11")
+    connection.commit()
+    return connection
+
+
+def test_apply_migrations_v12_drops_empty_qa_warnings(tmp_path) -> None:
+    connection = _seed_v11_with_qa_warnings(tmp_path / "legacy_v11.db")
+
+    apply_migrations(connection, target_version=SCHEMA_VERSION)
+
+    tables = {
+        row["name"]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    connection.close()
+
+    assert "qa_warnings" not in tables
+    assert version == SCHEMA_VERSION
+
+
+def test_apply_migrations_v12_is_idempotent(tmp_path) -> None:
+    connection = _seed_v11_with_qa_warnings(tmp_path / "legacy_v11.db")
+
+    apply_migrations(connection, target_version=SCHEMA_VERSION)
+    apply_migrations(connection, target_version=SCHEMA_VERSION)
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    connection.close()
+
+    assert version == SCHEMA_VERSION
+
+
+def test_apply_migrations_v12_refuses_to_drop_non_empty_qa_warnings(tmp_path) -> None:
+    connection = _seed_v11_with_qa_warnings(tmp_path / "legacy_v11.db")
+    connection.execute(
+        "INSERT INTO qa_warnings (segment_id, check_name, severity, message, created_at) "
+        "VALUES ('seg-1', 'legacy', 'warning', 'unexpected row', '2025-01-01T00:00:00+00:00')"
+    )
+    connection.commit()
+
+    with pytest.raises(DatabaseError, match="non-empty"):
+        apply_migrations(connection, target_version=SCHEMA_VERSION)
+    connection.close()

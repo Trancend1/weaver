@@ -15,6 +15,16 @@ JP_LEAK_PATTERN = re.compile(r"[぀-ゟ゠-ヿ㐀-䶿一-鿿]{4,}")
 
 PUBLISHED_STATUSES = frozenset({"translated", "manual"})
 
+# Translations this many times longer than their (sufficiently long) source are
+# flagged as runaway/duplicated output. JP→EN legitimately expands, so the
+# default is generous; the floor avoids false positives on very short sources.
+DEFAULT_MAX_LENGTH_RATIO = 8.0
+MAX_RATIO_MIN_SOURCE_LEN = 10
+
+# Trailing characters stripped before locating a segment's terminal punctuation
+# (closing quotes/brackets in either script). Pure presentation wrappers.
+_TERMINAL_TRAILERS = frozenset("\"'」』）)】〕》〉”’]｝}")
+
 
 @dataclass(frozen=True)
 class SegmentInput:
@@ -92,6 +102,86 @@ def check_length_ratio(seg: SegmentInput, *, minimum_ratio: float) -> QAWarning 
     )
 
 
+def check_max_length_ratio(
+    seg: SegmentInput, *, maximum_ratio: float = DEFAULT_MAX_LENGTH_RATIO
+) -> QAWarning | None:
+    """Flag translations far longer than their source (runaway/duplicated output).
+
+    Complements :func:`check_length_ratio` (too short). Only applies once the
+    source is at least :data:`MAX_RATIO_MIN_SOURCE_LEN` characters so a one- or
+    two-character source cannot trip the ratio.
+    """
+
+    if seg.translation_text is None or not seg.translation_text.strip():
+        return None
+    source_len = len(seg.source_text)
+    if source_len < MAX_RATIO_MIN_SOURCE_LEN:
+        return None
+    ratio = len(seg.translation_text) / source_len
+    if ratio <= maximum_ratio:
+        return None
+    return QAWarning(
+        segment_id=seg.segment_id,
+        check_name="max_length_ratio",
+        severity="warning",
+        message=(f"Translation length ratio {ratio:.1f} exceeds maximum {maximum_ratio:.1f}."),
+    )
+
+
+def _terminal_char(text: str) -> str | None:
+    """Return the final meaningful character, ignoring trailing quotes/brackets."""
+
+    stripped = text.rstrip()
+    while stripped and stripped[-1] in _TERMINAL_TRAILERS:
+        stripped = stripped[:-1].rstrip()
+    return stripped[-1] if stripped else None
+
+
+def check_punctuation_mismatch(seg: SegmentInput) -> QAWarning | None:
+    """Flag a question/exclamation in the source dropped from the translation.
+
+    Conservative: only the two highest-signal sentence-final marks are checked
+    (``？``/``?`` and ``！``/``!``), and only when the source's terminal mark has
+    no counterpart at the end of the translation. Lower-confidence finding (info).
+    """
+
+    if seg.translation_text is None or not seg.translation_text.strip():
+        return None
+    source_terminal = _terminal_char(seg.source_text)
+    if source_terminal is None:
+        return None
+    translation_terminal = _terminal_char(seg.translation_text)
+    expected = {"？": "?", "?": "?", "！": "!", "!": "!"}.get(source_terminal)
+    if expected is None:
+        return None
+    if translation_terminal == expected:
+        return None
+    label = "question" if expected == "?" else "exclamation"
+    return QAWarning(
+        segment_id=seg.segment_id,
+        check_name="punctuation_mismatch",
+        severity="info",
+        message=(f"Source ends as a {label} ({source_terminal!r}) but the translation does not."),
+    )
+
+
+def check_broken_line_breaks(seg: SegmentInput) -> QAWarning | None:
+    """Flag a multi-line source collapsed to a single line in the translation."""
+
+    if seg.translation_text is None or not seg.translation_text.strip():
+        return None
+    if "\n" not in seg.source_text:
+        return None
+    if "\n" in seg.translation_text:
+        return None
+    return QAWarning(
+        segment_id=seg.segment_id,
+        check_name="broken_line_breaks",
+        severity="info",
+        message="Source contains line breaks that the translation does not preserve.",
+    )
+
+
 def check_glossary_mismatch(seg: SegmentInput, terms: Sequence[GlossaryTerm]) -> list[QAWarning]:
     """Flag each approved glossary term whose source matches the segment but
     whose target is absent from the translation."""
@@ -164,11 +254,14 @@ def run_all_checks(
     detect_japanese: bool = True,
     detect_glossary_mismatch: bool = True,
     minimum_length_ratio: float = 0.3,
+    maximum_length_ratio: float = DEFAULT_MAX_LENGTH_RATIO,
 ) -> list[QAWarning]:
     """Run every enabled check and aggregate findings for one segment.
 
-    `failed` and `stale` status checks are always on. The other four checks
-    follow the `[qa]` config flags.
+    `failed` and `stale` status checks are always on, as are the deterministic
+    fidelity checks (max-length ratio, punctuation, line breaks) — they only
+    fire on segments that already have a translation. The remaining checks follow
+    the `[qa]` config flags.
     """
 
     findings: list[QAWarning] = []
@@ -188,6 +281,15 @@ def run_all_checks(
 
     if detect_glossary_mismatch:
         findings.extend(check_glossary_mismatch(seg, glossary_terms))
+
+    for fidelity_check in (
+        lambda s: check_max_length_ratio(s, maximum_ratio=maximum_length_ratio),
+        check_punctuation_mismatch,
+        check_broken_line_breaks,
+    ):
+        finding = fidelity_check(seg)
+        if finding is not None:
+            findings.append(finding)
 
     failed = check_failed_segment(seg)
     if failed is not None:

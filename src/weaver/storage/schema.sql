@@ -125,14 +125,10 @@ CREATE TABLE IF NOT EXISTS translation_memory (
   UNIQUE(project_id, source_hash)
 );
 
-CREATE TABLE IF NOT EXISTS qa_warnings (
-  id INTEGER PRIMARY KEY,
-  segment_id TEXT REFERENCES segments(id),
-  check_name TEXT NOT NULL,
-  severity TEXT NOT NULL CHECK (severity IN ('info', 'warning', 'critical')),
-  message TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
+-- NOTE: the legacy ``qa_warnings`` table was removed in schema v12 (Sprint Q11 /
+-- WV-011, ADR 013). It was never written — QA reports are computed on demand by
+-- ``services/translation_qa`` and never persisted. Existing databases drop it via
+-- the conditional v12 migration (only when provably empty).
 
 CREATE TABLE IF NOT EXISTS job_events (
   id INTEGER PRIMARY KEY,

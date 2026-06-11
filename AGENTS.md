@@ -86,8 +86,8 @@ Foundation (v0.6.0) ✅
         Q7 export gate+ledger    ✅  (migration v11; Draft/Final gate; exports hub)
         Q8 analytics             ✅  (deterministic per-project analytics + dashboard rollup)
         Q9 explorer v2           ✅  (tabbed Content Explorer; segment listing; render-path hashing removed)
-        Q10 editor panel         🟡  NEXT
-        Q11 validation (WV-007/008/011) · Q12 cleanup + final gate  ⬜
+        Q10 editor panel         ✅  (lazy-loaded per-segment context panel; no schema change)
+        Q11 validation (WV-007/008/011) · Q12 cleanup + final gate  🟡  NEXT
 ```
 
 Legend: ✅ complete · 🟡 active · ⬜ pending · 🚫 deferred/blocked
@@ -194,7 +194,7 @@ Deep detail per entry lives in git history and linked docs.
 | Sprint N — Tauri Shell Alpha | `desktop/` | 1043 / 4 | ✅ CLOSED — runtime validated, build green |
 | Sprint P — Workflow Coherence | [SPRINT_P_EXECUTION](.docs/audit/SPRINT_P_EXECUTION.md) | 1102 / 4 | ✅ CLOSED — WV-001..006; O-gate green. *Lesson:* per-project coherence precedes cross-project hubs |
 | Sprint O — Production Desktop | `desktop/` + [INSTALL_DESKTOP](docs/INSTALL_DESKTOP.md) | 1102 / 4 | ✅ COMPLETE — portable 3.2 MB exe; PATH-dependency baseline; PyInstaller recommended for single-file |
-| **Sprint Q — Workspace v2** | [SPRINT_Q_EXECUTION_PLAN](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [DEEP_AUDIT](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [RISK_REGISTER](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [HANDOFF](.docs/audit/SPRINT_Q_HANDOFF.md) | Q9 ≈1317 / 4 | 🟡 ACTIVE — Q0✅ Q1✅ Q2✅ Q3✅ Q4✅ Q5✅ Q6✅ Q7✅ Q8✅ Q9✅ (all merged); **Q10 next**. *Lesson:* Gate B1 audits pay off — Q9 found and removed source hashing still living on the structure render path |
+| **Sprint Q — Workspace v2** | [SPRINT_Q_EXECUTION_PLAN](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [DEEP_AUDIT](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [RISK_REGISTER](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [HANDOFF](.docs/audit/SPRINT_Q_HANDOFF.md) | Q10 ≈1326 / 4 | 🟡 ACTIVE — Q0✅ Q1✅ Q2✅ Q3✅ Q4✅ Q5✅ Q6✅ Q7✅ Q8✅ Q9✅ Q10✅ (all merged); **Q11 next**. *Lesson:* Gate B1 audits pay off — Q9 found and removed source hashing still living on the structure render path |
 
 > Test counts are the last full-suite figure verified at each closed stage. Re-run the full suite at each stage gate; do not assume a count without running it.
 
@@ -273,9 +273,9 @@ Build vertically, not horizontally. One polished slice beats several half-finish
 - Build only what the active stage (§2.3) lists. Deferred items get no scaffolding "for later".
 - One PR = one concern. No bundled refactor + feature. **One Sprint Q stage = one branch + one PR.**
 - **Sprint Q (active):** build only the stage named in §2.3 / the execution plan, in order. The cross-project read layer is **read-only**; **no global mutable store without an ADR**; **no source-file hashing on any render path** (Gate B1 extended). Add a **Non-Goals** line per stage (see Q5 in §2.3) to fence scope.
-- Out of scope for Q5 unless the stage names it: OCR, provider expansion, route rewrite, SPA/Node, external queue, `desktop/` changes, editing cross-project resources. Defer the sprint PR until all of Q is finished.
+- Out of scope for Q11 unless the stage names it: OCR, provider expansion, route rewrite, SPA/Node, external queue, `desktop/` changes, editing cross-project resources. Defer the sprint PR until all of Q is finished.
 
-Build order for Q5: **T1 workflow (read-only resources journey)** → **T3 read-layer extension (`workspace_index`)** → **T2 HTMX hub surface** → **T6/T7/T8 validation** → **T0 docs + handoff**.
+Build order for Q11: **T6/T7/T8 validation gates** → **T0 docs + handoff**.
 
 ### 4.5 Communication
 
@@ -338,7 +338,7 @@ A track is owned by exactly one role. Supporting roles review or provide input b
 | T8 | **Performance & Runtime** | Perf Eng | Feature complete → budget met or regression justified; **zero render-path hashing**; no blocking UX; job recovery tested |
 | T9 | **Release & Final Gate** | Release Captain | All tracks done; T6/T7/T8 passed → checklist signed; known gaps + next step clear |
 
-**Sprint Q track note:** every Q stage runs T0 (docs) + the build tracks it needs, always gated by T6/T7/T8. Q5 = T1 → T3 (read-layer) → T2 (hub UI) → T6/T7/T8 → T0. No T4 (no schema change in Q5); T4 returns at Q7 (migration v11).
+**Sprint Q track note:** every Q stage runs T0 (docs) + the build tracks it needs, always gated by T6/T7/T8. Q11 is validation-only (T6/T7/T8 → T0) — no new build tracks. v12 migration is conditional at Q12.
 
 ---
 

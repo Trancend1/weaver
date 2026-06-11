@@ -30,7 +30,14 @@ router = APIRouter(tags=["ui"], include_in_schema=False)
 
 _BADGE_CLASS = {"clean": "ok", "warnings": "warn", "errors": "bad"}
 _BADGE_LABEL = {"clean": "Clean", "warnings": "Warnings", "errors": "Errors"}
-_CATEGORIES = ("completeness", "staleness", "consistency", "quality", "export_readiness")
+_CATEGORIES = (
+    "completeness",
+    "staleness",
+    "consistency",
+    "quality",
+    "export_readiness",
+    "structure",
+)
 _SEVERITIES = ("info", "warning", "critical")
 
 

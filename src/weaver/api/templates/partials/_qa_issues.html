@@ -4,12 +4,13 @@
   <div class="table-scroll">
     <table class="grid">
       <thead>
-        <tr><th>Severity</th><th>Category</th><th>Rule</th><th>Message</th><th>Where</th></tr>
+        <tr><th>Severity</th><th>Source</th><th>Category</th><th>Rule</th><th>Message</th><th>Where</th></tr>
       </thead>
       <tbody>
         {% for i in issues %}
         <tr>
           <td><span class="badge {{ sev_class[i.severity] }}">{{ i.severity }}</span></td>
+          <td>{{ i.source }}</td>
           <td>{{ i.category }}</td>
           <td><code>{{ i.rule }}</code></td>
           <td class="cell-clip">{{ i.message }}</td>

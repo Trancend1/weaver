@@ -5,10 +5,13 @@ from __future__ import annotations
 from weaver.providers.types import GlossaryTerm
 from weaver.qa.checks import (
     SegmentInput,
+    check_broken_line_breaks,
     check_empty_translation,
     check_failed_segment,
     check_glossary_mismatch,
     check_length_ratio,
+    check_max_length_ratio,
+    check_punctuation_mismatch,
     check_stale_segment,
     check_untranslated_japanese,
     run_all_checks,
@@ -125,6 +128,96 @@ def test_check_stale_segment_flags_stale_status() -> None:
     assert warning is not None
     assert warning.severity == "warning"
     assert warning.check_name == "stale_segment"
+
+
+def test_check_max_length_ratio_flags_runaway_translation() -> None:
+    warning = check_max_length_ratio(
+        _segment(source_text="猫が鳴いた、とても可愛い。", translation_text="The cat " * 30),
+        maximum_ratio=8.0,
+    )
+    assert warning is not None
+    assert warning.severity == "warning"
+    assert warning.check_name == "max_length_ratio"
+
+
+def test_check_max_length_ratio_passes_normal_expansion() -> None:
+    assert (
+        check_max_length_ratio(
+            _segment(source_text="吾輩は猫である。", translation_text="I am a cat."),
+            maximum_ratio=8.0,
+        )
+        is None
+    )
+
+
+def test_check_max_length_ratio_ignores_very_short_source() -> None:
+    # A 1-char source could otherwise trip the ratio on any normal translation.
+    assert (
+        check_max_length_ratio(_segment(source_text="猫", translation_text="The cat ran away."))
+        is None
+    )
+
+
+def test_check_punctuation_mismatch_flags_dropped_question_mark() -> None:
+    warning = check_punctuation_mismatch(
+        _segment(source_text="本当ですか？", translation_text="Is that true.")
+    )
+    assert warning is not None
+    assert warning.severity == "info"
+    assert warning.check_name == "punctuation_mismatch"
+
+
+def test_check_punctuation_mismatch_silent_when_question_preserved() -> None:
+    assert (
+        check_punctuation_mismatch(
+            _segment(source_text="本当ですか？", translation_text='"Is that true?"')
+        )
+        is None
+    )
+
+
+def test_check_punctuation_mismatch_ignores_non_terminal_source() -> None:
+    assert (
+        check_punctuation_mismatch(
+            _segment(source_text="猫が鳴いた。", translation_text="The cat meowed.")
+        )
+        is None
+    )
+
+
+def test_check_broken_line_breaks_flags_collapsed_lines() -> None:
+    warning = check_broken_line_breaks(
+        _segment(source_text="一行目\n二行目", translation_text="First line second line")
+    )
+    assert warning is not None
+    assert warning.severity == "info"
+    assert warning.check_name == "broken_line_breaks"
+
+
+def test_check_broken_line_breaks_silent_when_preserved() -> None:
+    assert (
+        check_broken_line_breaks(
+            _segment(source_text="一行目\n二行目", translation_text="First line\nsecond line")
+        )
+        is None
+    )
+
+
+def test_check_broken_line_breaks_silent_when_source_single_line() -> None:
+    assert (
+        check_broken_line_breaks(_segment(source_text="一行だけ", translation_text="One line"))
+        is None
+    )
+
+
+def test_run_all_checks_includes_fidelity_findings() -> None:
+    segment = _segment(
+        status="translated",
+        source_text="本当に大事な話があるんだけど？",
+        translation_text="Talk.",
+    )
+    names = {f.check_name for f in run_all_checks(segment, glossary_terms=[])}
+    assert "punctuation_mismatch" in names
 
 
 def test_run_all_checks_respects_disable_flags() -> None:
