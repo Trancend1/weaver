@@ -40,15 +40,16 @@ def test_project_overview_renders_summary_cards(overview_client: TestClient) -> 
     assert "Pending" in page
 
 
-def test_project_overview_shows_next_actions(overview_client: TestClient) -> None:
+def test_project_overview_shows_import_and_export(overview_client: TestClient) -> None:
     name = _name(overview_client)
     page = overview_client.get(f"/ui/projects/{name}").text
-    assert "Next actions" in page
-    assert "Open workspace" in page
+    assert "Import another volume" in page or "Import first volume" in page
+    assert "Export project" in page
+    assert "Delete project" in page
+    assert "Volumes" in page
+    assert "Inspect" in page
+    assert "Preview" in page
     assert "Review queue" in page
-    assert "Run QA" in page
-    assert "Reading preview" in page
-    assert "Export preflight" in page
 
 
 def test_project_overview_shows_volume_grid(overview_client: TestClient) -> None:

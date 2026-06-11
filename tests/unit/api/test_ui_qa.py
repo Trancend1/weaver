@@ -134,12 +134,10 @@ def test_severity_filter_narrows_issues(ctx) -> None:
     assert "untranslated_segment" not in body  # warning filtered out
 
 
-def test_project_and_workspace_link_to_qa(ctx) -> None:
+def test_project_page_links_to_qa(ctx) -> None:
     client, chapter_id, _ = ctx
     project_page = client.get("/ui/projects/issues").text
     assert "/ui/projects/issues/qa" in project_page
-    workspace_page = client.get(f"/ui/projects/issues/chapters/{chapter_id}").text
-    assert f"/ui/projects/issues/chapters/{chapter_id}/qa" in workspace_page
 
 
 def test_unknown_targets_return_404(ctx) -> None:

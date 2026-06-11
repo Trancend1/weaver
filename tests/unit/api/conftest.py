@@ -21,7 +21,7 @@ def client_with_projects(tmp_path: Path) -> TestClient:
     from weaver.services.project import initialize_project
 
     fixtures = Path(__file__).parent.parent.parent / "fixtures"
-    epubs = list(fixtures.glob("*.epub"))
+    epubs = sorted(fixtures.glob("*.epub"))
     if not epubs:
         pytest.skip("no EPUB fixture available")
     initialize_project(epubs[0], cwd=tmp_path)
