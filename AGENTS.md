@@ -131,6 +131,16 @@ Before starting any stage:
 
 **Non-goals for Q10** (scope fence): no OCR, no provider expansion, no route rewrite, no SPA/Node, no external queue, no `desktop/` changes, no global mutable store, no candidate auto-generation (explicit button only), no auto-apply, no auto-review, no QA scan on workspace render.
 
+**Q10 workspace UI invariants (handoff for all agents — do NOT violate):**
+- `#seg-{id}` = full segment row swap target (save form uses this; returns `_segment.html`)
+- `#seg-statusline-{id}` = review badge only swap target (review buttons use this; returns `_segment_statusline.html`)
+- `#seg-{id}-history` / `#seg-{id}-candidates` / `#seg-{id}-gen-loader` = history/candidate/loader slots
+- Never `replaceAll` `#seg-{id}` → anything — only review buttons use the statusline variant
+- Segment action rows are 3-tier: `.seg-row--review` / `.seg-row--edit` / `.seg-row--tools` (replaced flat `.seg-bar`)
+- Review endpoint (`ui_review.py:138`) returns statusline fragment only — no `chapter_workspace()` call
+- **DELETED (do not re-create):** `_preview_modal.html`, `GET .../structure/modal` route, `POST /epub-preview` modal trigger
+- **DELETED (do not re-add):** "Preview EPUB" buttons, "Full structure page" tree link, "Next actions" section, sidebar brand icon, workspace header nav buttons (Back to project, Chapter QA, Candidates)
+
 **Sprint Q PR strategy:** one stage = one branch + one PR. Q5 branch `feat/workspace-resources-hub`. Q6–Q8 grouped on `feat/provider-export-analytics` (PR #41). Q9 branch `feat/content-explorer` (PR #42). Q10 branch `feat/workspace-context-panel`. **Sprint-level PR to `main` stays unopened until Q12 is green** (maintainer instruction 2026-06-10).
 
 **Hard fences for all of Sprint Q** (full list in [SPRINT_Q_HANDOFF.md §6](.docs/audit/SPRINT_Q_HANDOFF.md)):
