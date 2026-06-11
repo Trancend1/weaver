@@ -25,6 +25,7 @@ TRANSLATION_LABELS: dict[str, str] = {
 JOB_LABELS: dict[str, str] = {
     "queued": "Waiting",
     "running": "Processing",
+    "stale_running": "Stale",
     "cancelled": "Cancelled",
     "done": "Completed",
     "failed": "Failed",
@@ -59,6 +60,10 @@ def badge_class_for_job(status: str) -> str:
     """Return a CSS badge modifier class for a job status."""
     if status in ("done",):
         return "ok"
-    if status in ("failed",):
+    if status in ("failed", "stale_running"):
         return "bad"
+    if status == "running":
+        return "info"
+    if status == "queued":
+        return "warn"
     return ""

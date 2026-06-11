@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Queue · Weaver{% endblock %}
+{% block content %}
+<section class="queue-hub">
+  {% set page_title = "Translation Queue" %}
+  {% set page_meta = queue.jobs|length ~ " job" ~ ("" if queue.jobs|length == 1 else "s") ~ " across projects" %}
+  {% set page_crumbs = [{"label": "Dashboard", "href": "/ui"}, {"label": "Queue"}] %}
+  {% include "partials/_page_header.html" %}
+
+  <div id="queue-content"
+       hx-get="/ui/queue"
+       hx-trigger="every 3s"
+       hx-target="this"
+       hx-select="#queue-content"
+       hx-swap="outerHTML">
+
+    {% if queue.degraded %}
+    <div class="panel c-panel queue-degraded">
+      <h2 class="panel__title">Project issues</h2>
+      <ul class="degraded-list">
+        {% for d in queue.degraded %}
+        <li class="degraded-row degraded-row--{{ d.state }}">
+          <span class="degraded-row__name">{{ d.name }}</span>
+          <span class="badge bad">{{ d.state | replace("_", " ") }}</span>
+          {% if d.error %}<span class="degraded-row__error">{{ d.error }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if queue.jobs %}
+    <div class="panel c-panel queue-jobs">
+      <table class="jobs-table">
+        <thead>
+          <tr>
+            <th>Project</th>
+            <th>Kind</th>
+            <th>Status</th>
+            <th>Scope</th>
+            <th>Progress</th>
+            <th>Started</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for j in queue.jobs %}
+          <tr class="jobs-row jobs-row--{{ j.status }}">
+            <td>
+              <span class="meta">{{ j.project_name }}</span>
+            </td>
+            <td>{{ j.kind }}</td>
+            <td>
+              <span class="badge job-status job-status--{{ j.status }}">
+                {{ job_status_label(j.status) }}
+              </span>
+            </td>
+            <td class="meta">
+              {{ j.scope or "—" }}{% if j.scope_id %} · {{ j.scope_id }}{% endif %}
+            </td>
+            <td class="meta">
+              {% if j.total_units > 0 %}
+                {{ j.done_units }}/{{ j.total_units }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td class="meta">{{ j.started_at[:19] | replace("T", " ") }}</td>
+            <td>
+              <a href="/ui/projects/{{ j.project_name }}/jobs/{{ j.job_id }}/detail">Detail</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      {% if not queue.degraded %}
+      {% set empty_title = "Queue is empty" %}
+      {% set empty_hint = "Start a translation, batch, export, or parse job from any project. Jobs appear here automatically." %}
+      {% include "partials/_empty_state.html" %}
+      {% endif %}
+    {% endif %}
+
+  </div>
+</section>
+{% endblock %}

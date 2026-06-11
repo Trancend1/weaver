@@ -38,6 +38,7 @@ from weaver.api.routers.ui_admin import router as ui_admin_router
 from weaver.api.routers.ui_candidates import router as ui_candidates_router
 from weaver.api.routers.ui_jobs import router as ui_jobs_router
 from weaver.api.routers.ui_qa import router as ui_qa_router
+from weaver.api.routers.ui_queue import router as ui_queue_router
 from weaver.api.routers.ui_review import router as ui_review_router
 from weaver.api.routers.ui_workspace import router as ui_workspace_router
 from weaver.api.templating import mount_static
@@ -160,6 +161,7 @@ def create_api_app(base_dir: Path | None = None) -> FastAPI:
     app.include_router(ui_router)
     app.include_router(ui_workspace_router)
     app.include_router(ui_jobs_router)
+    app.include_router(ui_queue_router)
     app.include_router(ui_candidates_router)
     app.include_router(ui_review_router)
     app.include_router(ui_admin_router)
