@@ -1,11 +1,5 @@
 {% from "partials/_icons.html" import icon %}
 <aside class="sidebar sidebar--ws-hub" aria-label="Workspace navigation">
-  <div class="sidebar__head">
-    <a class="sidebar__project" href="/ui" title="Workspace">
-      <span class="sidebar__mark" aria-hidden="true">{{ icon("brand") }}</span>
-    </a>
-  </div>
-
   <nav class="sidebar__nav" aria-label="Workspace sections">
 
     <a class="sidebar-item{% if active_nav == 'projects' %} active{% endif %}"
