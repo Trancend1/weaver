@@ -71,12 +71,8 @@
     <a class="btn btn--secondary" href="#import-volume">Import another volume</a>
     {% endif %}
     {% if overview.volumes %}
-    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/chapters/{{ tree.volumes[0].chapters[0].id }}">Open workspace</a>
     <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/candidates">Review candidates</a>
-    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/volumes/{{ tree.volumes[0].id }}/review">Review queue</a>
     <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/qa">Run QA</a>
-    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/volumes/{{ tree.volumes[0].id }}/preview">Reading preview</a>
-    <a class="btn btn--secondary" href="/ui/projects/{{ tree.project_name }}/export/preflight">Export preflight</a>
     {% endif %}
   </div>
 </section>
