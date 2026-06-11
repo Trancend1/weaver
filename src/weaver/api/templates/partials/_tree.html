@@ -18,9 +18,6 @@
                   hx-confirm="Delete volume &quot;{{ v.title }}&quot;? This permanently removes its chapters, translations, and quality history. Glossary and translation memory stay.">Delete volume</button>
         </div>
         <div class="vol-snapshot" id="snapshot-vol-{{ v.id }}">
-          <button type="button" class="btn btn--primary"
-                  hx-get="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/structure/modal"
-                  hx-target="#modal-root" hx-swap="innerHTML">Preview EPUB</button>
           <button type="button" class="btn btn--quiet"
                   hx-get="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/snapshot"
                   hx-target="#snapshot-vol-{{ v.id }}" hx-swap="outerHTML">Inspect status</button>

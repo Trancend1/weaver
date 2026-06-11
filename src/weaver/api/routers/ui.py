@@ -383,41 +383,6 @@ def ui_volume_reparse(name: str, volume_id: int, request: Request) -> HTMLRespon
     )
 
 
-@router.get("/ui/projects/{name}/volumes/{volume_id}/structure/modal", response_class=HTMLResponse)
-def ui_volume_structure_modal(name: str, volume_id: int, request: Request) -> HTMLResponse:
-    """Contextual modal shell for inspecting a volume without leaving the project hub."""
-    from weaver.errors import VolumeNotFoundError as _VNF
-    from weaver.services.epub_reparse import status_for_volume
-
-    base = _base_dir(request)
-    dp = find_project(base, name)
-    if dp is None:
-        raise HTTPException(status_code=404, detail=f"No project named {name!r}.")
-    if dp.error:
-        return _import_error(request, dp.error)
-    tree = project_tree(dp.project_toml, cwd=base, jobs=_jobs(request))
-    volume = next((item for item in tree.volumes if item.id == volume_id), None)
-    if volume is None:
-        raise HTTPException(status_code=404, detail=f"No volume with id {volume_id}.")
-    try:
-        status = status_for_volume(dp.project_toml, volume_id, cwd=base)
-    except _VNF as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except WeaverError as exc:
-        return _import_error(request, str(exc))
-    first_chapter = volume.chapters[0] if volume and volume.chapters else None
-    return templates.TemplateResponse(
-        request,
-        "partials/_preview_modal.html",
-        {
-            "name": name,
-            "volume_id": volume_id,
-            "volume_title": volume.title,
-            "snapshot_status": status,
-            "first_chapter": first_chapter,
-        },
-    )
-
 
 # --- create / import (Stage 11B-1) ------------------------------------------
 
