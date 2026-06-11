@@ -93,7 +93,7 @@ def test_workspace_sidebar_projects_entry_is_active(hub_client: TestClient) -> N
 
 def test_workspace_sidebar_disabled_entries_have_no_links(hub_client: TestClient) -> None:
     html = hub_client.get("/ui").text
-    for disabled in ("Resources", "Providers", "Exports", "Settings"):
+    for disabled in ("Providers", "Exports", "Settings"):
         # Disabled entries render as <span> not <a href=...>
         # Quick check: no href pointing to missing hub routes
         assert f'href="/ui/workspace/{disabled.lower()}"' not in html
@@ -103,6 +103,11 @@ def test_workspace_sidebar_disabled_entries_have_no_links(hub_client: TestClient
 def test_workspace_sidebar_queue_is_enabled(hub_client: TestClient) -> None:
     html = hub_client.get("/ui").text
     assert 'href="/ui/queue"' in html
+
+
+def test_workspace_sidebar_resources_is_enabled(hub_client: TestClient) -> None:
+    html = hub_client.get("/ui").text
+    assert 'href="/ui/resources"' in html
 
 
 # ---------------------------------------------------------------------------

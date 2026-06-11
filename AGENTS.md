@@ -81,7 +81,7 @@ Foundation (v0.6.0) ✅
        Q2 read-path hardening   ✅  (readonly reads, reset/migration relocation, EPUB-hash fix, error fragments, ui.py split)
        Q3 shell + dashboard     ✅  (global workspace shell + dashboard command center)
        Q4 queue hub             ✅  (global translation queue; stale_running distinct)
-       Q5 resources             🟡  NEXT — cross-project glossary/character/style resources hub
+       Q5 resources             ✅  (cross-project glossary/character/style resources hub; read-only via workspace_resources)
        Q6 providers · Q7 export gate+ledger · Q8 analytics             ⬜
        Q9 explorer v2 · Q10 editor panel · Q11 validation (WV-007/008/011) · Q12 cleanup + final gate  ⬜
 ```
@@ -103,11 +103,11 @@ Before starting any stage:
 
 > Required reminder: **"Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Sprint Q (Workspace v2) 🟡 · Q1–Q4 ✅ merged · stage Q5 (Resources hub) next
+### 2.3 Active Phase — Sprint Q (Workspace v2) 🟡 · Q1–Q5 ✅ merged · stage Q6 (Providers hub) next
 
-**Sprint focus:** the cross-project Workspace command center. The hardened read foundation (Q1 identity + read-only index, Q2 read-path hardening) and the first two hubs (Q3 shell+dashboard, Q4 queue) are merged. **Stage Q5 builds the cross-project Resources hub** (glossary / character / style resources surfaced read-only across projects) on the hardened foundation.
+**Sprint focus:** the cross-project Workspace command center. The hardened read foundation (Q1 identity + read-only index, Q2 read-path hardening) and the first four hubs (Q3 shell+dashboard, Q4 queue, Q5 resources) are merged. **Stage Q5 (Resources hub)** is complete — cross-project glossary/character/style resource summary surfaced read-only via `workspace_resources` on the hardened foundation.
 
-**Track(s) active:** T0 (docs — this rewrite), then T1→T2→T3 for Q5 (workflow → HTMX surface → service/read layer), gated by T6/T7/T8 (see §6). **Owner agent:** Backend Engineer (read-layer extension) + Frontend Engineer (hub UI), Product Architect consulted.
+**Track(s) active:** T0 (docs — this update). Next stage Q6 — Providers hub. Gated by T6/T7/T8 (see §6).
 
 **Next:** after Q5 — Q6 providers, Q7 export gate + ledger (migration v11), Q8 analytics, then per-project surfaces Q9–Q11, then Q12 cleanup + final gate + sprint PR.
 
@@ -118,9 +118,7 @@ Before starting any stage:
 - **Q2 — Read-path & failure-visibility hardening** ✅ — `connect_readonly_database` on read paths; `reset_interrupted_segments`/migration off the read path; per-render EPUB hashing removed from Project Overview; swallowed approve/apply failures surfaced; `ui.py` split into `ui_admin`/`ui_candidates`/`ui_jobs`/`ui_qa`/`ui_queue`/`ui_review`/`ui_workspace` (PR-a mechanical, PR-b fixes).
 - **Q3 — Global shell + dashboard** ✅ — `workspace.html` global shell + `dashboard.html` command center; `_workspace_grid`/`_workspace_sidebar` partials; `ui_workspace` router.
 - **Q4 — Queue hub** ✅ — `queue_hub.html` cross-project translation queue (`stale_running` distinct); `ui_queue` router.
-
-**What is next (Q5, this branch):**
-- **Q5 — Resources hub** 🟡 — cross-project glossary/character/style resources, surfaced **read-only** via `workspace_index`. **No global mutable store; no source-file hashing on render.** Scope + acceptance per [SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) stage Q5.
+- **Q5 — Resources hub** ✅ — `services/workspace_resources.py` cross-project glossary/character/style resource summary; `ui_resources.py` router; `resources_hub.html` template; enabled in sidebar.
 
 **Non-goals for Q5** (scope fence): no OCR implementation, no provider expansion, no route rewrite, no SPA/Node, no external queue, no `desktop/` changes, no global mutable resource store, no editing of cross-project resources from the hub (read-only surface this stage).
 
@@ -149,14 +147,14 @@ Before starting any stage:
 
 **Sprint Q** (Workspace v2) — each stage gated per §2.2:
 
-> **Gate Q status: 🟡 IN PROGRESS — Q0 ✅ · Q1 ✅ · Q2 ✅ · Q3 ✅ · Q4 ✅ (all merged) · Q5 next · Q6–Q12 ⬜.**
+> **Gate Q status: 🟡 IN PROGRESS — Q0 ✅ · Q1 ✅ · Q2 ✅ · Q3 ✅ · Q4 ✅ · Q5 ✅ (all merged) · Q6 next · Q6–Q12 ⬜.**
 
 - [x] Q0 — Planning: deep audit, execution plan Q0–Q12, risk register R-01..23, cold-start handoff.
 - [x] Q1 — WV-010: migration v10 (`projects.uuid`, forward + idempotency tests); `project_discovery` uuid + duplicate detection; `workspace_index.py` read-only/mtime-cached/error-isolated/budget-tested; grep-gate; index consumed by zero routes (shipped dark).
 - [x] Q2 — Read paths use `connect_readonly_database` only; reset/migration off read path; zero source-file hashing on render; approve/apply failures surfaced; `ui.py` split (zero behavior change); router-SQL grep-gate → zero.
 - [x] Q3 — Global shell + dashboard command center on the hardened foundation; performance budget met; no SQLite in CLI/web layer.
 - [x] Q4 — Cross-project queue hub (`stale_running` distinct); ADR `010` unviolated; no provider call / no hashing on render.
-- [ ] Q5 — Resources hub: cross-project glossary/character/style surfaced read-only via `workspace_index`; within performance budget; no global mutable store; no source-file hashing on render; failure-visible per Gate B1.
+- [x] Q5 — Resources hub: cross-project glossary/character/style surfaced read-only via `workspace_resources`; within performance budget; no global mutable store; no source-file hashing on render; failure-visible per Gate B1.
 - [ ] Q6–Q8 — Providers hub; Export gate + ledger (migration v11; advisory default preserved per ADR `008`); Analytics.
 - [ ] Q9–Q11 — Content Explorer v2; editor context panel; validation completion (WV-007/008/011; `error` tier only after ADR `013`).
 - [ ] Q12 — Residual cleanup; conditional migration v12; **final gate green** — full suite + pyright 0 + ruff clean + `weaver --help` + `cargo check`/`cargo tauri build`; desktop smoke (≥3 projects, no orphans, both logs); security smoke (traversal rejected, zero key/token in logs/render, no cross-project path leak); performance smoke (index within budget @10 projects, zero render-time hashing).
