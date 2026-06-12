@@ -13,6 +13,7 @@ from weaver.errors import (
 )
 from weaver.providers.deepseek import DeepSeekConfig, DeepSeekProvider
 from weaver.providers.types import (
+    Completion,
     TranslationContext,
     TranslationRequest,
 )
@@ -111,6 +112,40 @@ def test_deepseek_translate_maps_timeout_error() -> None:
 
     with pytest.raises(ProviderTimeout):
         provider.translate(_request())
+
+
+def test_deepseek_complete_returns_text_and_usage() -> None:
+    completions = _StubChatCompletions(
+        [_completion('{"target": "Demon King"}', prompt_tokens=11, completion_tokens=3)]
+    )
+    provider = DeepSeekProvider(client=_StubClient(completions))
+
+    out = provider.complete("return json target", system="sys", max_output_tokens=64)
+
+    assert isinstance(out, Completion)
+    assert out.text == '{"target": "Demon King"}'
+    assert (out.input_tokens, out.output_tokens) == (11, 3)
+    sent = completions.calls[0]
+    assert sent["max_tokens"] == 64
+    messages = sent["messages"]
+    assert isinstance(messages, list)
+    assert messages[0] == {"role": "system", "content": "sys"}
+    assert messages[-1]["content"] == "return json target"
+
+
+def test_deepseek_complete_jsonmode_rejection_is_visible_not_silent() -> None:
+    # A custom/OpenAI-compatible endpoint that rejects response_format=json_object
+    # must surface as a provider error — never a silent fallback/empty success.
+    class BadRequestError(Exception):
+        pass
+
+    completions = _StubChatCompletions(
+        [BadRequestError("response_format json_object unsupported")]
+    )
+    provider = DeepSeekProvider(client=_StubClient(completions))
+
+    with pytest.raises(ProviderResponseError):
+        provider.complete("p mentioning json", max_output_tokens=8)
 
 
 def test_deepseek_translate_maps_auth_error_to_unavailable() -> None:

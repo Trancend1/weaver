@@ -15,7 +15,7 @@ from weaver.errors import (
 from weaver.providers.base import LLMProvider, ProviderStatus
 from weaver.providers.parser import parse_response
 from weaver.providers.prompts import load_repair_prompt, load_system_prompt, render_user_message
-from weaver.providers.types import TranslationRequest, TranslationResponse
+from weaver.providers.types import Completion, TranslationRequest, TranslationResponse
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-chat"
@@ -107,6 +107,22 @@ class DeepSeekProvider(LLMProvider):
                 input_tokens=_usage(repair, "prompt_tokens"),
                 output_tokens=_usage(repair, "completion_tokens"),
             )
+
+    def complete(
+        self, prompt: str, *, system: str | None = None, max_output_tokens: int
+    ) -> Completion:
+        messages: list[dict[str, str]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        response = self._chat_completion(messages=messages, max_tokens=max_output_tokens)
+        content = _extract_content(response)
+        return Completion(
+            text=content,
+            input_tokens=_usage(response, "prompt_tokens"),
+            output_tokens=_usage(response, "completion_tokens"),
+            raw_response=content,
+        )
 
     def healthcheck(self) -> ProviderStatus:
         start = time.perf_counter()
