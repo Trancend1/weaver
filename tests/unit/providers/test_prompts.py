@@ -3,11 +3,36 @@
 from __future__ import annotations
 
 from weaver.providers.prompts import (
+    GLOSSARY_SUGGEST_PROMPT_VERSION,
     load_repair_prompt,
     load_system_prompt,
+    render_glossary_suggestion_prompt,
     render_user_message,
 )
 from weaver.providers.types import GlossaryTerm, TranslationContext
+
+
+def test_glossary_suggestion_prompt_is_grounded_and_jsonmode_safe() -> None:
+    prompt = render_glossary_suggestion_prompt(
+        source="魔王",
+        category="title",
+        examples=["その時、魔王が現れた。"],
+        source_lang="ja",
+        target_lang="en",
+    )
+    assert "魔王" in prompt
+    assert "その時、魔王が現れた。" in prompt
+    assert "json" in prompt.lower()  # json-mode-strict endpoints require it
+    assert '{"target"' in prompt  # the strict shape is requested
+    assert isinstance(GLOSSARY_SUGGEST_PROMPT_VERSION, str)
+
+
+def test_glossary_suggestion_prompt_handles_no_examples() -> None:
+    prompt = render_glossary_suggestion_prompt(
+        source="勇者", category=None, examples=[], source_lang="ja", target_lang="en"
+    )
+    assert "勇者" in prompt
+    assert "json" in prompt.lower()
 
 
 def test_system_prompt_includes_jp_to_en_role() -> None:
