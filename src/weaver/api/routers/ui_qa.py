@@ -24,6 +24,7 @@ from weaver.services.project_discovery import find_project
 from weaver.services.project_paths import resolve_database_path
 from weaver.services.translation_qa import analyze_chapter, analyze_novel, analyze_volume
 from weaver.storage.db import connect_readonly_database
+from weaver.storage.projects import get_first_project_id
 from weaver.storage.volumes import list_volumes
 
 router = APIRouter(tags=["ui"], include_in_schema=False)
@@ -237,10 +238,10 @@ def _snapshot_export_advisories(project_toml: Path, base: Path) -> list[dict[str
     try:
         db_path = resolve_database_path(project_toml, cwd=base)
         with closing(connect_readonly_database(db_path)) as connection:
-            project = connection.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
-            if project is None:
+            project_id = get_first_project_id(connection)
+            if project_id is None:
                 return advisories
-            volumes = list_volumes(connection, int(project["id"]))
+            volumes = list_volumes(connection, project_id)
     except Exception:  # noqa: BLE001 - non-fatal
         return advisories
 
