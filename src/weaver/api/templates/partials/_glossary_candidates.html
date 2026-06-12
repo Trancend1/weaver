@@ -48,13 +48,9 @@
         <td class="num">{{ c.frequency }}</td>
         <td class="meta">{{ c.category or "—" }}</td>
         <td>
-          <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/edit"
-                hx-swap="none" hx-disabled-elt="find button">
-            <input name="target" value="{{ c.target or '' }}" placeholder="target (EN)"
-                   aria-label="Target for '{{ c.source }}' (English)">
-            <button type="submit" data-gc-action="edit">Save &amp; approve</button>
-          </form>
-          <p class="hint">Saves this target as the approved glossary term.</p>
+          {% with candidate_id = c.id, current_target = c.target, suggestion = none, error = none %}
+            {% include "partials/_glossary_candidate_edit.html" %}
+          {% endwith %}
         </td>
         <td>
           <div class="seg-review-pills" role="group" aria-label="Review action for {{ c.source }}">

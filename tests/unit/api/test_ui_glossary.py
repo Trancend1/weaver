@@ -209,3 +209,15 @@ def test_examples_fragment_unknown_source_is_empty_not_error(gloss_client: TestC
     )
     assert frag.status_code == 200
     assert "No source sentences found" in frag.text
+
+
+# --- Sprint R: AI target suggestion UI ---------------------------------------
+
+
+def test_candidate_row_has_suggest_button_and_edit_slot(gloss_client: TestClient) -> None:
+    name = _name(gloss_client)
+    page = gloss_client.get(f"/ui/projects/{name}/glossary").text
+    assert "Suggest with AI" in page
+    assert "(LLM call)" in page  # cost visible BEFORE click (gate 6a)
+    assert 'id="cand-edit-' in page  # swappable edit slot
+    assert "/glossary/candidates/" in page and "/suggest" in page
