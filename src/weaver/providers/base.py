@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from weaver.providers.types import TranslationRequest, TranslationResponse
+from weaver.providers.types import Completion, TranslationRequest, TranslationResponse
 
 
 @dataclass(frozen=True)
@@ -38,3 +38,14 @@ class LLMProvider(ABC):
     @abstractmethod
     def healthcheck(self) -> ProviderStatus:
         """Probe upstream availability without translating real content."""
+
+    @abstractmethod
+    def complete(
+        self, prompt: str, *, system: str | None = None, max_output_tokens: int
+    ) -> Completion:
+        """Return a raw text completion + token usage for an opaque prompt.
+
+        Transport primitive only — it carries no domain knowledge. Callers build
+        their own prompt and parse/validate the result in a service. Implementations
+        may raise any `weaver.errors.ProviderError` subclass on failure.
+        """
