@@ -17,6 +17,9 @@ class _UnhealthyProvider(LLMProvider):
     def translate(self, request: TranslationRequest) -> TranslationResponse:  # pragma: no cover
         raise NotImplementedError
 
+    def complete(self, prompt, *, system=None, max_output_tokens):  # pragma: no cover
+        raise NotImplementedError
+
     def healthcheck(self) -> ProviderStatus:
         return ProviderStatus(
             healthy=False,

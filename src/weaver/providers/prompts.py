@@ -56,3 +56,36 @@ def render_user_message(context: TranslationContext, *, source_text: str) -> str
         previous_segments=context.previous_segments,
         source_text=source_text,
     )
+
+
+GLOSSARY_SUGGEST_PROMPT_VERSION = "glossary-suggest-1.0"
+
+
+def render_glossary_suggestion_prompt(
+    *,
+    source: str,
+    category: str | None,
+    examples: list[str],
+    source_lang: str,
+    target_lang: str,
+) -> str:
+    """Build the term-suggestion prompt (domain content; the provider sees an opaque string).
+
+    Requests a strict minimal JSON object so the service can parse + validate. The literal
+    word "json" is present so OpenAI-compatible json-mode endpoints accept the request.
+    """
+
+    lines = [
+        f"You are a translation-glossary assistant for {source_lang} to {target_lang}.",
+        f"Propose a concise {target_lang} glossary target for this {source_lang} term.",
+        'Return ONLY a strict JSON object of the form {"target": "..."} and nothing else.',
+        "The target must be a short term or noun phrase, not a sentence, not multiline.",
+        "",
+        f"Term: {source}",
+    ]
+    if category:
+        lines.append(f"Category: {category}")
+    if examples:
+        lines.append("Example sentences (for context):")
+        lines.extend(f"- {example}" for example in examples)
+    return "\n".join(lines)

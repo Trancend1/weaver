@@ -15,7 +15,7 @@ from weaver.errors import (
 from weaver.providers.base import LLMProvider, ProviderStatus
 from weaver.providers.parser import parse_response
 from weaver.providers.prompts import load_repair_prompt, load_system_prompt, render_user_message
-from weaver.providers.types import TranslationRequest, TranslationResponse
+from weaver.providers.types import Completion, TranslationRequest, TranslationResponse
 
 DEFAULT_MODEL = "gemini-1.5-flash"
 DEFAULT_TEMPERATURE = 0.3
@@ -85,6 +85,24 @@ class GeminiProvider(LLMProvider):
                 input_tokens=_usage(repair, "prompt_token_count"),
                 output_tokens=_usage(repair, "candidates_token_count"),
             )
+
+    def complete(
+        self, prompt: str, *, system: str | None = None, max_output_tokens: int
+    ) -> Completion:
+        full = f"{system}\n\n{prompt}" if system else prompt
+        try:
+            response = self._client.generate_content(
+                full, generation_config={"max_output_tokens": max_output_tokens}
+            )
+        except Exception as exc:  # noqa: BLE001 — mapped to a typed ProviderError
+            raise _translate_gemini_error(exc) from exc
+        text = _extract_text(response)
+        return Completion(
+            text=text,
+            input_tokens=_usage(response, "prompt_token_count"),
+            output_tokens=_usage(response, "candidates_token_count"),
+            raw_response=text,
+        )
 
     def healthcheck(self) -> ProviderStatus:
         start = time.perf_counter()

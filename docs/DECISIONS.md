@@ -19,6 +19,7 @@ Active ADRs only. Active numbering was reset to `001` during the controlled rese
 | [011](decisions/011-project-terminology-consolidation.md) | Project Terminology Consolidation | Retire user-facing "Novel" label; schema (`projects`/`volumes`) unchanged. Supersedes ADR `006` label only. Locks before Sprint H. |
 | [012](decisions/012-image-preview-ocr-security-gate.md) | Image Preview / OCR Security Gate | Allows read-only manifest-backed image preview with MIME/size/path controls; keeps OCR contract-only until explicit future approval. |
 | [013](decisions/013-qa-error-severity-tier.md) | QA `error` Severity Tier (Rejected/Deferred) | Sprint Q11 keeps the 3-tier `info\|warning\|critical` contract; no `error` tier. Structure findings (WV-007) map EPUB `error`→`warning` (advisory, never block Final export). Re-open point documented. |
+| [014](decisions/014-provider-complete-primitive-and-glossary-suggestion.md) | Provider `complete()` Primitive + Glossary Target Suggestion | Sprint R adds a domain-agnostic `complete()` transport primitive (4 providers); on-demand AI glossary-target suggestion lives in a service (prompt+validation), ephemeral (no migration), provider fully config-driven (**no hidden vendor default**). Gate B1: provider called only on explicit POST. |
 
 ## ADR rules
 

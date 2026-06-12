@@ -7,9 +7,20 @@ import pytest
 from weaver.errors import ProviderResponseError
 from weaver.providers.fake import FakeProvider
 from weaver.providers.types import (
+    Completion,
     TranslationContext,
     TranslationRequest,
 )
+
+
+def test_fake_complete_is_deterministic_and_parseable() -> None:
+    provider = FakeProvider(completion='{"target": "[FAKE]"}')
+    out = provider.complete("any prompt mentioning json", max_output_tokens=64)
+    assert isinstance(out, Completion)
+    assert out.text == '{"target": "[FAKE]"}'
+    assert out.input_tokens is None and out.output_tokens is None
+    # deterministic across calls
+    assert provider.complete("other", max_output_tokens=8).text == '{"target": "[FAKE]"}'
 
 
 def _request(source: str = "テスト") -> TranslationRequest:

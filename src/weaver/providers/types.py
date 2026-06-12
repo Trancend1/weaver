@@ -71,3 +71,17 @@ class TranslationResponse:
     raw_response: str
     input_tokens: int | None
     output_tokens: int | None
+
+
+@dataclass(frozen=True)
+class Completion:
+    """Raw text completion + token usage from a provider's `complete()` primitive.
+
+    Domain-agnostic transport result: `text` is the model's verbatim output.
+    `input_tokens`/`output_tokens` are None when the provider does not report usage.
+    """
+
+    text: str
+    input_tokens: int | None
+    output_tokens: int | None
+    raw_response: str

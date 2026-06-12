@@ -208,6 +208,9 @@ class AlwaysFailProvider(LLMProvider):
             "Next command: use FakeProvider for green-path testing."
         )
 
+    def complete(self, prompt, *, system=None, max_output_tokens):  # pragma: no cover
+        raise NotImplementedError
+
     def healthcheck(self) -> ProviderStatus:
         return ProviderStatus(
             healthy=True,
@@ -235,6 +238,9 @@ class CapturingProvider(LLMProvider):
             input_tokens=10,
             output_tokens=5,
         )
+
+    def complete(self, prompt, *, system=None, max_output_tokens):  # pragma: no cover
+        raise NotImplementedError
 
     def healthcheck(self) -> ProviderStatus:
         return ProviderStatus(

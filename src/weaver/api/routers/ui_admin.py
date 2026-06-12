@@ -37,6 +37,7 @@ from weaver.services.glossary_review import (
     list_pending,
     list_project_glossary_conflicts,
 )
+from weaver.services.glossary_suggestion import suggest_glossary_target
 from weaver.services.project_discovery import discover_projects, find_project
 
 router = APIRouter(tags=["ui"], include_in_schema=False)
@@ -256,6 +257,29 @@ def glossary_examples_fragment(
         "partials/_glossary_examples.html",
         {"examples": examples, "source": source},
     )
+
+
+@router.post(
+    "/ui/projects/{name}/glossary/candidates/{candidate_id}/suggest",
+    response_class=HTMLResponse,
+)
+def glossary_candidate_suggest(name: str, candidate_id: int, request: Request) -> HTMLResponse:
+    """On-demand AI target suggestion for one candidate (explicit click only).
+
+    Renders the candidate edit-form fragment with the target pre-filled + a cost line.
+    A provider is called ONLY here (never on render — Gate B1). Failures are shown in
+    the fragment; the input is left empty (never a silent/garbage fill). Declared before
+    the generic ``/{action}`` route so it is not swallowed as an unknown action.
+    """
+    base = _base_dir(request)
+    ctx: dict[str, object] = {"name": name, "candidate_id": candidate_id, "current_target": None}
+    try:
+        ctx["suggestion"] = suggest_glossary_target(
+            _project_toml(request, name), candidate_id, cwd=base
+        )
+    except WeaverError as exc:
+        ctx["error"] = str(exc)
+    return templates.TemplateResponse(request, "partials/_glossary_candidate_edit.html", ctx)
 
 
 @router.post(
