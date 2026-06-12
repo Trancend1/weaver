@@ -9,7 +9,7 @@ import pytest
 from weaver.errors import ProviderResponseError, ProviderTimeout, ProviderUnavailable
 from weaver.providers import gemini as gemini_module
 from weaver.providers.gemini import GeminiConfig, GeminiProvider
-from weaver.providers.types import TranslationContext, TranslationRequest
+from weaver.providers.types import Completion, TranslationContext, TranslationRequest
 
 
 def _request() -> TranslationRequest:
@@ -42,9 +42,11 @@ class _StubModel:
     def __init__(self, responses: list[object]) -> None:
         self._responses = list(responses)
         self.calls: list[str] = []
+        self.gen_kwargs: list[dict[str, object]] = []
 
-    def generate_content(self, prompt: str) -> object:
+    def generate_content(self, prompt: str, **kwargs: object) -> object:
         self.calls.append(prompt)
+        self.gen_kwargs.append(kwargs)
         result = self._responses.pop(0)
         if isinstance(result, Exception):
             raise result
@@ -138,6 +140,19 @@ def test_gemini_constructor_without_client_or_env_raises(monkeypatch) -> None:
 
     with pytest.raises(ProviderUnavailable):
         GeminiProvider(config=GeminiConfig())
+
+
+def test_gemini_complete_combines_system_and_returns_usage() -> None:
+    model = _StubModel([_gemini_response('{"target": "Hero"}', prompt_tokens=9, output_tokens=2)])
+    provider = GeminiProvider(client=model)
+
+    out = provider.complete("user prompt json", system="SYS", max_output_tokens=32)
+
+    assert isinstance(out, Completion)
+    assert out.text == '{"target": "Hero"}'
+    assert (out.input_tokens, out.output_tokens) == (9, 2)
+    assert model.calls[0] == "SYS\n\nuser prompt json"
+    assert model.gen_kwargs[0]["generation_config"] == {"max_output_tokens": 32}
 
 
 def test_gemini_env_api_key_constant_is_the_env_var_name_not_a_literal_key() -> None:
