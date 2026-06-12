@@ -24,12 +24,12 @@
     <p>{{ '%.0f'|format(progress_pct) }}% ready · manual edits are protected unless force retranslate is chosen.</p>
   </div>
 
-  <div class="workspace-summary" aria-label="Workspace status summary">
-    <span><b>{{ ws.segment_count }}</b>Total</span>
-    <span><b>{{ ws.translated_count }}</b>AI translated</span>
-    <span><b>{{ counts.manual }}</b>Manual</span>
-    <span><b>{{ counts.pending }}</b>Pending</span>
-    <span><b>{{ counts.failed + counts.stale }}</b>Failed/stale</span>
+  <div class="workspace-summary" role="group" aria-label="Filter segments by status">
+    <button type="button" class="ws-stat is-active" data-ws-filter="all" aria-pressed="true"><b>{{ ws.segment_count }}</b>Total</button>
+    <button type="button" class="ws-stat" data-ws-filter="translated" aria-pressed="false"><b>{{ ws.translated_count }}</b>AI translated</button>
+    <button type="button" class="ws-stat" data-ws-filter="manual" aria-pressed="false"><b>{{ counts.manual }}</b>Manual</button>
+    <button type="button" class="ws-stat" data-ws-filter="pending" aria-pressed="false"><b>{{ counts.pending }}</b>Pending</button>
+    <button type="button" class="ws-stat" data-ws-filter="failed,stale" aria-pressed="false"><b>{{ counts.failed + counts.stale }}</b>Failed/stale</button>
   </div>
 
   <div class="workspace-actions">
@@ -58,14 +58,9 @@
     </div>
   </div>
   <div class="workspace-tools" aria-label="Workspace utilities">
-    <button type="button" data-ws-filter="all">Show all</button>
-    <button type="button" data-ws-filter="pending">Pending</button>
-    <button type="button" data-ws-filter="manual">Manual</button>
-    <button type="button" data-ws-filter="failed,stale">Failed/stale</button>
-    <button type="button" data-ws-jump="pending">Next untranslated</button>
-    <button type="button" data-ws-jump="failed,stale">Next failed/stale</button>
-    <button type="button" data-ws-collapse="translated">Collapse translated</button>
-    <span class="shortcut-hint">Shortcuts: Alt+J next pending · Ctrl/⌘+S save focused segment</span>
+    <button type="button" data-ws-jump="pending,failed,stale">Jump to next issue</button>
+    <button type="button" data-ws-collapse="translated" aria-pressed="false">Collapse translated</button>
+    <span class="shortcut-hint">Tip: status chips above filter the list · Alt+J jumps to the next issue · Ctrl/⌘+S saves the focused segment</span>
   </div>
   {% set name = ws.project_name %}
   {% set chapter_id = ws.chapter_id %}
@@ -115,6 +110,31 @@
       const show = value === "all" || wanted.includes(seg.dataset.status);
       seg.classList.toggle("is-filter-hidden", !show);
     });
+    document.querySelectorAll("[data-ws-filter]").forEach(function (btn) {
+      const active = btn.dataset.wsFilter === value;
+      btn.classList.toggle("is-active", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+  }
+  // Review pills: update the badge + active pill immediately on click (no fragment
+  // swap, no page reload). The POST runs in the background (hx-swap="none"); a failure
+  // is surfaced by the htmx:afterRequest handler below. data-* attrs carry the
+  // server-rendered label/colour so this needs no status-enum logic.
+  function applyReview(pill) {
+    const seg = pill.closest(".ws-seg");
+    if (!seg) return;
+    const badge = seg.querySelector(".seg-review-status");
+    if (badge) {
+      const extra = pill.dataset.reviewBadge ? " " + pill.dataset.reviewBadge : "";
+      badge.className = "badge c-badge seg-review-status seg-review-status--" + pill.dataset.reviewStatus + extra;
+      badge.textContent = pill.dataset.reviewLabel;
+      badge.classList.remove("review-save-failed");
+    }
+    seg.querySelectorAll(".review-pill").forEach(function (p) {
+      const active = p === pill;
+      p.classList.toggle("is-active", active);
+      p.setAttribute("aria-pressed", active ? "true" : "false");
+    });
   }
   function jumpTo(value) {
     const wanted = statusList(value);
@@ -138,9 +158,14 @@
   document.addEventListener("click", function (e) {
     const button = e.target.closest("button");
     if (!button) return;
+    if (button.dataset.reviewStatus) applyReview(button);
     if (button.dataset.wsFilter) setFilter(button.dataset.wsFilter);
     if (button.dataset.wsJump) jumpTo(button.dataset.wsJump);
-    if (button.dataset.wsCollapse) document.body.classList.toggle("ws-collapse-translated");
+    if (button.dataset.wsCollapse) {
+      const collapsed = document.body.classList.toggle("ws-collapse-translated");
+      button.setAttribute("aria-pressed", collapsed ? "true" : "false");
+      button.textContent = collapsed ? "Expand translated" : "Collapse translated";
+    }
     if (button.dataset.copyTarget) {
       const target = document.querySelector(button.dataset.copyTarget);
       if (target && navigator.clipboard) navigator.clipboard.writeText(target.value || target.textContent || "");
@@ -154,8 +179,18 @@
     }
   });
   document.addEventListener("keydown", function (e) {
-    if (e.altKey && e.key.toLowerCase() === "j") { e.preventDefault(); jumpTo("pending"); }
+    if (e.altKey && e.key.toLowerCase() === "j") { e.preventDefault(); jumpTo("pending,failed,stale"); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); saveFocused(); }
+  });
+  // A review POST that fails server-side must not look successful (anti-slop gate 5):
+  // mark the optimistically-updated badge as failed so the user knows to retry.
+  document.body.addEventListener("htmx:afterRequest", function (e) {
+    const elt = e.detail && e.detail.elt;
+    const pill = elt && elt.closest ? elt.closest(".review-pill") : null;
+    if (!pill || (e.detail && e.detail.successful)) return;
+    const seg = pill.closest(".ws-seg");
+    const badge = seg && seg.querySelector(".seg-review-status");
+    if (badge) { badge.classList.add("bad", "review-save-failed"); badge.textContent = "Save failed — retry"; }
   });
   document.body.addEventListener("htmx:afterSwap", function (e) {
     const el = e.target;

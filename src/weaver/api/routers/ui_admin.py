@@ -200,6 +200,12 @@ def glossary_candidates_fragment(
     return _candidates_fragment(request, name, offset=offset, find=find)
 
 
+@router.get("/ui/projects/{name}/glossary/terms", response_class=HTMLResponse)
+def glossary_terms_fragment(name: str, request: Request) -> HTMLResponse:
+    """Approved-terms table fragment (used to live-refresh after a candidate approval)."""
+    return _terms_fragment(request, name)
+
+
 @router.post(
     "/ui/projects/{name}/glossary/candidates/{candidate_id}/{action}",
     response_class=HTMLResponse,
@@ -211,22 +217,16 @@ def glossary_candidate_action(
     request: Request,
     target: str | None = Form(None),
     notes: str | None = Form(None),
-    offset: int = Form(0),
-    find: str | None = Form(None),
 ) -> HTMLResponse:
-    """Approve / edit / reject one candidate, then re-render the candidate list."""
+    """Approve / edit / reject one candidate (background write; UI updates optimistically).
+
+    The row feedback, counts, and Approved-terms refresh are driven client-side
+    (``hx-swap="none"`` + the script in ``glossary.html``). This endpoint only persists
+    and reports status: ``204`` on success, ``404``/``422`` with a message on failure
+    (HTMX surfaces the non-2xx so the optimistic row is reverted — no silent success).
+    Unknown actions (e.g. the removed ``translate`` stub) fail here with a clear message.
+    """
     base = _base_dir(request)
-    if action == "translate":
-        return _candidates_fragment(
-            request,
-            name,
-            offset=offset,
-            find=find,
-            error=(
-                "AI glossary target translation is not wired yet. "
-                "No candidate was approved or applied."
-            ),
-        )
     try:
         act_on_candidate(
             _project_toml(request, name),
@@ -237,10 +237,10 @@ def glossary_candidate_action(
             notes=_opt(notes),
         )
     except GlossaryCandidateNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return HTMLResponse(str(exc), status_code=404)
     except (ValueError, WeaverError) as exc:
-        return _candidates_fragment(request, name, offset=offset, find=find, error=str(exc))
-    return _candidates_fragment(request, name, offset=offset, find=find)
+        return HTMLResponse(str(exc), status_code=422)
+    return HTMLResponse("", status_code=204)
 
 
 @router.get("/ui/projects/{name}/glossary/diff", response_class=HTMLResponse)

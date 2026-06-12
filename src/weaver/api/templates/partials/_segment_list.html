@@ -77,8 +77,8 @@
             <tr class="segment-row segment-row--{{ seg.status }}">
               <td class="num">{{ seg.block_order }}</td>
               <td class="meta">{{ seg.kind }}</td>
-              <td><span class="badge seg-status seg-status--{{ seg.status }}">{{ seg.status | replace("_", " ") }}</span></td>
-              <td><span class="badge dim">{{ seg.review_status | replace("_", " ") }}</span></td>
+              <td><span class="badge seg-status seg-status--{{ seg.status }} {{ badge_class_for_translation(seg.status) }}">{{ translation_status_label(seg.status) }}</span></td>
+              <td><span class="badge seg-review-status seg-review-status--{{ seg.review_status }} {{ badge_class_for_review(seg.review_status) }}">{{ review_status_label(seg.review_status) }}</span></td>
               <td class="segment-row__actions">
                 <a href="/ui/projects/{{ project_name }}/chapters/{{ seg.chapter_id }}#seg-{{ seg.id }}">Open in editor</a>
                 <a class="meta" href="/ui/projects/{{ project_name }}/chapters/{{ seg.chapter_id }}/preview">Preview</a>

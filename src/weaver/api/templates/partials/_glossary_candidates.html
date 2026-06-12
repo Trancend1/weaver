@@ -1,8 +1,10 @@
-<div id="glossary-candidates">
+<div id="glossary-candidates" data-project="{{ name }}">
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-  <p class="meta">
-    pending {{ page.counts.pending }} · approved {{ page.counts.approved }} · rejected {{ page.counts.rejected }}
-    ({{ page.total_pending }} matching)
+  <p class="meta" id="glossary-candidate-counts">
+    pending <b data-count="pending">{{ page.counts.pending }}</b> ·
+    approved <b data-count="approved">{{ page.counts.approved }}</b> ·
+    rejected <b data-count="rejected">{{ page.counts.rejected }}</b>
+    (<span data-count="matching">{{ page.total_pending }}</span> matching)
   </p>
 
   <form class="inline-form" hx-get="/ui/projects/{{ name }}/glossary/candidates"
@@ -18,43 +20,47 @@
   </form>
 
   {% if page.items %}
+  {# Review actions update each row optimistically in JS (instant, no reload) and POST in
+     the background (hx-swap="none"). On success the row becomes a confirmation and (for
+     approve/edit) the Approved-terms table refreshes; a failed POST restores the row and
+     shows the error. Bulk + keyboard (a/r/e/j/k) are wired in glossary.html. #}
+  <div class="bulk-bar" role="group" aria-label="Bulk review">
+    <label><input type="checkbox" data-gc-selectall aria-label="Select all candidates on this page"> Select all</label>
+    <button type="button" data-gc-bulk="approve" disabled>Approve selected (<span data-gc-selcount>0</span>)</button>
+    <button type="button" data-gc-bulk="reject" disabled>Reject selected (<span data-gc-selcount>0</span>)</button>
+    <span class="shortcut-hint">Keys: j/k move · a approve · r reject · e edit · x select</span>
+  </div>
   <div class="table-scroll">
   <table class="grid">
-    <thead><tr><th>Source</th><th class="num">Freq</th><th>Target</th><th>Review action</th></tr></thead>
+    <thead><tr><th></th><th>Source</th><th class="num">Freq</th><th>Category</th><th>Target</th><th>Review action</th></tr></thead>
     <tbody>
       {% for c in page.items %}
-      <tr>
+      <tr id="cand-{{ c.id }}" data-cand-id="{{ c.id }}" data-cand-source="{{ c.source }}" tabindex="-1">
+        <td><input type="checkbox" class="gc-select" aria-label="Select {{ c.source }}"></td>
         <td>{{ c.source }}</td>
         <td class="num">{{ c.frequency }}</td>
+        <td class="meta">{{ c.category or "—" }}</td>
         <td>
           <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/edit"
-                hx-target="#glossary-candidates" hx-swap="outerHTML">
-            <input type="hidden" name="offset" value="{{ page.offset }}">
-            <input type="hidden" name="find" value="{{ find }}">
-            <input name="target" value="{{ c.target or '' }}" placeholder="target (EN)" aria-label="Target for '{{ c.source }}' (English)">
-            <button type="submit">Edit target</button>
+                hx-swap="none" hx-disabled-elt="find button">
+            <input name="target" value="{{ c.target or '' }}" placeholder="target (EN)"
+                   aria-label="Target for '{{ c.source }}' (English)">
+            <button type="submit" data-gc-action="edit">Save &amp; approve</button>
           </form>
-          <p class="hint">Editing saves this target as the approved glossary term.</p>
+          <p class="hint">Saves this target as the approved glossary term.</p>
         </td>
         <td>
-          <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/approve"
-                hx-target="#glossary-candidates" hx-swap="outerHTML" style="display:inline">
-            <input type="hidden" name="offset" value="{{ page.offset }}">
-            <input type="hidden" name="find" value="{{ find }}">
-            <button type="submit">Approve existing target</button>
-          </form>
-          <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/translate"
-                hx-target="#glossary-candidates" hx-swap="outerHTML" style="display:inline">
-            <input type="hidden" name="offset" value="{{ page.offset }}">
-            <input type="hidden" name="find" value="{{ find }}">
-            <button type="submit">Translate target with AI</button>
-          </form>
-          <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/reject"
-                hx-target="#glossary-candidates" hx-swap="outerHTML" style="display:inline">
-            <input type="hidden" name="offset" value="{{ page.offset }}">
-            <input type="hidden" name="find" value="{{ find }}">
-            <button type="submit">Reject</button>
-          </form>
+          <div class="seg-review-pills" role="group" aria-label="Review action for {{ c.source }}">
+            <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/approve"
+                  hx-swap="none" hx-disabled-elt="find button" style="display:inline">
+              <button type="submit" data-gc-action="approve" data-gc-target="{{ c.target or '' }}"
+                      {% if not c.target %}disabled title="No existing target — use Save &amp; approve"{% endif %}>Approve target</button>
+            </form>
+            <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/reject"
+                  hx-swap="none" hx-disabled-elt="find button" style="display:inline">
+              <button type="submit" data-gc-action="reject" class="link-btn link-btn--danger">Reject</button>
+            </form>
+          </div>
         </td>
       </tr>
       {% endfor %}

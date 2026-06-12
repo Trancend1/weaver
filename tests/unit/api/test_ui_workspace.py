@@ -64,9 +64,12 @@ def test_workspace_renders_workflow_toolbar_and_progress(ws_client: TestClient) 
     chapter_id = _first_chapter_id(ws_client, name)
     page = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}").text
     assert "workspace-tools" in page
-    assert "Next untranslated" in page
+    assert "Jump to next issue" in page
     assert "Collapse translated" in page
     assert "workspace-summary" in page
+    # Status chips double as clickable filters (count + filter unified)
+    assert 'data-ws-filter="pending"' in page
+    assert 'class="ws-stat' in page
     assert "workspace-progress" in page
     assert "Translate untranslated / empty segments" in page
     assert "Manual source of truth" in page or "Needs translation" in page

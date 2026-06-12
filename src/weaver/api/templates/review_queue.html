@@ -53,19 +53,23 @@
               {{ translation_status_label(item.translation_status) }}
             </span>
           </td>
-          <td>
-            <span class="badge c-badge seg-review-status--{{ item.review_status }}">
-              {{ item.review_status }}
+          <td id="qrev-{{ item.segment_id }}">
+            <span class="badge c-badge seg-review-status seg-review-status--{{ item.review_status }} {{ badge_class_for_review(item.review_status) }}">
+              {{ review_status_label(item.review_status) }}
             </span>
           </td>
           <td>
             <a class="link-btn" href="/ui/projects/{{ project_name }}/chapters/{{ item.chapter_id }}">Open</a>
+            {# Reuse the shared review endpoint; hx-select grabs only the review badge so a
+               table cell (not the whole row) is swapped — the row's <tr> is never replaced. #}
             <button type="button" class="link-btn"
                     hx-post="/ui/projects/{{ project_name }}/segments/{{ item.segment_id }}/review?review_status=approved"
-                    hx-target="closest tr" hx-swap="outerHTML">Approve</button>
+                    hx-target="#qrev-{{ item.segment_id }}" hx-swap="innerHTML"
+                    hx-select=".seg-review-status">Approve</button>
             <button type="button" class="link-btn"
                     hx-post="/ui/projects/{{ project_name }}/segments/{{ item.segment_id }}/review?review_status=needs_revision"
-                    hx-target="closest tr" hx-swap="outerHTML">Needs revision</button>
+                    hx-target="#qrev-{{ item.segment_id }}" hx-swap="innerHTML"
+                    hx-select=".seg-review-status">Needs revision</button>
           </td>
         </tr>
         {% endfor %}

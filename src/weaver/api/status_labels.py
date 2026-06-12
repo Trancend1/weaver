@@ -21,6 +21,15 @@ TRANSLATION_LABELS: dict[str, str] = {
     "skipped": "Skipped",
 }
 
+# Review status (per segment, human axis) — mirrors WV-003 / SOURCEOFARCHITECTURE §5.2
+REVIEW_LABELS: dict[str, str] = {
+    "not_reviewed": "Not reviewed",
+    "needs_review": "Needs review",
+    "needs_revision": "Needs revision",
+    "approved": "Reviewed",
+    "rejected": "Rejected",
+}
+
 # Job status (per job) — mirrors SOURCEOFARCHITECTURE §5.5
 JOB_LABELS: dict[str, str] = {
     "queued": "Waiting",
@@ -43,6 +52,22 @@ _JOB_ORDER = {"queued": 0, "running": 1, "cancelled": 2, "done": 3, "failed": 4}
 def job_status_label(status: str) -> str:
     """Return the canonical user-facing label for a job status."""
     return JOB_LABELS.get(status, status)
+
+
+def review_status_label(status: str) -> str:
+    """Return the canonical user-facing label for a segment review status."""
+    return REVIEW_LABELS.get(status, status)
+
+
+def badge_class_for_review(status: str) -> str:
+    """Return a CSS badge modifier class for a review status."""
+    if status == "approved":
+        return "ok"
+    if status in ("needs_revision", "rejected"):
+        return "bad"
+    if status == "needs_review":
+        return "warn"
+    return ""
 
 
 def badge_class_for_translation(status: str) -> str:
