@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
 
 from weaver.errors import ConfigError, GlossaryTermNotFoundError
@@ -21,12 +22,29 @@ from weaver.providers.types import GlossaryTerm
 from weaver.services.project_paths import resolve_database_path
 from weaver.storage.db import connect_database, connect_readonly_database, transaction
 from weaver.storage.glossary import (
+    count_glossary_terms,
     delete_glossary_term,
     get_glossary_term,
     list_glossary_terms,
     upsert_glossary_term,
 )
 from weaver.storage.projects import ProjectRecord, get_project
+
+DEFAULT_TERMS_PAGE = 20
+
+
+@dataclass(frozen=True)
+class TermsPage:
+    """One page of approved glossary terms plus the (filtered) total.
+
+    ``total`` reflects the current ``find`` filter so pagination is correct.
+    """
+
+    items: tuple[GlossaryTerm, ...]
+    total: int
+    offset: int
+    limit: int
+    find: str | None = None
 
 
 def list_terms(project_toml: Path, *, cwd: Path | None = None) -> tuple[GlossaryTerm, ...]:
@@ -36,6 +54,34 @@ def list_terms(project_toml: Path, *, cwd: Path | None = None) -> tuple[Glossary
     with closing(connect_readonly_database(db_path)) as connection:
         project = _load_single_project(connection)
         return tuple(list_glossary_terms(connection, project_id=project.id))
+
+
+def list_terms_page(
+    project_toml: Path,
+    *,
+    cwd: Path | None = None,
+    offset: int = 0,
+    limit: int = DEFAULT_TERMS_PAGE,
+    find: str | None = None,
+) -> TermsPage:
+    """Return one page of approved glossary terms plus the filtered total.
+
+    Read-only counterpart to :func:`list_terms` for the paginated/searchable web
+    admin table. When ``find`` is set, only terms whose JP source or EN target
+    contains it (case-insensitive) are returned and counted.
+    """
+
+    offset = max(offset, 0)
+    limit = max(limit, 1)
+    needle = (find or "").strip() or None
+    db_path = resolve_database_path(project_toml, cwd=cwd)
+    with closing(connect_readonly_database(db_path)) as connection:
+        project = _load_single_project(connection)
+        items = list_glossary_terms(
+            connection, project_id=project.id, find=needle, offset=offset, limit=limit
+        )
+        total = count_glossary_terms(connection, project_id=project.id, find=needle)
+    return TermsPage(items=tuple(items), total=total, offset=offset, limit=limit, find=needle)
 
 
 def add_term(

@@ -37,7 +37,14 @@
       {% for c in page.items %}
       <tr id="cand-{{ c.id }}" data-cand-id="{{ c.id }}" data-cand-source="{{ c.source }}" tabindex="-1">
         <td><input type="checkbox" class="gc-select" aria-label="Select {{ c.source }}"></td>
-        <td>{{ c.source }}</td>
+        <td>
+          {{ c.source }}
+          <button type="button" class="link-btn"
+                  hx-get="/ui/projects/{{ name }}/glossary/examples?source={{ c.source|urlencode }}"
+                  hx-target="#cand-ex-{{ c.id }}" hx-swap="innerHTML"
+                  aria-label="Show example sentences for {{ c.source }}">Examples</button>
+          <div id="cand-ex-{{ c.id }}" class="cand-examples"></div>
+        </td>
         <td class="num">{{ c.frequency }}</td>
         <td class="meta">{{ c.category or "—" }}</td>
         <td>

@@ -33,6 +33,7 @@ from weaver.services import translation_memory as tm_service
 from weaver.services.glossary_diff import glossary_diff
 from weaver.services.glossary_review import (
     act_on_candidate,
+    examples_for_source,
     list_pending,
     list_project_glossary_conflicts,
 )
@@ -41,7 +42,9 @@ from weaver.services.project_discovery import discover_projects, find_project
 router = APIRouter(tags=["ui"], include_in_schema=False)
 
 CANDIDATE_PAGE = 20
+TERMS_PAGE = 20
 MEMORY_PAGE = 50
+EXAMPLE_LIMIT = 3
 
 
 def _base_dir(request: Request) -> Path:
@@ -64,11 +67,20 @@ def _opt(value: str | None) -> str | None:
 # --- glossary terms + candidate review --------------------------------------
 
 
-def _glossary_terms_ctx(request: Request, name: str) -> dict[str, object]:
+def _glossary_terms_ctx(
+    request: Request, name: str, *, offset: int = 0, find: str | None = None
+) -> dict[str, object]:
     base = _base_dir(request)
+    page = glossary_service.list_terms_page(
+        _project_toml(request, name), cwd=base, offset=offset, limit=TERMS_PAGE, find=find
+    )
     return {
         "name": name,
-        "terms": glossary_service.list_terms(_project_toml(request, name), cwd=base),
+        "terms": page.items,
+        "page": page,
+        "find": find or "",
+        "prev_offset": max(offset - TERMS_PAGE, 0) if offset > 0 else None,
+        "next_offset": offset + TERMS_PAGE if offset + TERMS_PAGE < page.total else None,
     }
 
 
@@ -90,8 +102,15 @@ def _candidates_ctx(
     }
 
 
-def _terms_fragment(request: Request, name: str, *, error: str | None = None) -> HTMLResponse:
-    ctx = _glossary_terms_ctx(request, name)
+def _terms_fragment(
+    request: Request,
+    name: str,
+    *,
+    offset: int = 0,
+    find: str | None = None,
+    error: str | None = None,
+) -> HTMLResponse:
+    ctx = _glossary_terms_ctx(request, name, offset=offset, find=find)
     ctx["error"] = error
     return templates.TemplateResponse(request, "partials/_glossary_terms.html", ctx)
 
@@ -137,8 +156,10 @@ def glossary_add(
     target: str = Form(...),
     category: str | None = Form(None),
     notes: str | None = Form(None),
+    offset: int = Form(0),
+    find: str | None = Form(None),
 ) -> HTMLResponse:
-    """Add (upsert) one glossary term, then re-render the terms table."""
+    """Add (upsert) one glossary term, then re-render the terms table (page kept)."""
     base = _base_dir(request)
     try:
         glossary_service.add_term(
@@ -150,8 +171,8 @@ def glossary_add(
             cwd=base,
         )
     except (ValueError, WeaverError) as exc:
-        return _terms_fragment(request, name, error=str(exc))
-    return _terms_fragment(request, name)
+        return _terms_fragment(request, name, offset=offset, find=find, error=str(exc))
+    return _terms_fragment(request, name, offset=offset, find=find)
 
 
 @router.post("/ui/projects/{name}/glossary/terms/{source}/update", response_class=HTMLResponse)
@@ -162,8 +183,10 @@ def glossary_update(
     target: str = Form(...),
     category: str | None = Form(None),
     notes: str | None = Form(None),
+    offset: int = Form(0),
+    find: str | None = Form(None),
 ) -> HTMLResponse:
-    """Update one glossary term, then re-render the terms table."""
+    """Update one glossary term, then re-render the terms table (page kept)."""
     base = _base_dir(request)
     try:
         glossary_service.update_term(
@@ -175,21 +198,27 @@ def glossary_update(
             cwd=base,
         )
     except GlossaryTermNotFoundError as exc:
-        return _terms_fragment(request, name, error=str(exc))
+        return _terms_fragment(request, name, offset=offset, find=find, error=str(exc))
     except (ValueError, WeaverError) as exc:
-        return _terms_fragment(request, name, error=str(exc))
-    return _terms_fragment(request, name)
+        return _terms_fragment(request, name, offset=offset, find=find, error=str(exc))
+    return _terms_fragment(request, name, offset=offset, find=find)
 
 
 @router.post("/ui/projects/{name}/glossary/terms/{source}/delete", response_class=HTMLResponse)
-def glossary_delete(name: str, source: str, request: Request) -> HTMLResponse:
-    """Delete one glossary term, then re-render the terms table."""
+def glossary_delete(
+    name: str,
+    source: str,
+    request: Request,
+    offset: int = Form(0),
+    find: str | None = Form(None),
+) -> HTMLResponse:
+    """Delete one glossary term, then re-render the terms table (page kept)."""
     base = _base_dir(request)
     try:
         glossary_service.delete_term(_project_toml(request, name), source=source, cwd=base)
     except GlossaryTermNotFoundError as exc:
-        return _terms_fragment(request, name, error=str(exc))
-    return _terms_fragment(request, name)
+        return _terms_fragment(request, name, offset=offset, find=find, error=str(exc))
+    return _terms_fragment(request, name, offset=offset, find=find)
 
 
 @router.get("/ui/projects/{name}/glossary/candidates", response_class=HTMLResponse)
@@ -201,9 +230,32 @@ def glossary_candidates_fragment(
 
 
 @router.get("/ui/projects/{name}/glossary/terms", response_class=HTMLResponse)
-def glossary_terms_fragment(name: str, request: Request) -> HTMLResponse:
-    """Approved-terms table fragment (used to live-refresh after a candidate approval)."""
-    return _terms_fragment(request, name)
+def glossary_terms_fragment(
+    name: str, request: Request, offset: int = Query(0, ge=0), find: str | None = None
+) -> HTMLResponse:
+    """Approved-terms table fragment: search + paginated, also used to live-refresh
+    after a candidate approval (no params → first page, unfiltered)."""
+    return _terms_fragment(request, name, offset=offset, find=find)
+
+
+@router.get("/ui/projects/{name}/glossary/examples", response_class=HTMLResponse)
+def glossary_examples_fragment(
+    name: str, request: Request, source: str = Query(..., min_length=1)
+) -> HTMLResponse:
+    """Lazy-loaded example source sentences containing ``source`` (HTMX fragment).
+
+    Read-only; never runs on the initial glossary render (loaded on demand from a
+    per-candidate button) so Gate B1 holds on the page render path.
+    """
+    base = _base_dir(request)
+    examples = examples_for_source(
+        _project_toml(request, name), source, cwd=base, limit=EXAMPLE_LIMIT
+    )
+    return templates.TemplateResponse(
+        request,
+        "partials/_glossary_examples.html",
+        {"examples": examples, "source": source},
+    )
 
 
 @router.post(

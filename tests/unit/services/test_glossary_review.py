@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 
 from weaver.services.glossary_review import (
+    examples_for_source,
     list_project_glossary_conflicts,
     open_glossary_review_session,
 )
@@ -51,6 +52,49 @@ def test_session_examples_for_returns_segment_source_text(tmp_path, monkeypatch)
 
     assert examples, "expected at least one example sentence"
     assert all(candidate.source in line for line in examples)
+
+
+def test_examples_for_source_read_only_matches_session(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+
+    with open_glossary_review_session(init.project_toml) as session:
+        candidate = session.next_pending()
+        assert candidate is not None
+        session_examples = session.examples_for(candidate.source, limit=5)
+
+    # The stateless, read-only helper returns the same example sentences without
+    # opening a writable connection (Gate B1: safe on a render/lazy-load path).
+    examples = examples_for_source(init.project_toml, candidate.source, limit=5)
+
+    assert examples == session_examples
+    assert all(candidate.source in line for line in examples)
+
+
+def test_examples_for_source_blank_source_returns_empty(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+
+    assert examples_for_source(init.project_toml, "   ") == []
+
+
+def test_examples_for_source_uses_readonly_connection(tmp_path, monkeypatch) -> None:
+    """Gate B1: the helper must open a read-only connection, never a writable one."""
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    with open_glossary_review_session(init.project_toml) as session:
+        candidate = session.next_pending()
+        assert candidate is not None
+    source = candidate.source
+
+    import weaver.services.glossary_review as mod
+
+    def _fail(*_args, **_kwargs):  # pragma: no cover - only runs on regression
+        raise AssertionError("examples_for_source must not open a writable connection")
+
+    monkeypatch.setattr(mod, "connect_database", _fail)
+    examples = examples_for_source(init.project_toml, source, limit=3)
+    assert all(source in line for line in examples)
 
 
 def test_session_approve_persists_term_and_commits_independently(tmp_path, monkeypatch) -> None:

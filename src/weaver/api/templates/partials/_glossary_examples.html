@@ -1,0 +1,10 @@
+<div class="glossary-examples">
+  {% if examples %}
+  <p class="meta">Example sentences using <code>{{ source }}</code>:</p>
+  <ul class="plain-list">
+    {% for ex in examples %}<li class="src-example">{{ ex }}</li>{% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty hint">No source sentences found for “{{ source }}”.</p>
+  {% endif %}
+</div>

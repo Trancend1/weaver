@@ -131,19 +131,9 @@ class GlossaryReviewSession:
         )
 
     def examples_for(self, source: str, *, limit: int = DEFAULT_EXAMPLE_LIMIT) -> list[str]:
-        rows = self._connection.execute(
-            """
-            SELECT s.source_text
-            FROM segments s
-            JOIN chapters c ON c.id = s.chapter_id
-            WHERE c.project_id = ?
-              AND s.source_text LIKE ?
-            ORDER BY c.spine_order, s.block_order
-            LIMIT ?
-            """,
-            (self._project.id, f"%{source}%", limit),
-        ).fetchall()
-        return [str(row["source_text"]) for row in rows]
+        return _segment_examples(
+            self._connection, project_id=self._project.id, source=source, limit=limit
+        )
 
     def approve(self, candidate: GlossaryCandidateRecord) -> None:
         with transaction(self._connection):
@@ -178,6 +168,51 @@ class GlossaryReviewSession:
             restore_glossary_candidate(self._connection, candidate=self._undo_snapshot)
         self._undo_snapshot = None
         return True
+
+
+def _segment_examples(
+    connection: sqlite3.Connection, *, project_id: int, source: str, limit: int
+) -> list[str]:
+    """Return up to ``limit`` source segments containing ``source`` (reading order)."""
+
+    needle = source.strip()
+    if not needle:
+        return []
+    rows = connection.execute(
+        """
+        SELECT s.source_text
+        FROM segments s
+        JOIN chapters c ON c.id = s.chapter_id
+        WHERE c.project_id = ?
+          AND s.source_text LIKE ?
+        ORDER BY c.spine_order, s.block_order
+        LIMIT ?
+        """,
+        (project_id, f"%{needle}%", limit),
+    ).fetchall()
+    return [str(row["source_text"]) for row in rows]
+
+
+def examples_for_source(
+    project_toml: Path,
+    source: str,
+    *,
+    cwd: Path | None = None,
+    limit: int = DEFAULT_EXAMPLE_LIMIT,
+) -> list[str]:
+    """Return example source sentences containing ``source`` (read-only).
+
+    Stateless, read-only counterpart to ``GlossaryReviewSession.examples_for`` so
+    the web layer can lazy-load examples on a render path without opening a
+    writable connection (Gate B1). Returns ``[]`` for a blank source.
+    """
+
+    if not source.strip():
+        return []
+    db_path = _resolve_database_path(project_toml, cwd)
+    with closing(connect_readonly_database(db_path)) as connection:
+        project = _load_single_project(connection)
+        return _segment_examples(connection, project_id=project.id, source=source, limit=limit)
 
 
 @contextmanager

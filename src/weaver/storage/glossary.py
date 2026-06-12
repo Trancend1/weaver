@@ -25,27 +25,44 @@ class GlossaryCandidateRecord:
     frequency: int
 
 
-def list_glossary_terms(connection: sqlite3.Connection, *, project_id: int) -> list[GlossaryTerm]:
+def list_glossary_terms(
+    connection: sqlite3.Connection,
+    *,
+    project_id: int,
+    find: str | None = None,
+    offset: int = 0,
+    limit: int | None = None,
+) -> list[GlossaryTerm]:
     """Load approved glossary terms for a project.
 
     Args:
         connection: Open SQLite connection.
         project_id: Project row id.
+        find: Optional case-insensitive substring; matches the JP source or the
+            EN target. ``None``/empty returns every term.
+        offset: Rows to skip (only applied when ``limit`` is set).
+        limit: Page size. ``None`` (the default) returns all matching rows in
+            stable id order — the contract the prompt-injection callers rely on.
 
     Returns:
         Glossary terms in stable id order. Empty list when no terms are
         approved yet (the glossary review workflow ships in Phase 5).
     """
 
-    rows = connection.execute(
-        """
-        SELECT source, target, category, notes, case_sensitive
-        FROM glossary_terms
-        WHERE project_id = ?
-        ORDER BY id
-        """,
-        (project_id,),
-    ).fetchall()
+    params: list[object] = [project_id]
+    where = "WHERE project_id = ?"
+    needle = (find or "").strip()
+    if needle:
+        where += " AND (source LIKE ? OR target LIKE ?)"
+        params.extend([f"%{needle}%", f"%{needle}%"])
+    sql = (
+        "SELECT source, target, category, notes, case_sensitive "
+        f"FROM glossary_terms {where} ORDER BY id"
+    )
+    if limit is not None:
+        sql += " LIMIT ? OFFSET ?"
+        params.extend([max(limit, 0), max(offset, 0)])
+    rows = connection.execute(sql, params).fetchall()
     return [
         GlossaryTerm(
             source=str(row["source"]),
@@ -56,6 +73,23 @@ def list_glossary_terms(connection: sqlite3.Connection, *, project_id: int) -> l
         )
         for row in rows
     ]
+
+
+def count_glossary_terms(
+    connection: sqlite3.Connection, *, project_id: int, find: str | None = None
+) -> int:
+    """Count approved glossary terms, optionally filtered by a source/target substring."""
+
+    params: list[object] = [project_id]
+    where = "WHERE project_id = ?"
+    needle = (find or "").strip()
+    if needle:
+        where += " AND (source LIKE ? OR target LIKE ?)"
+        params.extend([f"%{needle}%", f"%{needle}%"])
+    row = connection.execute(
+        f"SELECT COUNT(*) AS count FROM glossary_terms {where}", params
+    ).fetchone()
+    return int(row["count"])
 
 
 def get_glossary_term(
