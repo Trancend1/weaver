@@ -47,4 +47,147 @@
   </form>
   <div id="glossary-diff-result"></div>
 </section>
+
+{# Candidate review feedback (no build, no framework). Each review action POSTs in the
+   background (hx-swap="none"); this script gives the row a busy state, then on success
+   turns it into a confirmation, updates the counts in place, and refreshes the
+   Approved-terms table — all without a page reload. A failed POST is shown in-row. #}
+<script>
+(function () {
+  var container = document.getElementById("glossary-candidates");
+  if (!container) return;
+  var project = container.dataset.project || "";
+
+  function actionForm(elt) { return elt && elt.matches && elt.matches("form.row-form") ? elt : null; }
+  function gcAction(form) { var b = form.querySelector("[data-gc-action]"); return b ? b.dataset.gcAction : null; }
+  function adjustCounts(delta) {
+    var line = document.getElementById("glossary-candidate-counts");
+    if (!line) return;
+    Object.keys(delta).forEach(function (k) {
+      var el = line.querySelector('[data-count="' + k + '"]');
+      if (el) { var n = parseInt(el.textContent, 10) || 0; el.textContent = Math.max(0, n + delta[k]); }
+    });
+  }
+
+  document.body.addEventListener("htmx:beforeRequest", function (e) {
+    var form = actionForm(e.detail.elt);
+    if (!form || !gcAction(form)) return;
+    var row = form.closest("tr");
+    if (row) { row.classList.add("cand-busy"); row.setAttribute("aria-busy", "true"); }
+  });
+
+  document.body.addEventListener("htmx:afterRequest", function (e) {
+    var form = actionForm(e.detail.elt);
+    if (!form) return;
+    var action = gcAction(form);
+    if (!action) return;
+    var row = form.closest("tr");
+    if (!row) return;
+    row.classList.remove("cand-busy"); row.removeAttribute("aria-busy");
+
+    if (!e.detail.successful) {
+      var msg = (e.detail.xhr && e.detail.xhr.responseText) || "Action failed";
+      var cell = row.querySelector("td:last-child");
+      var note = row.querySelector(".cand-error");
+      if (!note && cell) { note = document.createElement("div"); note.className = "cand-error error"; cell.appendChild(note); }
+      if (note) { note.setAttribute("role", "alert"); note.textContent = "⚠ " + msg + " — retry"; }
+      return;
+    }
+
+    var source = row.dataset.candSource || "";
+    var tgtInput = form.querySelector('[name="target"]');
+    var tgtBtn = form.querySelector("[data-gc-target]");
+    var target = action === "edit" ? (tgtInput ? tgtInput.value : "") : (tgtBtn ? tgtBtn.dataset.gcTarget : "");
+    var label = action === "reject" ? "✗ Rejected" : (action === "edit" ? "✓ Saved as glossary term" : "✓ Approved");
+
+    if (row._gcCheckbox) row._gcCheckbox.checked = false;
+    row.className = "cand-result cand-result--" + action;
+    row.innerHTML = '<td colspan="6" aria-live="polite"><span class="badge ' +
+      (action === "reject" ? "bad" : "ok") + '"></span> <code></code><span class="cand-arrow"></span></td>';
+    row.querySelector(".badge").textContent = label;
+    row.querySelector("code").textContent = source;
+    row.querySelector(".cand-arrow").textContent = (action !== "reject" && target) ? " → " + target : "";
+
+    adjustCounts(action === "reject" ? { pending: -1, rejected: 1, matching: -1 } : { pending: -1, approved: 1, matching: -1 });
+
+    if ((action === "approve" || action === "edit") && window.htmx) {
+      htmx.ajax("GET", "/ui/projects/" + encodeURIComponent(project) + "/glossary/terms",
+        { target: "#glossary-terms", swap: "outerHTML" });
+    }
+    refreshSelection();
+  });
+
+  // ── Selection + bulk ─────────────────────────────────────────────────────
+  function liveRows() {
+    return Array.from(container.querySelectorAll("tr[data-cand-id]")).filter(
+      function (r) { return !r.classList.contains("cand-result"); }
+    );
+  }
+  function selectedRows() {
+    return liveRows().filter(function (r) { var c = r.querySelector(".gc-select"); return c && c.checked; });
+  }
+  function refreshSelection() {
+    var n = selectedRows().length;
+    container.querySelectorAll("[data-gc-selcount]").forEach(function (s) { s.textContent = n; });
+    container.querySelectorAll("[data-gc-bulk]").forEach(function (b) { b.disabled = n === 0; });
+    var all = container.querySelector("[data-gc-selectall]");
+    var rows = liveRows();
+    if (all) all.checked = rows.length > 0 && n === rows.length;
+  }
+  function submitAction(row, action) {
+    var btn = row.querySelector('[data-gc-action="' + action + '"]');
+    if (!btn || btn.disabled) return false;  // e.g. Approve disabled when no target
+    var form = btn.closest("form");
+    if (form) { form.requestSubmit ? form.requestSubmit(btn) : form.submit(); return true; }
+    return false;
+  }
+  function bulk(action) {
+    // approve has no meaning for rows without a target — they are skipped
+    selectedRows().forEach(function (r) { submitAction(r, action); });
+  }
+
+  container.addEventListener("change", function (e) {
+    var t = e.target;
+    if (t.matches && t.matches(".gc-select")) {
+      var row = t.closest("tr");
+      if (row) row._gcCheckbox = t;
+      refreshSelection();
+    } else if (t.matches && t.matches("[data-gc-selectall]")) {
+      liveRows().forEach(function (r) { var c = r.querySelector(".gc-select"); if (c) { c.checked = t.checked; r._gcCheckbox = c; } });
+      refreshSelection();
+    }
+  });
+  container.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-gc-bulk]");
+    if (b) bulk(b.dataset.gcBulk);
+  });
+
+  // ── Keyboard (power-user review) ─────────────────────────────────────────
+  var focusIdx = -1;
+  function focusRow(idx) {
+    var rows = liveRows();
+    if (!rows.length) return;
+    focusIdx = Math.max(0, Math.min(idx, rows.length - 1));
+    rows.forEach(function (r, i) { r.classList.toggle("cand-focus", i === focusIdx); });
+    rows[focusIdx].scrollIntoView({ block: "nearest" });
+  }
+  document.addEventListener("keydown", function (e) {
+    if (!container.querySelector("tr[data-cand-id]")) return;
+    var tag = (document.activeElement && document.activeElement.tagName) || "";
+    var typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    if (typing && e.key !== "Escape") return;
+    var rows = liveRows();
+    var cur = rows[focusIdx];
+    switch (e.key) {
+      case "j": e.preventDefault(); focusRow(focusIdx + 1); break;
+      case "k": e.preventDefault(); focusRow(focusIdx - 1); break;
+      case "a": if (cur) { e.preventDefault(); submitAction(cur, "approve"); } break;
+      case "r": if (cur) { e.preventDefault(); submitAction(cur, "reject"); } break;
+      case "e": if (cur) { e.preventDefault(); var i = cur.querySelector('input[name="target"]'); if (i) i.focus(); } break;
+      case "x": if (cur) { e.preventDefault(); var c = cur.querySelector(".gc-select"); if (c) { c.checked = !c.checked; cur._gcCheckbox = c; refreshSelection(); } } break;
+      case "Escape": if (typing) document.activeElement.blur(); break;
+    }
+  });
+})();
+</script>
 {% endblock %}

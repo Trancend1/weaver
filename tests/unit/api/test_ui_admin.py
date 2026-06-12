@@ -84,9 +84,12 @@ def test_candidate_actions_are_unambiguous(admin_client: TestClient) -> None:
     name = _name(admin_client)
     page = admin_client.get(f"/ui/projects/{name}/glossary/candidates").text
 
-    assert "Approve existing target" in page
-    assert "Edit target" in page
-    assert "Translate target with AI" in page
+    assert "Approve target" in page
+    assert "Save &amp; approve" in page
+    assert "Reject" in page
+    # the always-erroring AI stub CTA was removed
+    assert "Translate target with AI" not in page
+    assert "not wired" not in page
     assert "Edit + approve" not in page
     assert ">Approve</button>" not in page
 
@@ -96,10 +99,9 @@ def test_candidate_approve(admin_client: TestClient) -> None:
     ids = _candidate_ids(admin_client, name)
     if not ids:
         pytest.skip("fixture produced no glossary candidates")
-    r = admin_client.post(
-        f"/ui/projects/{name}/glossary/candidates/{ids[0]}/approve", data={"offset": "0"}
-    )
-    assert r.status_code == 200
+    r = admin_client.post(f"/ui/projects/{name}/glossary/candidates/{ids[0]}/approve")
+    # optimistic scheme: background write returns 204; the UI updates client-side
+    assert r.status_code == 204
     # approved term lands in the same glossary_terms table
     assert admin_client.get(f"/projects/{name}/glossary").json()["count"] >= 1
 
@@ -111,36 +113,36 @@ def test_candidate_edit_then_reject(admin_client: TestClient) -> None:
         pytest.skip("need two candidates")
     edited = admin_client.post(
         f"/ui/projects/{name}/glossary/candidates/{ids[0]}/edit",
-        data={"target": "EditedTerm", "offset": "0"},
+        data={"target": "EditedTerm"},
     )
-    assert edited.status_code == 200
-    rejected = admin_client.post(
-        f"/ui/projects/{name}/glossary/candidates/{ids[1]}/reject", data={"offset": "0"}
-    )
-    assert rejected.status_code == 200
+    assert edited.status_code == 204
+    rejected = admin_client.post(f"/ui/projects/{name}/glossary/candidates/{ids[1]}/reject")
+    assert rejected.status_code == 204
 
 
-def test_candidate_ai_translate_skeleton_does_not_approve(admin_client: TestClient) -> None:
+def test_candidate_removed_translate_action_fails_loudly_without_approving(
+    admin_client: TestClient,
+) -> None:
+    """The old 'translate' stub is gone; an unknown action fails with a non-2xx + message
+    (HTMX surfaces it) and never approves/applies the candidate (it stays pending)."""
     name = _name(admin_client)
     ids = _candidate_ids(admin_client, name)
     if not ids:
         pytest.skip("fixture produced no glossary candidates")
 
-    response = admin_client.post(
-        f"/ui/projects/{name}/glossary/candidates/{ids[0]}/translate", data={"offset": "0"}
-    )
+    response = admin_client.post(f"/ui/projects/{name}/glossary/candidates/{ids[0]}/translate")
 
-    assert response.status_code == 200
-    assert "not wired yet" in response.text
-    remaining_ids = _candidate_ids(admin_client, name)
-    assert ids[0] in remaining_ids
+    assert response.status_code == 422
+    assert response.text  # explanatory message, not a silent no-op
+    assert "not wired yet" not in response.text  # no stub message
+    # the candidate was not acted on — still pending
+    assert ids[0] in _candidate_ids(admin_client, name)
 
 
-def test_candidate_unknown_404(admin_client: TestClient) -> None:
+def test_candidate_unknown_id_returns_404(admin_client: TestClient) -> None:
+    """A missing candidate fails loudly (404) so the optimistic UI can revert."""
     name = _name(admin_client)
-    r = admin_client.post(
-        f"/ui/projects/{name}/glossary/candidates/999999/approve", data={"offset": "0"}
-    )
+    r = admin_client.post(f"/ui/projects/{name}/glossary/candidates/999999/approve")
     assert r.status_code == 404
 
 
