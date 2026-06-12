@@ -2,5 +2,5 @@
   {% set _badge = badge_class_for_translation(status) %}
   <span class="badge c-badge seg-status seg-status--{{ status }} {{ _badge }}">{{ translation_status_label(status) }}</span>
   <span class="seg-protection">{% if status == "manual" %}Manual source of truth; protected from normal retranslate{% elif status == "translated" %}Provider translation{% elif status == "pending" %}Needs translation{% elif status in ("failed", "stale") %}Needs attention{% else %}{{ translation_status_label(status) }}{% endif %}</span>
-  <span class="badge c-badge seg-review-status seg-review-status--{{ review_status }}">{{ review_status }}</span>
+  <span class="badge c-badge seg-review-status seg-review-status--{{ review_status }} {{ badge_class_for_review(review_status) }}">{{ review_status_label(review_status) }}</span>
 </div>

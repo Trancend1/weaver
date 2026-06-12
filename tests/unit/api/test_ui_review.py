@@ -53,6 +53,24 @@ def test_workspace_shows_review_status_badge(review_client: TestClient) -> None:
     assert "Reset review" in page
 
 
+def test_workspace_review_pills_use_optimistic_scheme(review_client: TestClient) -> None:
+    """Workspace pills update the badge in JS + POST with hx-swap='none' (no fragment swap).
+
+    Regression: the old ``hx-target="#seg-statusline" hx-swap="outerHTML"`` swap failed to
+    paint live in the browser (badge vanished until reload). The new scheme paints
+    optimistically from data-* attrs and posts in the background.
+    """
+    name = _name(review_client)
+    chapter_id = _first_chapter_id(review_client, name)
+    page = review_client.get(f"/ui/projects/{name}/chapters/{chapter_id}").text
+    assert 'data-review-status="approved"' in page
+    assert 'data-review-label="Reviewed"' in page
+    assert 'hx-swap="none"' in page
+    # pills must no longer drive a fragile statusline outerHTML swap
+    assert 'hx-target="#seg-statusline-' not in page
+    assert "function applyReview" in page
+
+
 def test_review_status_post_updates_badge(review_client: TestClient) -> None:
     name = _name(review_client)
     chapter_id = _first_chapter_id(review_client, name)
@@ -71,6 +89,24 @@ def test_review_queue_page_renders(review_client: TestClient) -> None:
     assert "Review queue" in page
     # Should show at least the default segments
     assert "Not reviewed" in page or "Needs revision" in page or "Approve" in page
+
+
+def test_review_queue_inline_actions_target_cell_not_row(review_client: TestClient) -> None:
+    """Queue Approve/Needs-revision must swap a review-badge cell, never the whole <tr>.
+
+    Regression: the endpoint returns a ``<div class="seg-statusline">`` fragment; an
+    ``hx-target="closest tr"`` outerHTML swap would replace the row's ``<tr>`` with a
+    ``<div>`` and visually destroy the row. The fix targets a ``#qrev-<id>`` cell and
+    uses ``hx-select=".seg-review-status"`` to graft only the review badge.
+    """
+    name = _name(review_client)
+    volume_id = _first_volume_id(review_client, name)
+    page = review_client.get(f"/ui/projects/{name}/volumes/{volume_id}/review").text
+    assert 'hx-target="closest tr"' not in page  # the row-destroying pattern is gone
+    assert 'id="qrev-' in page
+    assert 'hx-select=".seg-review-status"' in page
+    # the badge carries a human label (the raw enum only survives inside the CSS class)
+    assert "Not reviewed" in page
 
 
 def test_review_queue_filter_works(review_client: TestClient) -> None:

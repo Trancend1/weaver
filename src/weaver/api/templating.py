@@ -16,8 +16,10 @@ from fastapi.templating import Jinja2Templates
 
 from weaver.api.status_labels import (
     badge_class_for_job,
+    badge_class_for_review,
     badge_class_for_translation,
     job_status_label,
+    review_status_label,
     translation_status_label,
 )
 
@@ -28,8 +30,10 @@ STATIC_DIR = _PACKAGE_DIR / "static"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.globals["translation_status_label"] = translation_status_label
 templates.env.globals["job_status_label"] = job_status_label
+templates.env.globals["review_status_label"] = review_status_label
 templates.env.globals["badge_class_for_translation"] = badge_class_for_translation
 templates.env.globals["badge_class_for_job"] = badge_class_for_job
+templates.env.globals["badge_class_for_review"] = badge_class_for_review
 
 
 def mount_static(app: FastAPI) -> None:

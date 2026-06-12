@@ -10,9 +10,12 @@ from fastapi.testclient import TestClient
 
 from weaver.api.app import create_api_app
 from weaver.api.status_labels import (
+    REVIEW_LABELS,
     TRANSLATION_LABELS,
+    badge_class_for_review,
     badge_class_for_translation,
     job_status_label,
+    review_status_label,
     translation_status_label,
 )
 from weaver.services.project import initialize_project
@@ -104,6 +107,38 @@ def test_ui_job_panel_uses_canonical_labels(tax_client: TestClient) -> None:
     assert '<span class="badge c-badge ">done</span>' not in page
 
 
+# ---- review status labels (WV-003 axis) ------------------------------------
+
+
+def test_review_status_label_maps_all_db_values() -> None:
+    assert review_status_label("not_reviewed") == "Not reviewed"
+    assert review_status_label("needs_review") == "Needs review"
+    assert review_status_label("needs_revision") == "Needs revision"
+    assert review_status_label("approved") == "Reviewed"
+    assert review_status_label("rejected") == "Rejected"
+    assert review_status_label("unknown") == "unknown"
+
+
+def test_badge_class_for_review() -> None:
+    assert badge_class_for_review("approved") == "ok"
+    assert badge_class_for_review("needs_revision") == "bad"
+    assert badge_class_for_review("rejected") == "bad"
+    assert badge_class_for_review("needs_review") == "warn"
+    assert badge_class_for_review("not_reviewed") == ""
+
+
+def test_review_status_badge_is_human_labelled_not_raw(tax_client: TestClient) -> None:
+    """The review badge shows a human label + color class, never the raw enum."""
+    name = _name(tax_client)
+    chapter_id = _first_chapter_id(tax_client, name)
+    page = tax_client.get(f"/ui/projects/{name}/chapters/{chapter_id}").text
+    # default review status is not_reviewed → "Not reviewed", never bare ">not_reviewed<"
+    assert "Not reviewed" in page
+    assert ">not_reviewed<" not in page
+    # the three review pills carry an aria-pressed state for active reflection
+    assert "aria-pressed=" in page
+
+
 # ---- dead branches ---------------------------------------------------------
 
 
@@ -132,3 +167,10 @@ def test_translation_labels_cover_db_check_constraint() -> None:
     """Every status in schema.sql CHECK must have a presentation label."""
     db_statuses = {"pending", "in_progress", "translated", "failed", "stale", "skipped", "manual"}
     assert db_statuses <= set(TRANSLATION_LABELS.keys())
+
+
+def test_review_labels_cover_canonical_review_statuses() -> None:
+    """Every canonical review status has a presentation label."""
+    from weaver.services.segment_review import _REVIEW_STATUSES
+
+    assert set(_REVIEW_STATUSES) <= set(REVIEW_LABELS.keys())

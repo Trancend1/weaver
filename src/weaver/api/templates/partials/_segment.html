@@ -16,29 +16,40 @@
         {% set _badge = badge_class_for_translation(seg.status) %}
         <span class="badge c-badge seg-status seg-status--{{ seg.status }} {{ _badge }}">{{ translation_status_label(seg.status) }}</span>
         <span class="seg-protection">{% if seg.status == "manual" %}Manual source of truth; protected from normal retranslate{% elif seg.status == "translated" %}Provider translation{% elif seg.status == "pending" %}Needs translation{% elif seg.status in ("failed", "stale") %}Needs attention{% else %}{{ translation_status_label(seg.status) }}{% endif %}</span>
-        <span class="badge c-badge seg-review-status seg-review-status--{{ seg.review_status|default('not_reviewed') }}">{{ seg.review_status|default('not_reviewed') }}</span>
+        {% set _review = seg.review_status|default('not_reviewed') %}
+        <span class="badge c-badge seg-review-status seg-review-status--{{ _review }} {{ badge_class_for_review(_review) }}">{{ review_status_label(_review) }}</span>
       </div>
       <label class="sr-only" for="{{ input_id }}">English translation for segment {{ seg.id }}</label>
       <textarea id="{{ input_id }}" name="translated_text" rows="3" class="seg-input" aria-describedby="seg-{{ seg.id }}-state">{{ seg.translated_text or "" }}</textarea>
 
       {# ── Row 1: Review controls ──────────────────────────── #}
       <div class="seg-row seg-row--review" aria-label="Review controls">
-        <div class="seg-review-pills">
-          <button type="button" class="review-pill review-pill--approved"
+        {# Review pills update the badge optimistically in JS (instant feedback) and
+           POST in the background with hx-swap="none" — no fragile fragment swap. The
+           data-* attrs carry the server-rendered label/colour so JS needs no enum logic.
+           A failed POST is surfaced by the htmx:afterRequest handler in workspace.html. #}
+        <div class="seg-review-pills" role="group" aria-label="Set review status">
+          <button type="button" class="review-pill review-pill--approved{% if _review == 'approved' %} is-active{% endif %}"
+                  aria-pressed="{{ 'true' if _review == 'approved' else 'false' }}"
+                  data-review-status="approved" data-review-label="{{ review_status_label('approved') }}" data-review-badge="{{ badge_class_for_review('approved') }}"
                   hx-post="/ui/projects/{{ name }}/segments/{{ seg.id }}/review?review_status=approved"
-                  hx-target="#seg-statusline-{{ seg.id }}" hx-swap="outerHTML"
+                  hx-swap="none"
                   title="Mark reviewed">
             <span class="review-dot"></span> Mark reviewed
           </button>
-          <button type="button" class="review-pill review-pill--revision"
+          <button type="button" class="review-pill review-pill--revision{% if _review == 'needs_revision' %} is-active{% endif %}"
+                  aria-pressed="{{ 'true' if _review == 'needs_revision' else 'false' }}"
+                  data-review-status="needs_revision" data-review-label="{{ review_status_label('needs_revision') }}" data-review-badge="{{ badge_class_for_review('needs_revision') }}"
                   hx-post="/ui/projects/{{ name }}/segments/{{ seg.id }}/review?review_status=needs_revision"
-                  hx-target="#seg-statusline-{{ seg.id }}" hx-swap="outerHTML"
+                  hx-swap="none"
                   title="Needs revision">
             <span class="review-dot"></span> Needs revision
           </button>
-          <button type="button" class="review-pill review-pill--reset"
+          <button type="button" class="review-pill review-pill--reset{% if _review == 'not_reviewed' %} is-active{% endif %}"
+                  aria-pressed="{{ 'true' if _review == 'not_reviewed' else 'false' }}"
+                  data-review-status="not_reviewed" data-review-label="{{ review_status_label('not_reviewed') }}" data-review-badge="{{ badge_class_for_review('not_reviewed') }}"
                   hx-post="/ui/projects/{{ name }}/segments/{{ seg.id }}/review?review_status=not_reviewed"
-                  hx-target="#seg-statusline-{{ seg.id }}" hx-swap="outerHTML"
+                  hx-swap="none"
                   title="Reset review">
             <span class="review-dot"></span> Reset review
           </button>
