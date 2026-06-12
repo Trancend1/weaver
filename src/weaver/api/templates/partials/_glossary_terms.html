@@ -1,6 +1,21 @@
 <div id="glossary-terms">
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+
+  <form class="inline-form" hx-get="/ui/projects/{{ name }}/glossary/terms"
+        hx-target="#glossary-terms" hx-swap="outerHTML">
+    <input name="find" value="{{ find }}" placeholder="search source or target"
+           aria-label="Search approved terms">
+    <button type="submit">Search</button>
+    {% if find %}
+    <button type="button" class="link-btn"
+            hx-get="/ui/projects/{{ name }}/glossary/terms"
+            hx-target="#glossary-terms" hx-swap="outerHTML">clear</button>
+    {% endif %}
+  </form>
+
   {% if terms %}
+  <p class="meta">{{ page.total }} term{{ "" if page.total == 1 else "s" }}{% if find %} matching “{{ find }}”{% endif %} ·
+    showing {{ page.offset + 1 }}–{{ page.offset + terms|length }}</p>
   <div class="table-scroll">
   <table class="grid">
     <thead><tr><th>Source (JP)</th><th>Target (EN)</th><th>Category</th><th>Notes</th><th></th></tr></thead>
@@ -11,6 +26,8 @@
         <td>
           <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/terms/{{ t.source }}/update"
                 hx-target="#glossary-terms" hx-swap="outerHTML">
+            <input type="hidden" name="offset" value="{{ page.offset }}">
+            <input type="hidden" name="find" value="{{ find }}">
             <input name="target" value="{{ t.target }}" aria-label="Target (English)">
             <input name="category" value="{{ t.category or '' }}" placeholder="category" aria-label="Category">
             <input name="notes" value="{{ t.notes or '' }}" placeholder="notes" aria-label="Notes">
@@ -20,22 +37,40 @@
         <td>{{ t.category or "—" }}</td>
         <td>{{ t.notes or "—" }}</td>
         <td>
-          <button type="button" class="link-btn"
-                  hx-post="/ui/projects/{{ name }}/glossary/terms/{{ t.source }}/delete"
-                  hx-target="#glossary-terms" hx-swap="outerHTML"
-                  hx-confirm="Delete glossary term '{{ t.source }}'? This cannot be undone.">Delete</button>
+          <form class="row-form" style="display:inline"
+                hx-post="/ui/projects/{{ name }}/glossary/terms/{{ t.source }}/delete"
+                hx-target="#glossary-terms" hx-swap="outerHTML"
+                hx-confirm="Delete glossary term '{{ t.source }}'? This cannot be undone.">
+            <input type="hidden" name="offset" value="{{ page.offset }}">
+            <input type="hidden" name="find" value="{{ find }}">
+            <button type="submit" class="link-btn">Delete</button>
+          </form>
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
   </div>
+  <div class="pager">
+    {% if prev_offset is not none %}
+    <button type="button" class="link-btn"
+            hx-get="/ui/projects/{{ name }}/glossary/terms?offset={{ prev_offset }}&find={{ find|urlencode }}"
+            hx-target="#glossary-terms" hx-swap="outerHTML">← prev</button>
+    {% endif %}
+    {% if next_offset is not none %}
+    <button type="button" class="link-btn"
+            hx-get="/ui/projects/{{ name }}/glossary/terms?offset={{ next_offset }}&find={{ find|urlencode }}"
+            hx-target="#glossary-terms" hx-swap="outerHTML">next →</button>
+    {% endif %}
+  </div>
   {% else %}
-  <p class="empty hint">No approved glossary terms yet.</p>
+  <p class="empty hint">{% if find %}No approved terms match “{{ find }}”.{% else %}No approved glossary terms yet.{% endif %}</p>
   {% endif %}
 
   <form class="inline-form" hx-post="/ui/projects/{{ name }}/glossary/terms"
         hx-target="#glossary-terms" hx-swap="outerHTML">
+    <input type="hidden" name="offset" value="{{ page.offset }}">
+    <input type="hidden" name="find" value="{{ find }}">
     <input name="source" placeholder="source (JP)" required aria-label="New term — source (Japanese)">
     <input name="target" placeholder="target (EN)" required aria-label="New term — target (English)">
     <input name="category" placeholder="category" aria-label="New term — category">

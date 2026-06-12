@@ -72,9 +72,12 @@ def build_provider(config: Mapping[str, Any]) -> LLMProvider:
 def _build_fake(config: Mapping[str, Any]) -> LLMProvider:
     model = str(config.get("model", "fake-1"))
     pattern = str(config.get("pattern", "[FAKE] {source}"))
+    completion = str(config.get("completion", '{"target": "[FAKE]"}'))
     fail_rate = read_float(config, "fail_rate", 0.0, minimum=0.0, maximum=1.0)
     seed = read_int(config, "seed", 0)
-    return FakeProvider(pattern=pattern, fail_rate=fail_rate, seed=seed, model=model)
+    return FakeProvider(
+        pattern=pattern, fail_rate=fail_rate, seed=seed, model=model, completion=completion
+    )
 
 
 def _build_deepseek(config: Mapping[str, Any]) -> LLMProvider:

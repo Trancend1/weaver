@@ -73,6 +73,10 @@ class GlossaryCandidateNotFoundError(WeaverError):
     """Requested glossary candidate id does not exist (or was already actioned)."""
 
 
+class GlossarySuggestionError(WeaverError):
+    """The AI returned no usable glossary target (empty/non-JSON/sentence/over-long)."""
+
+
 class ParserError(WeaverError):
     """Provider JSON output could not be parsed even after repair."""
 

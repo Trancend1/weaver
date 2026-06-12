@@ -14,7 +14,13 @@ import pytest
 from weaver.errors import GlossaryTermNotFoundError
 from weaver.providers.prompts import render_user_message
 from weaver.providers.types import GlossaryTerm
-from weaver.services.glossary_terms import add_term, delete_term, list_terms, update_term
+from weaver.services.glossary_terms import (
+    add_term,
+    delete_term,
+    list_terms,
+    list_terms_page,
+    update_term,
+)
 from weaver.services.project import initialize_project
 from weaver.services.translation import build_context
 
@@ -85,6 +91,41 @@ def test_managed_term_enters_translation_context(tmp_path) -> None:
     assert "<glossary>" in rendered
     assert "魔王" in rendered
     assert "Demon King" in rendered
+
+
+def test_list_terms_page_paginates_and_counts(tmp_path) -> None:
+    init = initialize_project(FIXTURE_EPUB_A, cwd=tmp_path, provider="fake")
+    for src, tgt in [("魔王", "Demon King"), ("勇者", "Hero"), ("カイ", "Kai")]:
+        add_term(init.project_toml, source=src, target=tgt, cwd=tmp_path)
+
+    first = list_terms_page(init.project_toml, cwd=tmp_path, offset=0, limit=2)
+    assert first.total == 3
+    assert first.offset == 0
+    assert first.limit == 2
+    assert [t.source for t in first.items] == ["魔王", "勇者"]
+
+    second = list_terms_page(init.project_toml, cwd=tmp_path, offset=2, limit=2)
+    assert [t.source for t in second.items] == ["カイ"]
+
+
+def test_list_terms_page_find_filters_by_source_or_target(tmp_path) -> None:
+    init = initialize_project(FIXTURE_EPUB_A, cwd=tmp_path, provider="fake")
+    add_term(init.project_toml, source="魔王", target="Demon King", cwd=tmp_path)
+    add_term(init.project_toml, source="勇者", target="Hero", cwd=tmp_path)
+
+    page = list_terms_page(init.project_toml, cwd=tmp_path, find="king")
+    assert page.find == "king"
+    assert [t.source for t in page.items] == ["魔王"]
+    assert page.total == 1
+
+
+def test_list_terms_page_find_no_match_is_empty(tmp_path) -> None:
+    init = initialize_project(FIXTURE_EPUB_A, cwd=tmp_path, provider="fake")
+    add_term(init.project_toml, source="魔王", target="Demon King", cwd=tmp_path)
+
+    page = list_terms_page(init.project_toml, cwd=tmp_path, find="ZZZ-nope")
+    assert page.items == ()
+    assert page.total == 0
 
 
 def test_unmatched_term_filtered_from_context() -> None:

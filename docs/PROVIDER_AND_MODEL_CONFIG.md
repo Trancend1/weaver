@@ -76,3 +76,14 @@ Config can also be managed over the FastAPI cockpit: `GET/PATCH /config` (provid
 - Never echo or render a key; show env-var **name + present/absent** only.
 - Provider/model changes go through `config_writer` (atomic, comment-preserving) — it writes `type`/`model`/`base_url`/`api_key_env` only.
 - `weaver doctor` / `inspect --healthcheck` report whether a key is present and whether the endpoint is reachable, without exposing the value.
+
+## AI glossary-target suggestion (Sprint R, ADR `014`)
+
+The cockpit's on-demand "Suggest with AI" button (glossary candidate review) calls **the
+provider configured in this project's `[provider]` block** via `build_provider()` — there is
+**no hidden default vendor**. `provider.type`, `model`, `base_url`, and `api_key_env` come
+from your config exactly as for translation; a `custom` OpenAI-compatible endpoint is used by
+setting `type = "custom"` with your own `base_url` + `api_key_env`. The suggestion uses the
+provider's domain-agnostic `complete()` primitive; if a custom endpoint rejects the JSON-mode
+request, that surfaces as a visible provider error (never a silent fallback). Suggestions are
+ephemeral (they fill the editable target; you still Save & approve) and are not persisted.

@@ -17,7 +17,7 @@ from weaver.errors import (
 from weaver.providers.base import LLMProvider, ProviderStatus
 from weaver.providers.parser import parse_response
 from weaver.providers.prompts import load_repair_prompt, load_system_prompt, render_user_message
-from weaver.providers.types import TranslationRequest, TranslationResponse
+from weaver.providers.types import Completion, TranslationRequest, TranslationResponse
 
 DEFAULT_BASE_URL = "http://localhost:11434"
 DEFAULT_MODEL = "qwen3:14b"
@@ -100,16 +100,32 @@ class OllamaProvider(LLMProvider):
         if self._owns_client:
             self._client.close()
 
-    def _generate(self, prompt: str) -> dict[str, Any]:
+    def complete(
+        self, prompt: str, *, system: str | None = None, max_output_tokens: int
+    ) -> Completion:
+        full = f"{system}\n\n{prompt}" if system else prompt
+        payload = self._generate(full, num_predict=max_output_tokens)
+        text = _extract_text(payload)
+        return Completion(
+            text=text,
+            input_tokens=_usage(payload, "prompt_eval_count"),
+            output_tokens=_usage(payload, "eval_count"),
+            raw_response=text,
+        )
+
+    def _generate(self, prompt: str, *, num_predict: int | None = None) -> dict[str, Any]:
         url = f"{self._config.base_url.rstrip('/')}/api/generate"
+        options: dict[str, Any] = {
+            "temperature": self._config.temperature,
+            "top_p": self._config.top_p,
+        }
+        if num_predict is not None:
+            options["num_predict"] = num_predict
         payload = {
             "model": self._config.model,
             "prompt": prompt,
             "stream": False,
-            "options": {
-                "temperature": self._config.temperature,
-                "top_p": self._config.top_p,
-            },
+            "options": options,
         }
         try:
             response = self._client.post(url, json=payload)

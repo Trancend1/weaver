@@ -8,7 +8,7 @@ import time
 
 from weaver.errors import ProviderResponseError
 from weaver.providers.base import LLMProvider, ProviderStatus
-from weaver.providers.types import TranslationRequest, TranslationResponse
+from weaver.providers.types import Completion, TranslationRequest, TranslationResponse
 
 
 class FakeProvider(LLMProvider):
@@ -29,6 +29,7 @@ class FakeProvider(LLMProvider):
         fail_rate: float = 0.0,
         seed: int = 0,
         model: str = "fake-1",
+        completion: str = '{"target": "[FAKE]"}',
     ) -> None:
         if not 0.0 <= fail_rate <= 1.0:
             raise ValueError("fail_rate must be in [0.0, 1.0]")
@@ -36,6 +37,7 @@ class FakeProvider(LLMProvider):
         self._fail_rate = fail_rate
         self._random = random.Random(seed)
         self._model = model
+        self._completion = completion
 
     def translate(self, request: TranslationRequest) -> TranslationResponse:
         if self._fail_rate > 0.0 and self._random.random() < self._fail_rate:
@@ -61,6 +63,22 @@ class FakeProvider(LLMProvider):
             raw_response=raw,
             input_tokens=None,
             output_tokens=None,
+        )
+
+    def complete(
+        self, prompt: str, *, system: str | None = None, max_output_tokens: int
+    ) -> Completion:
+        if self._fail_rate > 0.0 and self._random.random() < self._fail_rate:
+            raise ProviderResponseError(
+                "FakeProvider synthetic failure. "
+                "Likely cause: fail_rate>0 sampled this call. "
+                "Next command: rerun with FakeProvider(fail_rate=0)."
+            )
+        return Completion(
+            text=self._completion,
+            input_tokens=None,
+            output_tokens=None,
+            raw_response=self._completion,
         )
 
     def healthcheck(self) -> ProviderStatus:
