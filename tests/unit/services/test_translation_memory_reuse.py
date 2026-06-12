@@ -42,6 +42,9 @@ class CapturingProvider(LLMProvider):
             output_tokens=5,
         )
 
+    def complete(self, prompt, *, system=None, max_output_tokens):  # pragma: no cover
+        raise NotImplementedError
+
     def healthcheck(self) -> ProviderStatus:
         return ProviderStatus(
             healthy=True, provider_name=self.name, model="fake-capture", message=None, latency_ms=0
@@ -56,6 +59,9 @@ class AlwaysFailProvider(LLMProvider):
             "Synthetic provider failure. Likely cause: test provider. "
             "Next command: use FakeProvider."
         )
+
+    def complete(self, prompt, *, system=None, max_output_tokens):  # pragma: no cover
+        raise NotImplementedError
 
     def healthcheck(self) -> ProviderStatus:
         return ProviderStatus(

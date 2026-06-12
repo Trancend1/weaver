@@ -89,6 +89,10 @@ Foundation (v0.6.0) ✅
         Q10 editor panel         ✅  (lazy-loaded per-segment context panel; no schema change)
         Q11 validation           ✅  (structure-QA join; +3 checks; v12 drops qa_warnings; ADR 013; ruby spike)
         Q12 cleanup + final gate ✅  (raw_response honored; upload cap; export-path doc; _single_project_id dedup; full gate green) — Sprint Q COMPLETE, merged via PR #44
+   → Sprint R — AI glossary-target suggestion 🟡  (ADR 014; stacked on the #2/#3 branch, NOT yet merged)
+       R0 provider complete() primitive ✅  (domain-agnostic; deepseek/custom/gemini/ollama/fake)
+       R1 glossary_suggestion service   ✅  (config-driven provider; strict {"target"} JSON parse+validation; ephemeral)
+       R2 cockpit Suggest-with-AI       ✅  (per-candidate button fills editable target; Gate B1; visible failure; cost shown)
 ```
 
 Legend: ✅ complete · 🟡 active · ⬜ pending · 🚫 deferred/blocked
