@@ -5,9 +5,9 @@ Offline-capable, glossary-aware **JP→EN** light-novel translation workbench wi
 > **Operating manual:** This file follows the global agent template `@WORKFLOW.md`. It cites and coordinates the docs in §1; it does not duplicate full strategy content. §5–§10 define how work is split across specialized agents/subagents and gated.
 >
 > **Current Orchestrator:** repo owner (Trancend1) + Claude as Lead Technical Orchestrator.
-> **Active Sprint/Phase:** Sprint Q — Workspace v2 · **COMPLETE — all stages Q0–Q12 merged to `main`** (Q5–Q8 via PR #41; Q9 via PR #42; Q10 via PR #43; **Q11 + Q12 via PR #44** — the `feat/cleanup-docs-reconciliation-final-integration` stacked branch) · **final gate green; final validation pass complete (2026-06-12).**
+> **Active Sprint/Phase:** **none active** — Sprint Q (Workspace v2) and **Sprint R (AI glossary-target suggestion)** are both **COMPLETE and merged to `main`**. Next sprint scope TBD by the orchestrator.
 >
-> **Status (2026-06-12):** v0.7.0 stable · Sprints A–M + **N, P, O COMPLETE** · **Sprint Q COMPLETE — merged to `main` via PR #41/#42/#43/#44** — Q0 planning ✅, **Q1–Q10 ✅** (PR #41/#42/#43) · **Q11 (Validation: WV-007/008/011/014) ✅** · **Q12 (cleanup + final gate) ✅ — full suite 1351/4, pyright 0, ruff clean, cargo check/build green, security+perf smokes green** · **Final validation: [.docs/audit/SPRINT_Q_FINAL_VALIDATION.md](.docs/audit/SPRINT_Q_FINAL_VALIDATION.md)** · Source of truth: [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [SPRINT_Q_RISK_REGISTER.md](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate)
+> **Status (2026-06-12):** v0.7.0 stable · Sprints A–M + **N, P, O, Q COMPLETE** · **Sprint R COMPLETE — merged to `main` via PR #46 (#2/#3: terms search/pagination + lazy examples) + #47 (Sprint R: AI target suggestion, ADR `014`)** · full suite **1401/4**, pyright 0, ruff + format clean · Sprint Q source of truth: [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_FINAL_VALIDATION.md](.docs/audit/SPRINT_Q_FINAL_VALIDATION.md); Sprint R: [docs/decisions/014-provider-complete-primitive-and-glossary-suggestion.md](docs/decisions/014-provider-complete-primitive-and-glossary-suggestion.md) + [docs/superpowers/specs/2026-06-12-glossary-ai-target-suggestion-design.md](docs/superpowers/specs/2026-06-12-glossary-ai-target-suggestion-design.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate), `013` (QA severity), `014` (provider `complete()` + glossary suggestion)
 
 ---
 
@@ -25,12 +25,12 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 | Import → segment → translate → QA → export flow | [docs/TRANSLATION_PIPELINE.md](docs/TRANSLATION_PIPELINE.md) |
 | Runtime contract for Tauri (or any) host shell | [docs/SIDECAR_CONTRACT.md](docs/SIDECAR_CONTRACT.md) |
 | Testing, regression, release, migration discipline | [docs/MAINTENANCE.md](docs/MAINTENANCE.md) |
-| Architecture decisions (ADR `001`–`012`) | [docs/DECISIONS.md](docs/DECISIONS.md) · [docs/decisions/](docs/decisions/) |
+| Architecture decisions (ADR `001`–`014`) | [docs/DECISIONS.md](docs/DECISIONS.md) · [docs/decisions/](docs/decisions/) |
 | Active reference specs | [docs/PROMPT_DESIGN.md](docs/PROMPT_DESIGN.md) · [docs/SECURITY_AND_PERFORMANCE.md](docs/SECURITY_AND_PERFORMANCE.md) |
 | RTK shell tooling rule | `C:\Users\transcend\.claude\RTK.md` |
 | Global workflow template (this file follows it) | `C:\Users\transcend\.claude\WORKFLOW.md` |
 
-**Audit & roadmap of record (`.docs/audit/`)** — the agent-independent planning set (2026-06-09 Council audit). **For the active Sprint Q, the four `SPRINT_Q_*` docs are the primary source of truth** — read them first:
+**Audit & roadmap of record (`.docs/audit/`)** — the agent-independent planning set (2026-06-09 Council audit). The four `SPRINT_Q_*` docs are the **historical record for the now-closed Sprint Q** (and the staging-discipline reference for future sprints):
 
 | Doc | Purpose |
 | --- | --- |
@@ -89,7 +89,7 @@ Foundation (v0.6.0) ✅
         Q10 editor panel         ✅  (lazy-loaded per-segment context panel; no schema change)
         Q11 validation           ✅  (structure-QA join; +3 checks; v12 drops qa_warnings; ADR 013; ruby spike)
         Q12 cleanup + final gate ✅  (raw_response honored; upload cap; export-path doc; _single_project_id dedup; full gate green) — Sprint Q COMPLETE, merged via PR #44
-   → Sprint R — AI glossary-target suggestion 🟡  (ADR 014; stacked on the #2/#3 branch, NOT yet merged)
+   → Sprint R — AI glossary-target suggestion ✅  COMPLETE (merged: PR #46 #2/#3 + PR #47 Sprint R; ADR 014)
        R0 provider complete() primitive ✅  (domain-agnostic; deepseek/custom/gemini/ollama/fake)
        R1 glossary_suggestion service   ✅  (config-driven provider; strict {"target"} JSON parse+validation; ephemeral)
        R2 cockpit Suggest-with-AI       ✅  (per-candidate button fills editable target; Gate B1; visible failure; cost shown)
@@ -97,7 +97,7 @@ Foundation (v0.6.0) ✅
 
 Legend: ✅ complete · 🟡 active · ⬜ pending · 🚫 deferred/blocked
 
-> Phase ordering is dependency-driven, not calendar. **N → P → O closed; Sprint Q active, Q1–Q4 merged.** Sprint Q is staged Q0–Q12 (one stage = one branch + one PR, not parallel) per [SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md). **Roadmap (§2.1) = the plan; the active phase (§2.3) = the status. Do not conflate them.**
+> Phase ordering is dependency-driven, not calendar. **N → P → O → Q → R all closed and merged to `main`.** Sprint Q was staged Q0–Q12 (one stage = one branch + one PR) per [SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md); Sprint R shipped as two stacked PRs (#46/#47) per its [spec](docs/superpowers/specs/2026-06-12-glossary-ai-target-suggestion-design.md) + [ADR 014](docs/decisions/014-provider-complete-primitive-and-glossary-suggestion.md). **Roadmap (§2.1) = the plan; the active phase (§2.3) = the status. Do not conflate them.**
 
 ### 2.2 Reusable Phase Gate
 
@@ -112,13 +112,25 @@ Before starting any stage:
 
 > Required reminder: **"Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection."**
 
-### 2.3 Active Phase — Sprint Q (Workspace v2) ✅ COMPLETE · Q0–Q12 all merged to `main` (PR #41/#42/#43/#44) · final validation passed
+### 2.3 Active Phase — none active · Sprint Q + Sprint R both COMPLETE and merged to `main`
 
-**Sprint focus:** the cross-project Workspace command center plus per-project surfaces. The hardened read foundation (Q1+Q2), all hubs (Q3–Q7), deterministic analytics (Q8), **Content Explorer v2 (Q9)**, **Editor Context Panel (Q10)**, **Validation completion (Q11)**, and **residual cleanup + final gate (Q12)** are built **and merged to `main`** (Q11+Q12 via PR #44). **Sprint Q is COMPLETE; a final validation pass (2026-06-12) re-verified the full gate and reconciled the docs** — see [SPRINT_Q_FINAL_VALIDATION.md](.docs/audit/SPRINT_Q_FINAL_VALIDATION.md).
+**Track(s) active:** none. Next sprint scope is TBD by the orchestrator.
 
-**Track(s) active:** none — Sprint Q is closed. Next sprint scope is TBD by the orchestrator.
+**Sprint R — AI glossary-target suggestion** ✅ COMPLETE (merged via **PR #46 + #47**, ADR `014`; full suite **1401/4**, pyright 0, ruff+format clean):
+- **R0 — provider `complete()` primitive** — a domain-agnostic transport method on `LLMProvider` (`complete(prompt, *, system, max_output_tokens) -> Completion`), implemented across deepseek/custom, gemini, ollama, fake. Carries no domain knowledge; **not** an escape hatch — every AI feature's prompt + parsing stays in a service (adding a domain method to a provider is an ADR-level change).
+- **R1 — `services/glossary_suggestion.py`** — resolves the provider via `build_provider(config)` (**config-driven; no hidden vendor default**; raises if `provider.type` absent), grounds the prompt in the candidate source + example sentences (reuses #3's read-only `_segment_examples`), calls `complete()`, parses strict `{"target": "..."}` and **rejects** empty / non-JSON / multiline / over-long / sentence-shaped output. **Ephemeral** — no persistence, no migration.
+- **R2 — cockpit "Suggest with AI"** — per-candidate button (labelled `(LLM call)` so cost is visible before click) fills the **editable** target via an HTMX fragment + shows `provider · model · ~tokens`; failures shown in-place (never silent/garbage); `/suggest` declared before the generic `/{action}` route. **Gate B1**: provider called only on explicit POST (spy-tested); secret-grep regression.
+- Also merged in **PR #46** (Sprint Q #2/#3 follow-ons): approved-terms search + pagination (`list_terms_page`); lazy per-candidate example sentences (read-only `examples_for_source`).
+
+**Non-goals honored for Sprint R** (scope fence): no schema migration/persistence; no "Suggest all" batch; no auto-approve; no confidence score; no config flag; no provider expansion / hardcoded vendor; `desktop/` untouched; no change to the export gate, QA, or any render-path Gate-B1 posture.
 
 **Next:** open the next sprint (e.g. the WV-014 ruby-import-flatten follow-up and the carried known issues in [docs/MAINTENANCE.md](docs/MAINTENANCE.md)).
+
+---
+
+> **Sprint Q (Workspace v2) ✅ COMPLETE · Q0–Q12 all merged to `main` (PR #41/#42/#43/#44) · final validation passed.** Detail retained below as the historical record.
+
+**Sprint focus:** the cross-project Workspace command center plus per-project surfaces. The hardened read foundation (Q1+Q2), all hubs (Q3–Q7), deterministic analytics (Q8), **Content Explorer v2 (Q9)**, **Editor Context Panel (Q10)**, **Validation completion (Q11)**, and **residual cleanup + final gate (Q12)** are built **and merged to `main`** (Q11+Q12 via PR #44). A final validation pass (2026-06-12) re-verified the full gate and reconciled the docs — see [SPRINT_Q_FINAL_VALIDATION.md](.docs/audit/SPRINT_Q_FINAL_VALIDATION.md).
 
 **Q12 — Residual cleanup + final integration gate** ✅ (built on `feat/cleanup-docs-reconciliation-final-integration`, stacked on Q11):
 - **Q12a-1 `raw_response_logging` honored** — `[logging].raw_response_logging` defaults **false**, so the provider raw response is no longer persisted unless opted in. Threaded `persist_raw_response` through `translate_one_segment` → `translate_project` / `workspace_translate` / `batch_translate`. Tests: omitted-when-disabled / persisted-when-enabled. **Behavior change** (privacy-positive).
@@ -221,6 +233,7 @@ Deep detail per entry lives in git history and linked docs.
 | Sprint P — Workflow Coherence | [SPRINT_P_EXECUTION](.docs/audit/SPRINT_P_EXECUTION.md) | 1102 / 4 | ✅ CLOSED — WV-001..006; O-gate green. *Lesson:* per-project coherence precedes cross-project hubs |
 | Sprint O — Production Desktop | `desktop/` + [INSTALL_DESKTOP](docs/INSTALL_DESKTOP.md) | 1102 / 4 | ✅ COMPLETE — portable 3.2 MB exe; PATH-dependency baseline; PyInstaller recommended for single-file |
 | **Sprint Q — Workspace v2** | [SPRINT_Q_EXECUTION_PLAN](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [DEEP_AUDIT](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) + [RISK_REGISTER](.docs/audit/SPRINT_Q_RISK_REGISTER.md) + [HANDOFF](.docs/audit/SPRINT_Q_HANDOFF.md) | Q12 1351 / 4 | ✅ COMPLETE (merged: PR #41/#42/#43/#44) — Q0–Q10 merged; **Q11 ✅** (structure-QA join, +3 checks, v12 drops `qa_warnings`, ADR 013, WV-014 spike); **Q12 ✅** (raw_response honored, upload cap, export-path doc, `_single_project_id` dedup, final gate green: 1351/4 + pyright 0 + ruff + cargo + security/perf smokes); **final validation 2026-06-12** (re-verified gate + reconciled docs + fixed a missed raw-SQL spot in `ui_qa.py`). *Lesson:* a Gate-B1-style audit before building pays twice — WV-008's "missing" checks were mostly already present (the new set shrank to three), and the WV-014 spike found the real defect was import-side, not the renderer |
+| **Sprint R — AI glossary-target suggestion** | [ADR 014](docs/decisions/014-provider-complete-primitive-and-glossary-suggestion.md) + [spec](docs/superpowers/specs/2026-06-12-glossary-ai-target-suggestion-design.md) + [plan](docs/superpowers/plans/2026-06-12-sprint-r-glossary-ai-suggestion.md) | 1401 / 4 | ✅ COMPLETE (merged: PR #46 #2/#3 + PR #47 Sprint R) — domain-agnostic provider `complete()` primitive (4 providers); config-driven `glossary_suggestion` service (strict-JSON parse+validation, ephemeral); cockpit Suggest-with-AI (Gate B1, visible failure, cost shown). *Lesson:* adding an abstract method to a base class is a real blast-radius — 6 in-repo `LLMProvider` test doubles needed the new `complete()`; the abstract-method choice (vs a default) made each a load-time failure, caught by pyright + the suite before merge |
 
 > Test counts are the last full-suite figure verified at each closed stage. Re-run the full suite at each stage gate; do not assume a count without running it.
 
@@ -256,7 +269,7 @@ Provider registry: `providers/registry.py`. API keys resolve from env vars or `~
 
 ### 4.1 Before Coding
 
-1. Read this file first, then the relevant doc/ADR from §1. For the **active Sprint Q**: [SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) (cold start: [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md)), against [SOURCEOFARCHITECTURE.md](.docs/audit/SOURCEOFARCHITECTURE.md) + [ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md).
+1. Read this file first, then the relevant doc/ADR from §1. No sprint is currently active (Sprint Q + R closed); when a new sprint opens, follow its execution plan/spec + the staging discipline modelled by [SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md), against [SOURCEOFARCHITECTURE.md](.docs/audit/SOURCEOFARCHITECTURE.md) + [ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md).
 2. Check the active stage in §2.3 before starting any work. Respect stage order; stop at each stage gate (§2.2) for inspection.
 3. Run `rtk git status --short --branch`. If WIP overlaps the relevant area, tell the orchestrator before editing.
 4. Confirm scaffolding is actually requested. Docs/strategy request ≠ build code.
