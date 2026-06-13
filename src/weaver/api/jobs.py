@@ -60,7 +60,7 @@ from weaver.services.job_store import (
 from weaver.services.logging_setup import log_job_event
 from weaver.services.translation import ProgressCallback
 from weaver.services.workspace_translate import ChapterTranslationResult
-from weaver.storage.db import connect_database
+from weaver.storage.db import connect_database, connect_readonly_database
 from weaver.storage.segments import SegmentRecord
 
 logger = logging.getLogger("weaver.job")
@@ -1300,7 +1300,7 @@ def replay_persisted_events(
     if db_path is None:
         return
     try:
-        with closing(connect_database(db_path)) as conn:
+        with closing(connect_readonly_database(db_path)) as conn:
             for row in list_events_after(conn, job_id=job_id, after_id=after_id):
                 yield {"event": row.event, "data": row.data, "id": row.id}
     except (WeaverError, sqlite3.Error) as exc:
