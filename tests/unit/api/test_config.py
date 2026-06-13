@@ -60,7 +60,7 @@ def test_get_config_with_project(isolated: Path) -> None:
     client = _client(isolated)
     body = client.get("/config", params={"project": name}).json()
     assert body["project_name"] == name
-    assert body["provider_type"]  # initialized project has a provider type
+    assert body["provider_type"] is None  # new projects require explicit provider config
 
 
 def test_get_config_unknown_project_404(isolated: Path) -> None:
@@ -80,7 +80,8 @@ def test_patch_project_scope_persists(isolated: Path) -> None:
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["provider_type"] == "fake"
+    assert body["provider_type"] == "custom"
+    assert body["protocol"] == "fake"
     assert body["model"] == "fake-9"
     # persisted: a fresh read reflects it
     again = client.get("/config", params={"project": name}).json()
@@ -99,14 +100,15 @@ def test_patch_global_scope_persists(isolated: Path) -> None:
     assert body["default_model"] == "gemini-x"
 
 
-def test_patch_unknown_provider_422(isolated: Path) -> None:
+def test_patch_freeform_provider_type_persists(isolated: Path) -> None:
     name = _make_project(isolated)
     client = _client(isolated)
     r = client.patch(
         "/config",
         json={"scope": "project", "project": name, "provider_type": "not-real"},
     )
-    assert r.status_code == 422
+    assert r.status_code == 200
+    assert r.json()["provider_type"] == "not-real"
 
 
 def test_patch_project_scope_without_project_422(isolated: Path) -> None:

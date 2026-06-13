@@ -56,7 +56,9 @@ def test_weaver_translate_provider_unhealthy_exits_code_three(tmp_path, monkeypa
     project_toml = tmp_path / ".weaver" / "aozora_sample" / "project.toml"
     text = project_toml.read_text(encoding="utf-8")
     text = (
-        text.replace('type = "deepseek"', 'type = "fake"')
+        text.replace('type = ""', 'type = "fake"')
+        .replace('type = "deepseek"', 'type = "fake"')
+        .replace('model = ""', 'model = "fake-1"')
         .replace('model = "deepseek-chat"', 'model = "fake-1"')
         .replace('model = "fake-1"', 'model = "fake-1"\npattern = "EN translation."')
     )

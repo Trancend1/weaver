@@ -5,12 +5,15 @@ from __future__ import annotations
 import pytest
 
 from weaver.errors import ConfigError
-from weaver.providers.registry import build_provider, known_provider_types
+from weaver.providers.registry import build_provider, known_protocols, known_provider_types
 
 
-def test_known_provider_types_includes_builtins_and_custom() -> None:
+def test_known_provider_types_and_protocols_include_compatibility_values() -> None:
     types = known_provider_types()
     assert {"deepseek", "gemini", "ollama", "fake", "custom"} <= set(types)
+    assert {"openai_chat", "gemini_generate", "ollama_generate", "fake"} <= set(
+        known_protocols()
+    )
 
 
 def test_build_custom_success(monkeypatch) -> None:

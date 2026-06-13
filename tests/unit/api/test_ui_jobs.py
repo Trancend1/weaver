@@ -27,7 +27,9 @@ def jobs_client(tmp_path: Path) -> TestClient:
     init = initialize_project(epubs[0], cwd=tmp_path)
     toml = Path(init.project_toml)
     toml.write_text(
-        toml.read_text(encoding="utf-8").replace('type = "deepseek"', 'type = "fake"'),
+        toml.read_text(encoding="utf-8")
+        .replace('type = ""', 'type = "fake"')
+        .replace('type = "deepseek"', 'type = "fake"'),
         encoding="utf-8",
     )
     return TestClient(create_api_app(tmp_path))

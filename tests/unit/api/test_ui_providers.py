@@ -39,8 +39,8 @@ def _init(tmp_path: Path, name: str, provider: str | None = None) -> None:
 
 @pytest.fixture
 def providers_client(tmp_path: Path) -> TestClient:
-    _init(tmp_path, "alpha")
-    _init(tmp_path, "beta")
+    _init(tmp_path, "alpha", provider="deepseek")
+    _init(tmp_path, "beta", provider="deepseek")
     return TestClient(create_api_app(tmp_path))
 
 
@@ -129,7 +129,7 @@ def test_healthcheck_unknown_project_is_handled(providers_client: TestClient) ->
 def test_secret_value_never_rendered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     secret_value = "sk-SUPER-SECRET-DO-NOT-RENDER-9999"
     monkeypatch.setenv("DEEPSEEK_API_KEY", secret_value)
-    _init(tmp_path, "alpha")
+    _init(tmp_path, "alpha", provider="deepseek")
     client = TestClient(create_api_app(tmp_path))
     html = client.get("/ui/providers").text
     assert secret_value not in html

@@ -21,21 +21,11 @@ from typing import Any
 from weaver.core.config import load_project_config
 from weaver.core.secret_store import list_secret_names
 from weaver.errors import WeaverError
-from weaver.providers.deepseek import ENV_API_KEY as DEEPSEEK_ENV
-from weaver.providers.gemini import ENV_API_KEY as GEMINI_ENV
+from weaver.providers.registry import normalize_provider_config
 from weaver.services.project_discovery import discover_projects
 from weaver.storage.db import connect_readonly_database
 
 _RECENT_FAILURES_PER_PROJECT = 5
-
-# Canonical env-var name per built-in provider type.  ``custom`` reads its own
-# ``api_key_env`` from project.toml; ``ollama``/``fake`` need no key.
-_KEY_ENV_BY_TYPE: dict[str, str] = {
-    "deepseek": DEEPSEEK_ENV,
-    "gemini": GEMINI_ENV,
-}
-_KEYLESS_TYPES = frozenset({"ollama", "fake"})
-
 
 @dataclass(frozen=True)
 class ProviderFailure:
@@ -155,10 +145,13 @@ def _providers_for_project(
 
     try:
         config = load_project_config(project_toml)
-        provider_cfg = config.get("provider", {})
+        provider_cfg = normalize_provider_config(config.get("provider", {}))
         provider_type = str(provider_cfg.get("type", "")) or "unknown"
+        protocol = str(provider_cfg.get("protocol", "")).strip()
         model = str(provider_cfg.get("model", "")) or "—"
-        api_key_env = _resolve_key_env(provider_type, provider_cfg)
+        api_key_env = _resolve_key_env(provider_cfg)
+        if protocol:
+            provider_type = f"{provider_type} / {protocol}"
     except WeaverError as exc:
         return _degraded(name, uuid, "error", str(exc))
 
@@ -194,15 +187,14 @@ def _providers_for_project(
     )
 
 
-def _resolve_key_env(provider_type: str, provider_cfg: dict[str, Any]) -> str | None:
-    """Return the env-var NAME the provider expects, or None for keyless types."""
+def _resolve_key_env(provider_cfg: dict[str, Any]) -> str | None:
+    """Return the env-var NAME the provider expects, or None for keyless protocols."""
 
-    if provider_type in _KEYLESS_TYPES:
+    protocol = str(provider_cfg.get("protocol", "")).strip()
+    if protocol in {"ollama_generate", "fake"}:
         return None
-    if provider_type == "custom":
-        env = str(provider_cfg.get("api_key_env", "")).strip()
-        return env or None
-    return _KEY_ENV_BY_TYPE.get(provider_type)
+    env = str(provider_cfg.get("api_key_env", "")).strip()
+    return env or None
 
 
 def _read_token_totals(connection: sqlite3.Connection) -> tuple[int, int]:

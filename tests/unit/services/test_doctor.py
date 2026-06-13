@@ -44,7 +44,7 @@ def test_doctor_flags_missing_provider_env(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("EDITOR", "notepad")
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-    init = initialize_project(FIXTURE_EPUB)
+    init = initialize_project(FIXTURE_EPUB, provider="deepseek")
 
     report = run_doctor(init.project_toml)
 

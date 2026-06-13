@@ -34,4 +34,4 @@ These archived ADRs still describe behavior in the current code; their intent is
 
 - `0017` localhost security model → folded into [004](decisions/004-fastapi-cockpit-technical-direction.md).
 - `0019` job-manager / SSE progress → folded into [004](decisions/004-fastapi-cockpit-technical-direction.md).
-- `0020` local secret store → folded into [004](decisions/004-fastapi-cockpit-technical-direction.md) + [PROVIDER_AND_MODEL_CONFIG.md](PROVIDER_AND_MODEL_CONFIG.md).
+- `0020` local secret store → folded into [004](decisions/004-fastapi-cockpit-technical-direction.md) + [docs/CODEMAPS/dependencies.md](CODEMAPS/dependencies.md).

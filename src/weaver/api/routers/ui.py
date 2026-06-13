@@ -29,7 +29,6 @@ from weaver.errors import (
     VolumeNotFoundError,
     WeaverError,
 )
-from weaver.providers.registry import known_provider_types
 from weaver.services.chapter_workspace import chapter_workspace
 from weaver.services.epub_structure_preview import preview_epub_structure
 from weaver.services.import_source import import_volume
@@ -403,7 +402,7 @@ def new_project_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "new.html",
-        {**global_layout("new"), "provider_types": known_provider_types()},
+        {**global_layout("new")},
     )
 
 
@@ -444,7 +443,7 @@ async def create_project_submit(
         return templates.TemplateResponse(
             request,
             "new.html",
-            {**global_layout("new"), "error": str(exc), "provider_types": known_provider_types()},
+            {**global_layout("new"), "error": str(exc)},
             status_code=400,
         )
     return RedirectResponse(url=f"/ui/projects/{result.project_name}", status_code=303)

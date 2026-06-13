@@ -14,7 +14,7 @@
   </form>
   <button type="button" class="link-btn"
           hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ candidate_id }}/suggest"
-          hx-target="#cand-edit-{{ candidate_id }}" hx-swap="innerHTML"
+          hx-target="#cand-edit-{{ candidate_id }}" hx-swap="innerHTML" hx-disabled-elt="this"
           aria-label="Suggest a target with AI for this term">Suggest with AI <span class="hint">(LLM call)</span></button>
   {% if suggestion %}
   <p class="meta" aria-live="polite">via {{ suggestion.provider }} · {{ suggestion.model }} ·

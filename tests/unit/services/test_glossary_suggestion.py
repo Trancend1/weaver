@@ -35,6 +35,10 @@ class _StubProvider(LLMProvider):
 
     def complete(self, prompt, *, system=None, max_output_tokens):
         self.last_prompt = prompt
+        if not self._healthy:
+            from weaver.errors import ProviderUnavailable
+
+            raise ProviderUnavailable(self.name, "stub provider is unavailable")
         if self._exc:
             raise self._exc
         return Completion(
@@ -51,7 +55,7 @@ def _candidate_source(project_toml: Path) -> tuple[int, str]:
 
 def test_suggest_returns_grounded_target(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    init = initialize_project(FIXTURE_EPUB)
+    init = initialize_project(FIXTURE_EPUB, provider="fake")
     cid, source = _candidate_source(init.project_toml)
     stub = _StubProvider(text='{"target": "Demon King"}')
 
@@ -59,7 +63,7 @@ def test_suggest_returns_grounded_target(tmp_path: Path, monkeypatch) -> None:
 
     assert isinstance(out, GlossarySuggestion)
     assert out.target == "Demon King"
-    assert out.provider == "stub" and out.model == "stub-1"
+    assert out.provider == "stub" and out.model == "fake-1"
     assert (out.input_tokens, out.output_tokens) == (5, 2)
     # grounded: the prompt the provider saw contains the candidate's source term
     assert source in (stub.last_prompt or "")

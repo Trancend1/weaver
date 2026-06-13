@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from weaver.core.config import load_project_config
-from weaver.errors import ConfigError, GlossarySuggestionError, ProviderUnavailable
+from weaver.errors import ConfigError, GlossarySuggestionError
 from weaver.providers import LLMProvider, build_provider
 from weaver.providers.prompts import (
     GLOSSARY_SUGGEST_PROMPT_VERSION,
@@ -70,41 +70,39 @@ def suggest_glossary_target(
     db_path = resolve_database_path(project_toml, cwd=cwd)
 
     active = build_provider(provider_config) if provider is None else provider
-    status = active.healthcheck()
-    if not status.healthy:
-        raise ProviderUnavailable(
-            f"Provider {active.name} is unavailable: {status.message or 'no detail'}. "
-            "Likely cause: API key missing/invalid or endpoint unreachable. "
-            "Next command: run `weaver inspect --healthcheck <project.toml>`."
-        )
+    try:
+        with closing(connect_readonly_database(db_path)) as connection:
+            project = _load_single_project(connection)
+            candidate = get_glossary_candidate(connection, candidate_id=candidate_id)
+            examples = _segment_examples(
+                connection, project_id=project.id, source=candidate.source, limit=EXAMPLE_LIMIT
+            )
 
-    with closing(connect_readonly_database(db_path)) as connection:
-        project = _load_single_project(connection)
-        candidate = get_glossary_candidate(connection, candidate_id=candidate_id)
-        examples = _segment_examples(
-            connection, project_id=project.id, source=candidate.source, limit=EXAMPLE_LIMIT
+        prompt = render_glossary_suggestion_prompt(
+            source=candidate.source,
+            category=candidate.category,
+            examples=examples,
+            source_lang=project.source_lang,
+            target_lang=project.target_lang,
         )
-
-    prompt = render_glossary_suggestion_prompt(
-        source=candidate.source,
-        category=candidate.category,
-        examples=examples,
-        source_lang=project.source_lang,
-        target_lang=project.target_lang,
-    )
-    completion = active.complete(
-        prompt,
-        system=f"Glossary assistant ({GLOSSARY_SUGGEST_PROMPT_VERSION}).",
-        max_output_tokens=MAX_OUTPUT_TOKENS,
-    )
-    target = _parse_target(completion.text)
-    return GlossarySuggestion(
-        target=target,
-        provider=active.name,
-        model=status.model or configured_model,
-        input_tokens=completion.input_tokens,
-        output_tokens=completion.output_tokens,
-    )
+        completion = active.complete(
+            prompt,
+            system=f"Glossary assistant ({GLOSSARY_SUGGEST_PROMPT_VERSION}).",
+            max_output_tokens=MAX_OUTPUT_TOKENS,
+        )
+        target = _parse_target(completion.text)
+        return GlossarySuggestion(
+            target=target,
+            provider=active.name,
+            model=configured_model or "unknown model",
+            input_tokens=completion.input_tokens,
+            output_tokens=completion.output_tokens,
+        )
+    finally:
+        if provider is None:
+            close = getattr(active, "close", None)
+            if callable(close):
+                close()
 
 
 def _parse_target(text: str) -> str:
@@ -121,9 +119,16 @@ def _parse_target(text: str) -> str:
         raise _unusable("the AI returned a multiline target")
     if len(target) > MAX_TARGET_CHARS:
         raise _unusable("the AI returned an over-long target")
-    if target[-1] in _SENTENCE_END:
+    if target[-1] in _SENTENCE_END and not _looks_like_abbreviation(target):
         raise _unusable("the AI returned a sentence, not a glossary term")
     return target
+
+
+def _looks_like_abbreviation(target: str) -> bool:
+    compact = target.replace(".", "")
+    if len(compact) <= 4 and compact.isalpha():
+        return True
+    return "." in target[:-1] and all(part.isalpha() for part in target.split(".") if part)
 
 
 def _unusable(reason: str) -> GlossarySuggestionError:

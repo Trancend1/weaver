@@ -25,7 +25,6 @@ from weaver.errors import (
     TranslationMemoryNotFoundError,
     WeaverError,
 )
-from weaver.providers.registry import known_provider_types
 from weaver.services import characters as characters_service
 from weaver.services import glossary_terms as glossary_service
 from weaver.services import provider_config as config_service
@@ -527,7 +526,6 @@ def _config_ctx(request: Request, project: str | None) -> dict[str, object]:
         "view": view,
         "project": _opt(project),
         "projects": [dp.name for dp in discover_projects(base)],
-        "provider_types": known_provider_types(),
     }
 
 
@@ -547,6 +545,7 @@ def config_save(
     scope: str = Form("project"),
     project: str | None = Form(None),
     provider_type: str | None = Form(None),
+    protocol: str | None = Form(None),
     model: str | None = Form(None),
     base_url: str | None = Form(None),
     api_key_env: str | None = Form(None),
@@ -560,6 +559,7 @@ def config_save(
             scope=scope,
             project=_opt(project),
             provider_type=_opt(provider_type),
+            protocol=_opt(protocol),
             model=_opt(model),
             base_url=_opt(base_url),
             api_key_env=_opt(api_key_env),

@@ -86,10 +86,14 @@ def test_set_provider_custom_writes_endpoint_fields(tmp_path: Path) -> None:
     assert "api_key " not in raw and 'api_key"' not in raw
 
 
-def test_set_provider_rejects_unknown_provider(tmp_path: Path) -> None:
+def test_set_provider_accepts_freeform_provider_type(tmp_path: Path) -> None:
     toml = _write(tmp_path / "project.toml", PROJECT_TOML)
-    with pytest.raises(ConfigError):
-        set_provider(toml, provider_type="not-a-provider")
+
+    set_provider(toml, provider_type="not-a-provider", protocol="openai_chat")
+
+    data = tomllib.loads(toml.read_text(encoding="utf-8"))
+    assert data["provider"]["type"] == "not-a-provider"
+    assert data["provider"]["protocol"] == "openai_chat"
 
 
 def test_set_provider_missing_project_raises(tmp_path: Path) -> None:
