@@ -151,6 +151,7 @@ def write_config(
 
     if scope == "global":
         target = default_global_config_path()
+        _reject_global_orphan_model(provider_type=provider_type, model=model)
     else:
         if project is None:
             raise ConfigError(
@@ -204,6 +205,28 @@ def remove_secret(env_name: str) -> SecretPresence:
             "Next command: list config to see stored secret names."
         )
     return SecretPresence(name=env_name, is_set=False)
+
+
+def _reject_global_orphan_model(*, provider_type: str | None, model: str | None) -> None:
+    """Forbid a global ``default_model`` with no ``default_provider`` (an orphan).
+
+    Global ``[defaults]`` is the top of the precedence chain, so a default model
+    with no provider can never route to a real engine ("no hidden default
+    provider"). The check is on the *resulting* state, so a model-only save is
+    allowed when a global provider already exists (a normal partial update);
+    only a write that would leave a model with no provider is rejected.
+    """
+
+    defaults = load_global_config().get("defaults", {})
+    resulting_provider = _opt_str(provider_type) or _opt_str(defaults.get("default_provider"))
+    resulting_model = _opt_str(model) or _opt_str(defaults.get("default_model"))
+    if resulting_model and not resulting_provider:
+        raise ConfigError(
+            "A global default model needs a provider type. "
+            "Likely cause: the model field was set while the provider type was left "
+            "empty, which would store a default model that cannot route to any provider. "
+            "Next command: set the provider type as well, or save under project scope."
+        )
 
 
 def _opt_str(value: object) -> str | None:

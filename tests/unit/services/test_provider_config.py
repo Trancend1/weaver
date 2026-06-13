@@ -42,6 +42,27 @@ def test_write_global_then_read_back(tmp_path: Path) -> None:
     assert view.default_model == "m1"
 
 
+def test_write_global_model_without_provider_raises(tmp_path: Path) -> None:
+    # No hidden default provider: a global default model with no provider can never
+    # route, so it is rejected rather than persisted as an orphan.
+    with pytest.raises(ConfigError):
+        write_config(tmp_path, scope="global", model="MiniMax-M3")
+
+
+def test_write_global_model_allowed_when_provider_already_set(tmp_path: Path) -> None:
+    # Partial update: provider already exists globally, so a model-only save is fine.
+    write_config(tmp_path, scope="global", provider_type="fake")
+    view = write_config(tmp_path, scope="global", model="m2")
+    assert view.default_provider == "fake"
+    assert view.default_model == "m2"
+
+
+def test_write_global_provider_only_is_allowed(tmp_path: Path) -> None:
+    view = write_config(tmp_path, scope="global", provider_type="fake")
+    assert view.default_provider == "fake"
+    assert view.default_model is None
+
+
 def test_write_unknown_scope_raises(tmp_path: Path) -> None:
     with pytest.raises(ConfigError):
         write_config(tmp_path, scope="weird", provider_type="fake")
