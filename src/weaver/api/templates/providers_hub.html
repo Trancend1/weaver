@@ -110,8 +110,8 @@
       <label>Project
         <select name="project">
           <option value="">(global only)</option>
-          {% for p in projects %}
-          <option value="{{ p }}"{% if p == project %} selected{% endif %}>{{ p }}</option>
+          {% for proj in projects %}
+          <option value="{{ proj }}"{% if proj == project %} selected{% endif %}>{{ proj }}</option>
           {% endfor %}
         </select>
       </label>

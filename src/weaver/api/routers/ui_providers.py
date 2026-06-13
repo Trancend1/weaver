@@ -1,10 +1,15 @@
-"""UI router: global Providers hub (Sprint Q6).
+"""UI router: global Providers hub (Sprint Q6) + provider/model + secret config editor (ADR ``015``).
 
-Read-only cross-project provider surface.  The hub GET uses
-``services/workspace_providers`` with ``connect_readonly_database`` exclusively
+The hub GET is render-safe (Gate B1): it uses ``services/workspace_providers``
+(read-only DB) plus ``provider_config.read_config`` (TOML + secret-name list only)
 — no writes, no migrations, no source hashing, **no provider calls on render**.
 
-The only provider call lives behind an explicit per-project health-check POST
+Write paths are explicit POSTs through the ``provider_config`` service:
+``/ui/providers/config`` persists provider/model config (project or global scope);
+``/ui/providers/secrets`` stores/removes API-key secrets in ``~/.weaver/secrets.toml``.
+Secret *values* are only ever accepted by the secret form and are never rendered back.
+
+The only provider call lives behind the explicit per-project health-check POST
 (R-22 / Gate B1 extension: provider calls cost money/quota, so they are never
 triggered by a render).
 """
