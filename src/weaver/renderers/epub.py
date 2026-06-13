@@ -14,7 +14,7 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 from ebooklib import epub
-from ebooklib.epub import EpubBook, EpubException, EpubHtml, EpubNcx
+from ebooklib.epub import EpubBook, EpubException, EpubHtml, EpubItem, EpubNcx
 
 from weaver.core.ir import BlockIR, DocumentIR
 from weaver.errors import EpubWriteError
@@ -70,6 +70,7 @@ def render_translated_epub(
             "Next command: rerun `weaver init <path-to-epub>` for a fresh project."
         ) from exc
 
+    _filter_book_to_document(book, document)
     blocks_by_href = _group_blocks_by_href(document)
     items_by_href = {
         item.get_name(): item for item in book.get_items() if isinstance(item, EpubHtml)
@@ -115,6 +116,50 @@ def render_translated_epub(
         translated_blocks=translated,
         fallback_blocks=fallback,
     )
+
+
+def _filter_book_to_document(book: EpubBook, document: DocumentIR) -> None:
+    chapter_hrefs = {chapter.href for chapter in document.chapters}
+    chapter_items = {
+        str(item.get_id()): item
+        for item in book.get_items()
+        if isinstance(item, EpubHtml) and item.is_chapter()
+    }
+    selected_ids = {
+        item_id for item_id, item in chapter_items.items() if item.get_name() in chapter_hrefs
+    }
+    if selected_ids == set(chapter_items):
+        return
+
+    book.items = [
+        item
+        for item in book.items
+        if not (
+            isinstance(item, EpubHtml)
+            and item.is_chapter()
+            and str(item.get_id()) not in selected_ids
+        )
+    ]
+    book.spine = [
+        entry
+        for entry in book.spine
+        if (idref := _spine_idref(entry)) not in chapter_items or idref in selected_ids
+    ]
+    selected_by_href = {
+        item.get_name(): item
+        for item in book.get_items()
+        if isinstance(item, EpubHtml) and item.is_chapter()
+    }
+    book.toc = [
+        item for chapter in document.chapters if (item := selected_by_href.get(chapter.href))
+    ]
+
+
+def _spine_idref(entry: object) -> str:
+    item = entry[0] if isinstance(entry, tuple) else entry
+    if isinstance(item, EpubItem):
+        return str(item.get_id())
+    return str(item)
 
 
 def _ensure_navigation_items(book: EpubBook) -> None:

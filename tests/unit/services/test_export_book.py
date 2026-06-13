@@ -174,6 +174,32 @@ def _epub_text(path: Path) -> str:
     )
 
 
+def _write_two_chapter_epub(path: Path) -> None:
+    book = epub.EpubBook()
+    book.set_identifier("two-chapter-fixture")
+    book.set_title("Two Chapter Fixture")
+    book.set_language("ja")
+
+    chapter_one = epub.EpubHtml(title="Chapter One", file_name="chapter1.xhtml", lang="ja")
+    chapter_one.content = (
+        "<html><body><h1>Chapter One</h1>"
+        "<p>FIRST-ONLY-SOURCE</p></body></html>"
+    )
+    chapter_two = epub.EpubHtml(title="Chapter Two", file_name="chapter2.xhtml", lang="ja")
+    chapter_two.content = (
+        "<html><body><h1>Chapter Two</h1>"
+        "<p>SECOND-UNRELATED-SOURCE</p></body></html>"
+    )
+
+    book.add_item(chapter_one)
+    book.add_item(chapter_two)
+    book.toc = [chapter_one, chapter_two]
+    book.spine = ["nav", chapter_one, chapter_two]
+    book.add_item(epub.EpubNcx())
+    book.add_item(epub.EpubNav())
+    epub.write_epub(str(path), book)
+
+
 # --------------------------------------------------------------------------- #
 # Gate 8A: mixed-format novel exports to per-volume EPUBs
 # --------------------------------------------------------------------------- #
@@ -496,6 +522,36 @@ def test_export_chapter_single_chapter(tmp_path: Path) -> None:
     assert result.chapters_exported == 1
     assert len(result.artifacts) == 1
     assert result.artifacts[0].output_path.name.startswith("chapter-")
+
+
+def test_export_chapter_epub_artifact_excludes_unrelated_source_chapters(
+    tmp_path: Path,
+) -> None:
+    source_epub = tmp_path / "two-chapters.epub"
+    _write_two_chapter_epub(source_epub)
+    project_toml, db_path = _init(tmp_path)
+
+    with closing(initialize_database(db_path)) as conn, transaction(conn):
+        project_id = create_project(
+            conn, name="demo", source_path=str(source_epub), source_lang="ja", target_lang="en"
+        )
+        volume_id = create_volume(
+            conn,
+            project_id=project_id,
+            title="EPUB Vol",
+            source_path=str(source_epub),
+            source_format="epub",
+        )
+        document = scope_document_to_volume(read_epub(source_epub), volume_id)
+        sync_document_segments(conn, project_id=project_id, volume_id=volume_id, document=document)
+        first_chapter_id = document.chapters[0].id
+
+    result = export_chapter(project_toml, first_chapter_id, target="epub")
+
+    assert result.chapters_exported == 1
+    artifact_text = _epub_text(result.artifacts[0].output_path)
+    assert "FIRST-ONLY-SOURCE" in artifact_text
+    assert "SECOND-UNRELATED-SOURCE" not in artifact_text
 
 
 def test_export_volume_filename_includes_id(tmp_path: Path) -> None:
