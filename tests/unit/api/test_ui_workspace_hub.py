@@ -290,9 +290,3 @@ def test_new_project_route_still_global_layout(hub_client: TestClient) -> None:
     resp = hub_client.get("/ui/new")
     assert resp.status_code == 200
     assert "layout--global" in resp.text
-
-
-def test_config_route_still_global_layout(hub_client: TestClient) -> None:
-    resp = hub_client.get("/ui/config")
-    assert resp.status_code == 200
-    assert "layout--global" in resp.text

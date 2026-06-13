@@ -1,8 +1,6 @@
 """Tests for the FastAPI consistency/admin UI (Stage 11C).
 
-Glossary CRUD + candidate review, character DB, translation memory, provider/secret
-config. The secret store and global config are isolated to tmp so no real
-``~/.weaver`` files are touched and no real key can leak into assertions.
+Glossary CRUD + candidate review, character DB, translation memory.
 """
 
 from __future__ import annotations
@@ -218,55 +216,6 @@ def test_memory_delete_unknown_shows_error(admin_client: TestClient) -> None:
     assert "error" in r.text.lower()
 
 
-# --- provider / secret config -----------------------------------------------
-
-
-def test_config_page_and_save(admin_client: TestClient) -> None:
-    name = _name(admin_client)
-    assert admin_client.get("/ui/config").status_code == 200
-    assert admin_client.get("/ui/config", params={"project": name}).status_code == 200
-
-    r = admin_client.post(
-        "/ui/config",
-        data={"scope": "project", "project": name, "provider_type": "fake", "model": "fake-9"},
-    )
-    assert r.status_code == 200 and "Saved" in r.text
-    # persisted
-    view = admin_client.get(f"/config?project={name}").json()
-    assert view["model"] == "fake-9"
-
-
-def test_config_freeform_provider_type(admin_client: TestClient) -> None:
-    name = _name(admin_client)
-    r = admin_client.post(
-        "/ui/config",
-        data={"scope": "project", "project": name, "provider_type": "not-real"},
-    )
-    assert r.status_code == 200
-    assert "Saved" in r.text
-
-
-def test_secret_set_and_delete_without_exposing_value(admin_client: TestClient) -> None:
-    r = admin_client.post(
-        "/ui/config/secrets", data={"env_name": "MY_KEY", "value": "sk-LEAKCHECK"}
-    )
-    assert r.status_code == 200
-    assert "MY_KEY" in r.text
-    assert "sk-LEAKCHECK" not in r.text  # value never rendered
-    # and not in the page either
-    assert "sk-LEAKCHECK" not in admin_client.get("/ui/config").text
-
-    delete = admin_client.post("/ui/config/secrets/MY_KEY/delete")
-    assert delete.status_code == 200
-    assert "MY_KEY" not in delete.text
-
-
-def test_secret_invalid_name_error(admin_client: TestClient) -> None:
-    r = admin_client.post("/ui/config/secrets", data={"env_name": "bad name!", "value": "x"})
-    assert r.status_code == 200
-    assert "error" in r.text.lower()
-
-
 # --- nav links --------------------------------------------------------------
 
 
@@ -276,7 +225,7 @@ def test_project_page_links_admin_sections(admin_client: TestClient) -> None:
     assert f"/ui/projects/{name}/glossary" in page
     assert f"/ui/projects/{name}/characters" in page
     assert f"/ui/projects/{name}/memory" in page
-    assert "/ui/config" in admin_client.get("/ui").text
+    assert "/ui/providers" in admin_client.get("/ui").text
 
 
 # --- A2-5 admin usability ---------------------------------------------------
@@ -308,12 +257,7 @@ def test_candidate_search_param_is_echoed(admin_client: TestClient) -> None:
     assert 'value="zzz"' in r.text  # the search box keeps the query
 
 
-def test_config_and_new_use_freeform_provider_config(admin_client: TestClient) -> None:
-    cfg = admin_client.get("/ui/config").text
-    assert 'name="provider_type"' in cfg
-    assert 'name="protocol"' in cfg
-    assert '<select name="provider_type"' not in cfg
-
+def test_new_project_uses_freeform_provider_config(admin_client: TestClient) -> None:
     new = admin_client.get("/ui/new").text
     assert '<select name="provider"' not in new
     assert "Provider settings start empty" in new
