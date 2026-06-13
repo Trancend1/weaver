@@ -244,13 +244,20 @@ def test_providers_config_save_persists(providers_client: TestClient) -> None:
     assert view["model"] == "fake-9"
 
 
-def test_providers_config_freeform_provider_type(providers_client: TestClient) -> None:
+def test_providers_config_unbuildable_provider_type_errors_without_persisting(
+    providers_client: TestClient,
+) -> None:
     r = providers_client.post(
         "/ui/providers/config",
         data={"scope": "project", "project": "alpha", "provider_type": "not-real"},
     )
     assert r.status_code == 200
-    assert "Saved" in r.text
+    assert "Provider configuration is incomplete" in r.text
+    assert "Saved" not in r.text
+
+    view = providers_client.get("/config?project=alpha").json()
+    assert view["provider_type"] == "custom"
+    assert view["protocol"] == "openai_chat"
 
 
 def test_providers_secret_set_and_delete_without_exposing_value(
