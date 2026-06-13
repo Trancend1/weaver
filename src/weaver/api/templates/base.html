@@ -14,13 +14,9 @@
 <body class="layout layout--{{ _mode }}">
   <a class="skip-link" href="#content">Skip to content</a>
   <header class="topbar">
-    <a class="brand" href="/ui" aria-label="Weaver home">
+    <a class="brand" href="/ui" aria-label="Weaver home — dashboard">
       <span class="brand__name">Weaver</span>
     </a>
-    <nav class="topnav" aria-label="Primary">
-      <a href="/ui"{% if active_nav|default('') == "dashboard" or _path == "/ui" %} class="active" aria-current="page"{% endif %}>Dashboard</a>
-      <a href="/ui/new"{% if active_nav|default('') == "new" or _path.startswith("/ui/new") %} class="active" aria-current="page"{% endif %}>New project</a>
-    </nav>
   </header>
 
   <div class="app-shell app-shell--{{ _mode }}">
