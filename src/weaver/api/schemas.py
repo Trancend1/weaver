@@ -120,12 +120,6 @@ class NovelTreeResponse(BaseModel):
     volumes: list[VolumeResponse]
 
 
-class ErrorResponse(BaseModel):
-    """Generic error envelope."""
-
-    detail: str
-
-
 # ---------------------------------------------------------------------------
 # Import (Stage 2C)
 # ---------------------------------------------------------------------------

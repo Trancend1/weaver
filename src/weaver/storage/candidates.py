@@ -253,26 +253,7 @@ def list_candidates_for_project(
     return [_candidate_from_row(row) for row in rows]
 
 
-def count_candidates_for_project(
-    connection: sqlite3.Connection,
-    *,
-    project_id: int,
-    status: str | None = None,
-) -> int:
-    """Count candidates for a project, optionally filtered by status."""
 
-    if status is not None:
-        row = connection.execute(
-            "SELECT COUNT(*) AS count FROM translation_candidates "
-            "WHERE project_id = ? AND status = ?",
-            (project_id, status),
-        ).fetchone()
-    else:
-        row = connection.execute(
-            "SELECT COUNT(*) AS count FROM translation_candidates WHERE project_id = ?",
-            (project_id,),
-        ).fetchone()
-    return int(row["count"])
 
 
 def update_candidate_status(

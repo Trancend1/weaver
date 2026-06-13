@@ -135,33 +135,4 @@ def get_first_project_id(connection: sqlite3.Connection) -> int | None:
     return int(row["id"])
 
 
-def get_project_by_uuid(connection: sqlite3.Connection, project_uuid: str) -> ProjectRecord | None:
-    """Load a project row by its stable uuid.
 
-    Args:
-        connection: Open SQLite connection.
-        project_uuid: The project's uuid.
-
-    Returns:
-        ProjectRecord if found, otherwise None.
-    """
-
-    row = connection.execute(
-        """
-        SELECT id, name, source_path, source_lang, target_lang, schema_version, uuid
-        FROM projects
-        WHERE uuid = ?
-        """,
-        (project_uuid,),
-    ).fetchone()
-    if row is None:
-        return None
-    return ProjectRecord(
-        id=int(row["id"]),
-        name=str(row["name"]),
-        source_path=str(row["source_path"]),
-        source_lang=str(row["source_lang"]),
-        target_lang=str(row["target_lang"]),
-        schema_version=int(row["schema_version"]),
-        uuid=str(row["uuid"]) if row["uuid"] is not None else None,
-    )
