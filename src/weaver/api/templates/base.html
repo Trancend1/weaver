@@ -20,7 +20,6 @@
     <nav class="topnav" aria-label="Primary">
       <a href="/ui"{% if active_nav|default('') == "dashboard" or _path == "/ui" %} class="active" aria-current="page"{% endif %}>Dashboard</a>
       <a href="/ui/new"{% if active_nav|default('') == "new" or _path.startswith("/ui/new") %} class="active" aria-current="page"{% endif %}>New project</a>
-      <a href="/ui/providers"{% if active_nav|default('') == "providers" or _path.startswith("/ui/providers") %} class="active" aria-current="page"{% endif %}>Providers</a>
     </nav>
   </header>
 
