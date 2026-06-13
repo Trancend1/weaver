@@ -1,11 +1,9 @@
-"""Consistency/admin browser UI (Stage 11C): glossary, characters, TM, config.
+"""Consistency/admin browser UI (Stage 11C): glossary, characters, TM.
 
 Server-rendered Jinja2 + HTMX (ADR ``007``), **presentation only** — every route
 is a thin adapter over the existing services (`glossary_terms`, `glossary_review`,
-`glossary_diff`, `characters`, `translation_memory`, `provider_config`). No
-business logic, no storage access, no behavior change. API-key *values* are only
-ever accepted by the secret-set form and are never rendered back. Lives under
-``/ui``; the JSON API is untouched.
+`glossary_diff`, `characters`, `translation_memory`). No business logic, no
+storage access, no behavior change. Lives under ``/ui``; the JSON API is untouched.
 """
 
 from __future__ import annotations
@@ -16,18 +14,16 @@ from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from weaver.api.templating import templates
-from weaver.api.ui_context import global_layout, project_layout
+from weaver.api.ui_context import project_layout
 from weaver.errors import (
     CharacterNotFoundError,
     GlossaryCandidateNotFoundError,
     GlossaryTermNotFoundError,
-    SecretNotFoundError,
     TranslationMemoryNotFoundError,
     WeaverError,
 )
 from weaver.services import characters as characters_service
 from weaver.services import glossary_terms as glossary_service
-from weaver.services import provider_config as config_service
 from weaver.services import translation_memory as tm_service
 from weaver.services.glossary_diff import glossary_diff
 from weaver.services.glossary_review import (
@@ -37,7 +33,7 @@ from weaver.services.glossary_review import (
     list_project_glossary_conflicts,
 )
 from weaver.services.glossary_suggestion import suggest_glossary_target
-from weaver.services.project_discovery import discover_projects, find_project
+from weaver.services.project_discovery import find_project
 
 router = APIRouter(tags=["ui"], include_in_schema=False)
 
@@ -513,94 +509,3 @@ def memory_delete(
     except TranslationMemoryNotFoundError as exc:
         return _memory_fragment(request, name, offset=offset, find=find, error=str(exc))
     return _memory_fragment(request, name, offset=offset, find=find)
-
-
-# --- provider / secret config -----------------------------------------------
-
-
-def _config_ctx(request: Request, project: str | None) -> dict[str, object]:
-    base = _base_dir(request)
-    view = config_service.read_config(base, project=_opt(project))
-    return {
-        **global_layout("config"),
-        "view": view,
-        "project": _opt(project),
-        "projects": [dp.name for dp in discover_projects(base)],
-    }
-
-
-@router.get("/ui/config", response_class=HTMLResponse)
-def config_page(request: Request, project: str | None = None) -> HTMLResponse:
-    """Provider/model + secret config admin (key values never rendered)."""
-    try:
-        ctx = _config_ctx(request, project)
-    except WeaverError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return templates.TemplateResponse(request, "config.html", ctx)
-
-
-@router.post("/ui/config", response_class=HTMLResponse)
-def config_save(
-    request: Request,
-    scope: str = Form("project"),
-    project: str | None = Form(None),
-    provider_type: str | None = Form(None),
-    protocol: str | None = Form(None),
-    model: str | None = Form(None),
-    base_url: str | None = Form(None),
-    api_key_env: str | None = Form(None),
-) -> HTMLResponse:
-    """Persist provider/model config (no key value accepted), then re-render."""
-    base = _base_dir(request)
-    error: str | None = None
-    try:
-        config_service.write_config(
-            base,
-            scope=scope,
-            project=_opt(project),
-            provider_type=_opt(provider_type),
-            protocol=_opt(protocol),
-            model=_opt(model),
-            base_url=_opt(base_url),
-            api_key_env=_opt(api_key_env),
-        )
-    except WeaverError as exc:
-        error = str(exc)
-    ctx = _config_ctx(request, project)
-    ctx["error"] = error
-    ctx["saved"] = error is None
-    return templates.TemplateResponse(request, "partials/_config_form.html", ctx)
-
-
-@router.post("/ui/config/secrets", response_class=HTMLResponse)
-def config_secret_set(
-    request: Request,
-    project: str | None = Form(None),
-    env_name: str = Form(...),
-    value: str = Form(...),
-) -> HTMLResponse:
-    """Store an API-key secret under an env-var name (value never echoed back)."""
-    error: str | None = None
-    try:
-        config_service.store_secret(env_name, value)
-    except WeaverError as exc:
-        error = str(exc)
-    ctx = _config_ctx(request, project)
-    ctx["secret_error"] = error
-    ctx["secret_saved"] = error is None
-    return templates.TemplateResponse(request, "partials/_secrets.html", ctx)
-
-
-@router.post("/ui/config/secrets/{env_name}/delete", response_class=HTMLResponse)
-def config_secret_delete(
-    env_name: str, request: Request, project: str | None = Form(None)
-) -> HTMLResponse:
-    """Remove a stored secret, then re-render the secret list."""
-    error: str | None = None
-    try:
-        config_service.remove_secret(env_name)
-    except SecretNotFoundError as exc:
-        error = str(exc)
-    ctx = _config_ctx(request, project)
-    ctx["secret_error"] = error
-    return templates.TemplateResponse(request, "partials/_secrets.html", ctx)
