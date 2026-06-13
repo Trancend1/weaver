@@ -62,10 +62,10 @@ def test_providers_builds_summary(tmp_path: Path) -> None:
     p = providers.projects[0]
     assert p.project_name == "alpha"
     assert p.state == "ready"
-    assert p.provider_type == "deepseek"
-    assert p.model == "deepseek-chat"
-    assert p.api_key_env == "DEEPSEEK_API_KEY"
-    assert p.requires_key is True
+    assert p.provider_type == "unknown"
+    assert p.model == "—"
+    assert p.api_key_env is None
+    assert p.requires_key is False
     assert p.input_tokens == 0
     assert p.output_tokens == 0
     assert p.failed_job_count == 0
@@ -110,7 +110,7 @@ def test_providers_failure_summary(tmp_path: Path) -> None:
 def test_providers_secret_present_when_env_set(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    initialize_project(FIXTURE_EPUB, cwd=tmp_path, project_name="alpha")
+    initialize_project(FIXTURE_EPUB, cwd=tmp_path, project_name="alpha", provider="deepseek")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-not-rendered")
 
     providers = build_workspace_providers(tmp_path)
@@ -140,13 +140,19 @@ def test_providers_sorts_projects(tmp_path: Path) -> None:
 # ---------- Key env resolution ----------
 
 
-def test_resolve_key_env_per_type() -> None:
-    assert _resolve_key_env("deepseek", {}) == "DEEPSEEK_API_KEY"
-    assert _resolve_key_env("gemini", {}) == "GEMINI_API_KEY"
-    assert _resolve_key_env("ollama", {}) is None
-    assert _resolve_key_env("fake", {}) is None
-    assert _resolve_key_env("custom", {"api_key_env": "MY_KEY"}) == "MY_KEY"
-    assert _resolve_key_env("custom", {}) is None
+def test_resolve_key_env_per_protocol() -> None:
+    assert (
+        _resolve_key_env({"protocol": "openai_chat", "api_key_env": "DEEPSEEK_API_KEY"})
+        == "DEEPSEEK_API_KEY"
+    )
+    assert (
+        _resolve_key_env({"protocol": "gemini_generate", "api_key_env": "GEMINI_API_KEY"})
+        == "GEMINI_API_KEY"
+    )
+    assert _resolve_key_env({"protocol": "ollama_generate"}) is None
+    assert _resolve_key_env({"protocol": "fake"}) is None
+    assert _resolve_key_env({"protocol": "openai_chat", "api_key_env": "MY_KEY"}) == "MY_KEY"
+    assert _resolve_key_env({"protocol": "openai_chat"}) is None
 
 
 # ---------- Error isolation ----------

@@ -26,13 +26,13 @@ from pathlib import Path
 
 from weaver.core.global_config import default_global_config_path
 from weaver.errors import ConfigError
-from weaver.providers.registry import known_provider_types
 
 
 def set_provider(
     target: Path,
     *,
     provider_type: str | None = None,
+    protocol: str | None = None,
     model: str | None = None,
     base_url: str | None = None,
     api_key_env: str | None = None,
@@ -59,18 +59,17 @@ def set_provider(
             project ``target`` does not exist, or when no field is supplied.
     """
 
-    if provider_type is None and model is None and base_url is None and api_key_env is None:
+    if (
+        provider_type is None
+        and protocol is None
+        and model is None
+        and base_url is None
+        and api_key_env is None
+    ):
         raise ConfigError(
             "No provider field supplied. "
             "Likely cause: set_provider called with all fields None. "
-            "Next command: pass provider_type, model, base_url, and/or api_key_env."
-        )
-    if provider_type is not None and provider_type not in known_provider_types():
-        valid = ", ".join(known_provider_types())
-        raise ConfigError(
-            f"Unknown provider type `{provider_type}`. "
-            f"Likely cause: value must be a registered provider: {valid}. "
-            "Next command: choose a registered provider."
+            "Next command: pass provider_type, protocol, model, base_url, and/or api_key_env."
         )
 
     is_global = target.resolve() == default_global_config_path().resolve()
@@ -86,7 +85,11 @@ def set_provider(
             )
         section = "provider"
         updates = _drop_none(
-            type=provider_type, model=model, base_url=base_url, api_key_env=api_key_env
+            type=provider_type,
+            protocol=protocol,
+            model=model,
+            base_url=base_url,
+            api_key_env=api_key_env,
         )
 
     if not updates:

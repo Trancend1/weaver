@@ -45,6 +45,8 @@ def test_inspect_without_healthcheck_flag_omits_healthcheck_row(tmp_path, monkey
 
 def _rewrite_provider_to_fake(project_toml: Path) -> None:
     text = project_toml.read_text(encoding="utf-8")
+    text = text.replace('type = ""', 'type = "fake"')
     text = text.replace('type = "deepseek"', 'type = "fake"')
+    text = text.replace('model = ""', 'model = "fake-1"')
     text = text.replace('model = "deepseek-chat"', 'model = "fake-1"')
     project_toml.write_text(text, encoding="utf-8")

@@ -28,6 +28,7 @@ from weaver.core.secret_store import (
     set_secret,
 )
 from weaver.errors import ConfigError, SecretNotFoundError
+from weaver.providers.registry import normalize_provider_config
 from weaver.services.config_writer import set_provider
 from weaver.services.project_discovery import find_project
 
@@ -42,6 +43,7 @@ class ProviderConfigView:
     default_model: str | None
     project_name: str | None
     provider_type: str | None
+    protocol: str | None
     model: str | None
     base_url: str | None
     api_key_env: str | None
@@ -85,7 +87,7 @@ def read_config(base_dir: Path, *, project: str | None = None) -> ProviderConfig
     default_model = _opt_str(defaults.get("default_model"))
 
     project_name: str | None = None
-    provider_type = model = base_url = api_key_env = None
+    provider_type = protocol = model = base_url = api_key_env = None
     if project is not None:
         discovered = find_project(base_dir, project)
         if discovered is None:
@@ -95,8 +97,11 @@ def read_config(base_dir: Path, *, project: str | None = None) -> ProviderConfig
                 "Next command: list projects, then retry with an existing name."
             )
         project_name = discovered.name
-        provider = load_project_config(discovered.project_toml).get("provider", {})
+        provider = normalize_provider_config(
+            load_project_config(discovered.project_toml).get("provider", {})
+        )
         provider_type = _opt_str(provider.get("type"))
+        protocol = _opt_str(provider.get("protocol"))
         model = _opt_str(provider.get("model"))
         base_url = _opt_str(provider.get("base_url"))
         api_key_env = _opt_str(provider.get("api_key_env"))
@@ -106,6 +111,7 @@ def read_config(base_dir: Path, *, project: str | None = None) -> ProviderConfig
         default_model=default_model,
         project_name=project_name,
         provider_type=provider_type,
+        protocol=protocol,
         model=model,
         base_url=base_url,
         api_key_env=api_key_env,
@@ -120,6 +126,7 @@ def write_config(
     scope: str,
     project: str | None = None,
     provider_type: str | None = None,
+    protocol: str | None = None,
     model: str | None = None,
     base_url: str | None = None,
     api_key_env: str | None = None,
@@ -163,6 +170,7 @@ def write_config(
     set_provider(
         target,
         provider_type=provider_type,
+        protocol=protocol,
         model=model,
         base_url=base_url,
         api_key_env=api_key_env,

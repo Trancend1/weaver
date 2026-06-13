@@ -163,7 +163,9 @@ class DeepSeekProvider(LLMProvider):
         try:
             return self._client.chat.completions.create(**kwargs)
         except Exception as exc:
-            raise _translate_openai_error(exc) from exc
+            raise _translate_openai_error(
+                exc, provider_name=self.name, api_key_env=self._config.api_key_env
+            ) from exc
 
     def _status(self, healthy: bool, message: str | None, start: float) -> ProviderStatus:
         latency_ms = int((time.perf_counter() - start) * 1000)
@@ -221,41 +223,44 @@ def _usage(completion: Any, key: str) -> int | None:
         return None
 
 
-def _translate_openai_error(exc: BaseException) -> Exception:
+def _translate_openai_error(
+    exc: BaseException, *, provider_name: str = "DeepSeek", api_key_env: str = ENV_API_KEY
+) -> Exception:
+    display_name = provider_name or "OpenAI-compatible provider"
     name = type(exc).__name__
     message = str(exc) or name
     if name in {"APITimeoutError", "Timeout"}:
         return ProviderTimeout(
-            f"DeepSeek request timed out: {message}. "
+            f"{display_name} request timed out: {message}. "
             "Likely cause: network slow or upstream overloaded. "
             "Next command: rerun translation or raise `translation.timeout_seconds`."
         )
     if name in {"AuthenticationError", "PermissionDeniedError"}:
         return ProviderUnavailable(
-            f"DeepSeek auth failed: {message}. "
-            f"Likely cause: invalid or revoked ${ENV_API_KEY}. "
-            f"Next command: regenerate the DeepSeek API key and update ${ENV_API_KEY}."
+            f"{display_name} auth failed: {message}. "
+            f"Likely cause: invalid or revoked ${api_key_env}. "
+            f"Next command: regenerate the provider API key and update ${api_key_env}."
         )
     if name in {"NotFoundError", "NotFound"}:
         return ProviderResponseError(
-            f"DeepSeek model not found: {message}. "
+            f"{display_name} model not found: {message}. "
             "Likely cause: `[provider] model` is misspelled or unavailable to this key/endpoint. "
             "Next command: check `[provider] model` in project.toml against the provider's models."
         )
     if name in {"APIConnectionError", "ConnectionError"}:
         return ProviderUnavailable(
-            f"DeepSeek unreachable: {message}. "
+            f"{display_name} unreachable: {message}. "
             "Likely cause: DNS or network outage. "
             "Next command: check network connectivity, then rerun."
         )
     if name == "RateLimitError":
         return ProviderTimeout(
-            f"DeepSeek rate limit hit: {message}. "
+            f"{display_name} rate limit hit: {message}. "
             "Likely cause: too many concurrent requests. "
             "Next command: wait and rerun; reduce concurrency in `project.toml`."
         )
     return ProviderResponseError(
-        f"DeepSeek call failed ({name}): {message}. "
+        f"{display_name} call failed ({name}): {message}. "
         "Likely cause: upstream returned an unexpected error. "
-        "Next command: rerun translation; check DeepSeek status if it persists."
+        "Next command: rerun translation; check provider status if it persists."
     )

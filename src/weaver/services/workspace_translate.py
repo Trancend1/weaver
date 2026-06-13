@@ -39,6 +39,7 @@ from weaver.errors import (
     SegmentNotFoundError,
 )
 from weaver.providers import GlossaryTerm, LLMProvider, build_provider
+from weaver.providers.registry import normalize_provider_config
 from weaver.providers.types import CharacterContext
 from weaver.services.glossary import raise_on_glossary_conflicts
 from weaver.services.project_paths import resolve_database_path
@@ -310,7 +311,9 @@ def validate_provider_config(
         ConfigError: If the honorific policy or provider model is invalid.
     """
 
-    provider_config = _merge_provider_config(data["provider"], provider_override)
+    provider_config = normalize_provider_config(
+        _merge_provider_config(data["provider"], provider_override)
+    )
     honorific_policy = str(data["translation"].get("honorifics", "preserve"))
     if honorific_policy not in VALID_HONORIFIC_POLICIES:
         valid = ", ".join(sorted(VALID_HONORIFIC_POLICIES))

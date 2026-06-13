@@ -120,14 +120,7 @@ def delete_project(project_toml: Path) -> None:
     log_runtime_event("project.deleted", project=project_dir.name)
 
 
-DEFAULT_PROVIDER = "deepseek"
-DEFAULT_MODELS = {
-    "deepseek": "deepseek-chat",
-    "gemini": "gemini-1.5-flash",
-    "ollama": "llama3",
-    "fake": "fake-1",
-}
-OLLAMA_BASE_URL = "http://localhost:11434"
+DEFAULT_PROVIDER = ""
 
 
 def initialize_project(
@@ -146,26 +139,15 @@ def initialize_project(
         template: Optional template preset name (``light-novel``,
             ``web-novel``, ``aozora-classic``). Overrides ``[glossary]``
             and ``[qa]`` sections in the generated ``project.toml``.
-        provider: Optional provider type for the generated ``[provider]`` table
-            (``deepseek`` | ``gemini`` | ``ollama`` | ``fake``). Defaults to
-            ``deepseek``. The model defaults to that provider's standard model;
-            ``base_url`` is emitted only for ``ollama`` (ADR ``0018`` — fixes the
-            stray localhost ``base_url`` that the deepseek default carried).
+        provider: Optional free-form provider type/engine label for the generated
+            ``[provider]`` table. New projects default to an empty provider config;
+            users fill protocol, endpoint, model, and key env from Config.
 
     Returns:
         InitResult with created project locations and counts.
     """
 
     provider_type = provider or DEFAULT_PROVIDER
-    if provider_type not in DEFAULT_MODELS:
-        valid = ", ".join(sorted(DEFAULT_MODELS))
-        raise ConfigError(
-            f"`weaver init` cannot scaffold provider `{provider_type}`. "
-            f"Likely cause: init supports the built-in providers ({valid}); a "
-            "custom OpenAI-compatible endpoint needs base_url + api_key_env. "
-            "Next command: init with a built-in provider, then set the custom "
-            "endpoint via the cockpit or `weaver` config."
-        )
 
     base_dir = cwd or Path.cwd()
     source_path = source_epub.resolve() if source_epub is not None else None
@@ -312,6 +294,10 @@ def _run_provider_healthcheck(provider_config: dict[str, Any]) -> ProviderStatus
             message=str(exc),
             latency_ms=None,
         )
+    finally:
+        close = getattr(provider, "close", None)
+        if callable(close):
+            close()
 
 
 def _write_project_toml(
@@ -339,14 +325,7 @@ def _write_project_toml(
         glossary_defaults.update(template_overrides.get("glossary", {}))
         qa_defaults.update(template_overrides.get("qa", {}))
 
-    provider_model = DEFAULT_MODELS.get(provider_type, DEFAULT_MODELS[DEFAULT_PROVIDER])
-    provider_lines = [
-        "[provider]",
-        f'type = "{provider_type}"',
-        f'model = "{provider_model}"',
-    ]
-    if provider_type == "ollama":
-        provider_lines.append(f'base_url = "{OLLAMA_BASE_URL}"')
+    provider_lines = _provider_lines(provider_type)
     provider_section = "\n".join(provider_lines)
 
     content = f"""[project]
@@ -399,6 +378,26 @@ raw_response_logging = false
         temp_path = Path(file.name)
         file.write(content)
     temp_path.replace(path)
+
+
+def _provider_lines(provider_type: str) -> list[str]:
+    if provider_type == "fake":
+        return [
+            "[provider]",
+            'type = "custom"',
+            'protocol = "fake"',
+            'model = "fake-1"',
+            'base_url = ""',
+            'api_key_env = ""',
+        ]
+    return [
+        "[provider]",
+        f'type = "{_escape_toml(provider_type)}"',
+        'protocol = ""',
+        'model = ""',
+        'base_url = ""',
+        'api_key_env = ""',
+    ]
 
 
 def _read_counts(connection: sqlite3.Connection) -> dict[str, int]:

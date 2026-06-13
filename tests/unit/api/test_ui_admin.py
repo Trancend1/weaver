@@ -29,12 +29,7 @@ def admin_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     epubs = list(fixtures.glob("*.epub"))
     if not epubs:
         pytest.skip("no EPUB fixture available")
-    init = initialize_project(epubs[0], cwd=tmp_path)
-    toml = Path(init.project_toml)
-    toml.write_text(
-        toml.read_text(encoding="utf-8").replace('type = "deepseek"', 'type = "fake"'),
-        encoding="utf-8",
-    )
+    initialize_project(epubs[0], cwd=tmp_path, provider="fake")
     return TestClient(create_api_app(tmp_path))
 
 
@@ -241,14 +236,14 @@ def test_config_page_and_save(admin_client: TestClient) -> None:
     assert view["model"] == "fake-9"
 
 
-def test_config_invalid_provider_error(admin_client: TestClient) -> None:
+def test_config_freeform_provider_type(admin_client: TestClient) -> None:
     name = _name(admin_client)
     r = admin_client.post(
         "/ui/config",
         data={"scope": "project", "project": name, "provider_type": "not-real"},
     )
     assert r.status_code == 200
-    assert "error" in r.text.lower()
+    assert "Saved" in r.text
 
 
 def test_secret_set_and_delete_without_exposing_value(admin_client: TestClient) -> None:
@@ -313,11 +308,12 @@ def test_candidate_search_param_is_echoed(admin_client: TestClient) -> None:
     assert 'value="zzz"' in r.text  # the search box keeps the query
 
 
-def test_config_and_new_expose_provider_selects(admin_client: TestClient) -> None:
+def test_config_and_new_use_freeform_provider_config(admin_client: TestClient) -> None:
     cfg = admin_client.get("/ui/config").text
-    assert '<select name="provider_type"' in cfg
-    assert ">fake<" in cfg  # a known provider type is offered as an option
+    assert 'name="provider_type"' in cfg
+    assert 'name="protocol"' in cfg
+    assert '<select name="provider_type"' not in cfg
 
     new = admin_client.get("/ui/new").text
-    assert '<select name="provider"' in new
-    assert ">fake<" in new
+    assert '<select name="provider"' not in new
+    assert "Provider settings start empty" in new

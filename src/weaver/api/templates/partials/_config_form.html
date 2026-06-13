@@ -8,8 +8,9 @@
   {% if view.project_name %}
   <p class="meta">
     Project <strong>{{ view.project_name }}</strong> [provider]:
-    type <code>{{ view.provider_type or "—" }}</code> · model <code>{{ view.model or "—" }}</code> ·
-    api_key_env <code>{{ view.api_key_env or "—" }}</code> · key set: {{ "yes" if view.api_key_set else "no" }}
+    type <code>{{ view.provider_type or "—" }}</code> · protocol <code>{{ view.protocol or "—" }}</code> ·
+    model <code>{{ view.model or "—" }}</code> · api_key_env <code>{{ view.api_key_env or "—" }}</code> ·
+    key set: {{ "yes" if view.api_key_set else "no" }}
   </p>
   {% endif %}
 
@@ -23,16 +24,14 @@
     </label>
     <span class="hint meta"><strong>project</strong> saves to this project's <code>project.toml</code>;
       <strong>global</strong> sets the default used by new projects.</span>
-    <label>Provider type
-      <select name="provider_type">
-        <option value="">(leave unchanged)</option>
-        {% for pt in provider_types %}
-        <option value="{{ pt }}"{% if view.provider_type == pt %} selected{% endif %}>{{ pt }}</option>
-        {% endfor %}
-      </select>
+    <label>Provider type / engine
+      <input name="provider_type" value="{{ view.provider_type or 'custom' }}" placeholder="custom">
     </label>
-    <label>Model <input name="model" placeholder="model id"></label>
-    <label>Base URL <input name="base_url" placeholder="(custom/ollama only)"></label>
+    <label>Protocol
+      <input name="protocol" value="{{ view.protocol or '' }}" placeholder="openai_chat / gemini_generate / ollama_generate / fake">
+    </label>
+    <label>Model <input name="model" value="{{ view.model or '' }}" placeholder="model id"></label>
+    <label>Base URL <input name="base_url" value="{{ view.base_url or '' }}" placeholder="https://api.example.com/v1"></label>
     <label>API key env <input name="api_key_env" placeholder="env-var name only (no value)"></label>
     <button type="submit">Save config</button>
   </form>

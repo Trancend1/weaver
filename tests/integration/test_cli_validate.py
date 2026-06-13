@@ -98,7 +98,9 @@ def _init_with_fake_pattern(runner: CliRunner, tmp_path: Path, *, pattern: str) 
     assert init.exit_code == 0, init.output
     project_toml = tmp_path / ".weaver" / "aozora_sample" / "project.toml"
     text = project_toml.read_text(encoding="utf-8")
+    text = text.replace('type = ""', 'type = "fake"')
     text = text.replace('type = "deepseek"', 'type = "fake"')
+    text = text.replace('model = ""', 'model = "fake-1"')
     text = text.replace('model = "deepseek-chat"', 'model = "fake-1"')
     text = text.replace(
         'model = "fake-1"',

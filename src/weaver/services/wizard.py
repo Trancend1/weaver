@@ -20,11 +20,9 @@ def _require_questionary() -> None:
 
 
 def _scaffoldable_providers() -> list[str]:
-    """Built-in providers `weaver init` can scaffold (custom is set post-init)."""
+    """Provider labels `weaver init` can write before endpoint configuration."""
 
-    from weaver.services.project import DEFAULT_MODELS
-
-    return sorted(DEFAULT_MODELS)
+    return ["custom"]
 
 
 @dataclass(frozen=True)

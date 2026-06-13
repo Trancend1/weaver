@@ -139,9 +139,9 @@ def test_create_duplicate_is_409(tmp_path: Path) -> None:
     assert client.post("/projects/create", files=again).status_code == 409
 
 
-def test_create_invalid_provider_is_422(tmp_path: Path) -> None:
+def test_create_freeform_provider_is_accepted(tmp_path: Path) -> None:
     epub = _fixture_epub()
     client = TestClient(create_api_app(tmp_path))
     data = {"file": (epub.name, BytesIO(epub.read_bytes()), "application/epub+zip")}
-    r = client.post("/projects/create", files=data, data={"provider": "not-a-provider"})
-    assert r.status_code == 422
+    r = client.post("/projects/create", files=data, data={"provider": "my-custom-llm"})
+    assert r.status_code == 201

@@ -25,6 +25,7 @@ FIXTURE_EPUB = Path(__file__).parent.parent.parent / "fixtures" / "aozora_sample
 
 def _set_fake_provider(project_toml: Path) -> None:
     text = project_toml.read_text(encoding="utf-8")
+    text = text.replace('type = ""', 'type = "fake"')
     text = text.replace('type = "deepseek"', 'type = "fake"')
     project_toml.write_text(text, encoding="utf-8")
 

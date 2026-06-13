@@ -194,9 +194,7 @@ def test_examples_fragment_returns_source_sentences(gloss_client: TestClient) ->
     cands = _candidates(gloss_client, name)
     source = cands[0]["source"]
 
-    frag = gloss_client.get(
-        f"/ui/projects/{name}/glossary/examples", params={"source": source}
-    )
+    frag = gloss_client.get(f"/ui/projects/{name}/glossary/examples", params={"source": source})
     assert frag.status_code == 200
     assert source in frag.text
     assert "Example sentences using" in frag.text

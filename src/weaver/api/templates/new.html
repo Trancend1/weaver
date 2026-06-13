@@ -13,14 +13,7 @@
     <label>Project name
       <input type="text" name="project_name" placeholder="My Novel Project" required>
     </label>
-    <label>Provider
-      <select name="provider">
-        <option value="">(default)</option>
-        {% for pt in provider_types or [] %}
-        <option value="{{ pt }}">{{ pt }}</option>
-        {% endfor %}
-      </select>
-    </label>
+    <p class="hint">Provider settings start empty. Configure type, protocol, endpoint, model, and API key after creating the project.</p>
     <label>Template <input name="template" placeholder="(default)"></label>
     <button type="submit">Create project</button>
   </form>

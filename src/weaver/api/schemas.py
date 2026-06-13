@@ -183,6 +183,7 @@ class ProviderConfigResponse(BaseModel):
     default_model: str | None
     project_name: str | None
     provider_type: str | None
+    protocol: str | None
     model: str | None
     base_url: str | None
     api_key_env: str | None
@@ -200,6 +201,7 @@ class ConfigUpdateRequest(BaseModel):
     scope: Literal["project", "global"] = "project"
     project: str | None = None
     provider_type: str | None = None
+    protocol: str | None = None
     model: str | None = None
     base_url: str | None = None
     api_key_env: str | None = None
