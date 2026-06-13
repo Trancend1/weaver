@@ -227,3 +227,51 @@ def test_resources_still_renders(providers_client: TestClient) -> None:
     resp = providers_client.get("/ui/resources")
     assert resp.status_code == 200
     assert "layout--ws-hub" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# 9. Provider config editor (moved from /ui/config)
+# ---------------------------------------------------------------------------
+
+
+def test_providers_config_save_persists(providers_client: TestClient) -> None:
+    r = providers_client.post(
+        "/ui/providers/config",
+        data={"scope": "project", "project": "alpha", "provider_type": "fake", "model": "fake-9"},
+    )
+    assert r.status_code == 200 and "Saved" in r.text
+    view = providers_client.get("/config?project=alpha").json()
+    assert view["model"] == "fake-9"
+
+
+def test_providers_config_freeform_provider_type(providers_client: TestClient) -> None:
+    r = providers_client.post(
+        "/ui/providers/config",
+        data={"scope": "project", "project": "alpha", "provider_type": "not-real"},
+    )
+    assert r.status_code == 200
+    assert "Saved" in r.text
+
+
+def test_providers_secret_set_and_delete_without_exposing_value(
+    providers_client: TestClient,
+) -> None:
+    r = providers_client.post(
+        "/ui/providers/secrets", data={"env_name": "MY_KEY", "value": "sk-LEAKCHECK"}
+    )
+    assert r.status_code == 200
+    assert "MY_KEY" in r.text
+    assert "sk-LEAKCHECK" not in r.text  # value never rendered
+    assert "sk-LEAKCHECK" not in providers_client.get("/ui/providers").text
+
+    delete = providers_client.post("/ui/providers/secrets/MY_KEY/delete")
+    assert delete.status_code == 200
+    assert "MY_KEY" not in delete.text
+
+
+def test_providers_secret_invalid_name_error(providers_client: TestClient) -> None:
+    r = providers_client.post(
+        "/ui/providers/secrets", data={"env_name": "bad name!", "value": "x"}
+    )
+    assert r.status_code == 200
+    assert "error" in r.text.lower()
