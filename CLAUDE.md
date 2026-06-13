@@ -7,7 +7,6 @@ Offline-capable, glossary-aware **JP→EN** light-novel translation workbench wi
 > **Current Orchestrator:** repo owner (Trancend1) + Claude as Lead Technical Orchestrator.
 > **Active Sprint/Phase:** **none active** — Sprint Q (Workspace v2) and **Sprint R (AI glossary-target suggestion)** are both **COMPLETE and merged to `main`**. Next sprint scope TBD by the orchestrator.
 >
-> **Status (2026-06-12):** v0.7.0 stable · Sprints A–M + **N, P, O, Q COMPLETE** · **Sprint R COMPLETE — merged to `main` via PR #46 (#2/#3: terms search/pagination + lazy examples) + #47 (Sprint R: AI target suggestion, ADR `014`)** · full suite **1401/4**, pyright 0, ruff + format clean · Sprint Q source of truth: [.docs/audit/SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) + [SPRINT_Q_FINAL_VALIDATION.md](.docs/audit/SPRINT_Q_FINAL_VALIDATION.md); Sprint R: [docs/decisions/014-provider-complete-primitive-and-glossary-suggestion.md](docs/decisions/014-provider-complete-primitive-and-glossary-suggestion.md) + [docs/superpowers/specs/2026-06-12-glossary-ai-target-suggestion-design.md](docs/superpowers/specs/2026-06-12-glossary-ai-target-suggestion-design.md) · ADRs `009` (strategic pivot), `010` (persistent job core), `011` (Project terminology), `012` (image/OCR security gate), `013` (QA severity), `014` (provider `complete()` + glossary suggestion)
 
 ---
 
@@ -27,24 +26,6 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 | Global workflow template (this file follows it) | `C:\Users\transcend\.claude\WORKFLOW.md` |
 
 **Hierarchy:** `docs/CODEMAPS/` is the primary navigation supplement (module map, CLI/web workflows, data flow, dependencies). ADRs and active sprint docs are source of truth for decisions. `SIDECAR_CONTRACT.md`, `MAINTENANCE.md`, `PROMPT_DESIGN.md`, and `SECURITY_AND_PERFORMANCE.md` remain as detailed reference docs for their respective domains. `.reports/` is an audit/report artifact area; do not treat it as product or architecture authority.
-
-**Audit & roadmap of record (`.docs/audit/`)** — the agent-independent planning set (2026-06-09 Council audit). The four `SPRINT_Q_*` docs are the **historical record for the now-closed Sprint Q** (and the staging-discipline reference for future sprints):
-
-| Doc | Purpose |
-| --- | --- |
-| [SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md) | **★ Historical execution plan** — staged Q0–Q12, per-stage scope/deps/files/risks/tests/acceptance/rollback (closed; staging-discipline reference) |
-| [SPRINT_Q_DEEP_AUDIT.md](.docs/audit/SPRINT_Q_DEEP_AUDIT.md) | **★ Evidence base** — WV-001..014 map, gap matrix G-01..15, findings QF-01..22 (file:line) |
-| [SPRINT_Q_RISK_REGISTER.md](.docs/audit/SPRINT_Q_RISK_REGISTER.md) | **★ Risk register** — R-01..23 + per-stage-gate review rule |
-| [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md) | **★ Cold-start handoff** — status, read order, branch advice, hard fences |
-| [ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md) | Roadmap of record: strict N → P → O → Q; Sprint Q acceptance |
-| [SOURCEOFARCHITECTURE.md](.docs/audit/SOURCEOFARCHITECTURE.md) | Reconciled product spec (build-state annotated) — target Sprint Q builds against |
-| [ISSUE_BACKLOG.md](.docs/audit/ISSUE_BACKLOG.md) | WV-001..014 with acceptance criteria |
-| [PAGE_LAYOUT_BLUEPRINT.md](.docs/audit/PAGE_LAYOUT_BLUEPRINT.md) | Target page layouts (§0 shell, §1 dashboard, §10 hubs) |
-| [WORKFLOW_BLUEPRINT.md](.docs/audit/WORKFLOW_BLUEPRINT.md) | Per-process Today/Target/Delta |
-| [THE_COUNCIL_WEAVER_AUDIT.md](.docs/audit/THE_COUNCIL_WEAVER_AUDIT.md) | Original current-state map, pain verification, Top 10 fixes |
-| [SPRINT_P_EXECUTION.md](.docs/audit/SPRINT_P_EXECUTION.md) | Sprint P task-level breakdown (closed; staging-discipline reference) |
-
-> Retired docs (pre-reset specs, Phase A UI audit, MVP logs, Flask→FastAPI audits, RC1 reports, the prior `weaver_next_plan.md`, `ENGINEERING_STANDARDS.md`/`AI_SLOP_PREVENTION.md` — now absorbed into §4.2/§4.3) live in **git history** only.
 
 ---
 

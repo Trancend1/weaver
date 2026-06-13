@@ -30,20 +30,15 @@ def _name(client: TestClient) -> str:
 # --- global mode ------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    ("path", "nav_label"),
-    [("/ui/new", "New project"), ("/ui/config", "Config")],
-)
-def test_global_mode_has_no_sidebar(ui_client: TestClient, path: str, nav_label: str) -> None:
-    html = ui_client.get(path).text
+def test_global_mode_has_no_sidebar(ui_client: TestClient) -> None:
+    html = ui_client.get("/ui/new").text
     assert "layout--global" in html
     assert "app-shell--global" in html
     # global mode renders no sidebar aside
     assert '<aside class="sidebar' not in html
-    # the matching nav link is marked active for assistive tech
-    link = re.search(rf'<a href="[^"]*"([^>]*)>{re.escape(nav_label)}</a>', html)
-    assert link is not None
-    assert 'aria-current="page"' in link.group(1)
+    # the topbar carries only the brand link home (no Dashboard/New-project nav)
+    assert '<nav class="topnav"' not in html
+    assert 'aria-label="Weaver home' in html
 
 
 def test_dashboard_uses_ws_hub_mode_with_sidebar(ui_client: TestClient) -> None:

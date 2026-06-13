@@ -8,7 +8,7 @@
   {% set page_meta = providers.degraded | length ~ " degraded · " ~ providers.projects | length ~ " projects · " ~ total_in ~ " in / " ~ total_out ~ " out tokens" %}
   {% set page_crumbs = [{"label": "Dashboard", "href": "/ui"}, {"label": "Providers"}] %}
   {% set page_actions %}
-    <span class="hint">Read-only routing view · config edits stay on each project's Config page.</span>
+    <span class="hint">Read-only routing view · edit provider/model + secrets below.</span>
   {% endset %}
   {% include "partials/_page_header.html" %}
 
@@ -54,8 +54,8 @@
             {% elif p.secret_present %}
               <span class="badge good" title="{{ p.api_key_env }} is set (value never shown)">{{ p.api_key_env }} ✓</span>
             {% else %}
-              <a href="/ui/projects/{{ p.project_name }}/config" class="badge bad"
-                 title="{{ p.api_key_env }} is not set — open Config to add it">{{ p.api_key_env or "key" }} missing</a>
+              <a href="/ui/providers?project={{ p.project_name }}#config-editor" class="badge bad"
+                 title="{{ p.api_key_env }} is not set — set it in the config editor below">{{ p.api_key_env or "key" }} missing</a>
             {% endif %}
           </td>
           <td class="meta">
@@ -98,10 +98,33 @@
   {% else %}
     {% if not providers.degraded %}
     {% set empty_title = "No providers to show" %}
-    {% set empty_hint = "Import a project to see which provider and model it uses, its API-key status, token usage, and recent failures. Configure providers from each project's Config page." %}
+    {% set empty_hint = "Import a project to see which provider and model it uses, its API-key status, token usage, and recent failures. Configure providers in the editor below." %}
     {% include "partials/_empty_state.html" %}
     {% endif %}
   {% endif %}
+
+  <section id="config-editor" class="panel c-panel">
+    <h2 class="panel__title">Provider / model</h2>
+    <p class="meta">Global defaults and optional per-project provider overrides. No hidden default provider — set provider, model, API-key env name, and base URL here.</p>
+    <form class="inline-form form-row" method="get" action="/ui/providers">
+      <label>Project
+        <select name="project">
+          <option value="">(global only)</option>
+          {% for proj in projects %}
+          <option value="{{ proj }}"{% if proj == project %} selected{% endif %}>{{ proj }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit">Load</button>
+    </form>
+    {% include "partials/_config_form.html" %}
+  </section>
+
+  <section class="panel c-panel">
+    <h2 class="panel__title">Secrets</h2>
+    <p class="meta">API-key values are stored in <code>~/.weaver/secrets.toml</code> and never returned by the API or rendered here.</p>
+    {% include "partials/_secrets.html" %}
+  </section>
 
 </section>
 {% endblock %}

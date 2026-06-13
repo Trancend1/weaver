@@ -14,7 +14,7 @@
   </p>
   {% endif %}
 
-  <form class="stack" hx-post="/ui/config" hx-target="#config-form" hx-swap="outerHTML">
+  <form class="stack" hx-post="/ui/providers/config" hx-target="#config-form" hx-swap="outerHTML">
     <input type="hidden" name="project" value="{{ project or '' }}">
     <label>Scope
       <select name="scope">
