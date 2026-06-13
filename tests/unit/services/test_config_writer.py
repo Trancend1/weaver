@@ -86,14 +86,33 @@ def test_set_provider_custom_writes_endpoint_fields(tmp_path: Path) -> None:
     assert "api_key " not in raw and 'api_key"' not in raw
 
 
-def test_set_provider_accepts_freeform_provider_type(tmp_path: Path) -> None:
+def test_set_provider_rejects_freeform_without_protocol_fields(tmp_path: Path) -> None:
+    """A free-form provider_type with protocol but missing required fields is rejected."""
     toml = _write(tmp_path / "project.toml", PROJECT_TOML)
 
-    set_provider(toml, provider_type="not-a-provider", protocol="openai_chat")
+    with pytest.raises(ConfigError, match="base_url"):
+        set_provider(toml, provider_type="not-a-provider", protocol="openai_chat")
+
+
+def test_set_provider_accepts_buildable_freeform_provider_type(tmp_path: Path) -> None:
+    """A free-form provider_type passes if protocol + all required fields present."""
+    toml = _write(tmp_path / "project.toml", PROJECT_TOML)
+
+    set_provider(
+        toml,
+        provider_type="custom-gateway",
+        protocol="openai_chat",
+        model="gpt-4o",
+        base_url="https://api.example.com/v1",
+        api_key_env="CUSTOM_API_KEY",
+    )
 
     data = tomllib.loads(toml.read_text(encoding="utf-8"))
-    assert data["provider"]["type"] == "not-a-provider"
+    assert data["provider"]["type"] == "custom-gateway"
     assert data["provider"]["protocol"] == "openai_chat"
+    assert data["provider"]["model"] == "gpt-4o"
+    assert data["provider"]["base_url"] == "https://api.example.com/v1"
+    assert data["provider"]["api_key_env"] == "CUSTOM_API_KEY"
 
 
 def test_set_provider_missing_project_raises(tmp_path: Path) -> None:
