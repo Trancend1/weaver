@@ -273,3 +273,29 @@ def test_providers_secret_invalid_name_error(providers_client: TestClient) -> No
     r = providers_client.post("/ui/providers/secrets", data={"env_name": "bad name!", "value": "x"})
     assert r.status_code == 200
     assert "error" in r.text.lower()
+
+
+# ---------------------------------------------------------------------------
+# 10. Config editor embedded in hub (Task 3)
+# ---------------------------------------------------------------------------
+
+
+def test_providers_hub_renders_config_editor(providers_client: TestClient) -> None:
+    html = providers_client.get("/ui/providers").text
+    # free-form provider config fields are present (no provider <select>)
+    assert 'name="provider_type"' in html
+    assert 'name="protocol"' in html
+    assert '<select name="provider_type"' not in html
+    # the editor posts to the consolidated endpoint, not the removed /ui/config
+    assert 'hx-post="/ui/providers/config"' in html
+    assert 'hx-post="/ui/providers/secrets"' in html
+    assert "/ui/config" not in html
+
+
+def test_providers_hub_project_param_loads_project_config(providers_client: TestClient) -> None:
+    providers_client.post(
+        "/ui/providers/config",
+        data={"scope": "project", "project": "alpha", "provider_type": "fake", "model": "fake-42"},
+    )
+    html = providers_client.get("/ui/providers", params={"project": "alpha"}).text
+    assert "fake-42" in html
