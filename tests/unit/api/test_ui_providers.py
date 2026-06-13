@@ -270,8 +270,6 @@ def test_providers_secret_set_and_delete_without_exposing_value(
 
 
 def test_providers_secret_invalid_name_error(providers_client: TestClient) -> None:
-    r = providers_client.post(
-        "/ui/providers/secrets", data={"env_name": "bad name!", "value": "x"}
-    )
+    r = providers_client.post("/ui/providers/secrets", data={"env_name": "bad name!", "value": "x"})
     assert r.status_code == 200
     assert "error" in r.text.lower()
