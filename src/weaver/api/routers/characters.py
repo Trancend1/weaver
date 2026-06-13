@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from weaver.api.schemas import (
     CharacterCreateRequest,
@@ -111,6 +111,46 @@ def update_character_endpoint(
 @router.delete("/{name}/characters/{jp_name}", status_code=204)
 def remove_character(name: str, jp_name: str, request: Request) -> Response:
     """Delete one character identified by its Japanese name."""
+    project_toml = _project_toml(request, name)
+    try:
+        delete(project_toml, jp_name=jp_name, cwd=_base_dir(request))
+    except CharacterNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return Response(status_code=204)
+
+
+@router.patch("/{name}/characters", response_model=CharacterResponse)
+def update_character_by_jp_name(
+    name: str, body: CharacterUpdateRequest, jp_name: str = Query(...), request: Request = None  # type: ignore[assignment]
+) -> CharacterResponse:
+    """Update an existing character by jp_name (query-param safe for '/' keys)."""
+    project_toml = _project_toml(request, name)
+    try:
+        character = update_character(
+            project_toml,
+            jp_name=jp_name,
+            en_name=body.en_name,
+            gender=body.gender,
+            role=body.role,
+            notes=body.notes,
+            cwd=_base_dir(request),
+        )
+    except CharacterNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _to_response(character)
+
+
+@router.delete("/{name}/characters", status_code=204)
+def remove_character_by_jp_name(
+    name: str, jp_name: str = Query(...), request: Request = None  # type: ignore[assignment]
+) -> Response:
+    """Delete one character by jp_name (query-param safe for '/' keys)."""
     project_toml = _project_toml(request, name)
     try:
         delete(project_toml, jp_name=jp_name, cwd=_base_dir(request))

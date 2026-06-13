@@ -216,6 +216,60 @@ def test_memory_delete_unknown_shows_error(admin_client: TestClient) -> None:
     assert "error" in r.text.lower()
 
 
+# --- slash-safe glossary term mutation --------------------------------------
+
+
+def test_glossary_add_update_delete_with_slash_in_source(admin_client: TestClient) -> None:
+    """Glossary term with '/' in source: update and delete via body-based routes."""
+    name = _name(admin_client)
+    assert admin_client.get(f"/ui/projects/{name}/glossary").status_code == 200
+
+    add = admin_client.post(
+        f"/ui/projects/{name}/glossary/terms",
+        data={"source": "A/B", "target": "Slash Test"},
+    )
+    assert add.status_code == 200 and "A/B" in add.text and "Slash Test" in add.text
+
+    edit = admin_client.post(
+        f"/ui/projects/{name}/glossary/term/update",
+        data={"source": "A/B", "target": "Updated Slash"},
+    )
+    assert edit.status_code == 200 and "Updated Slash" in edit.text
+
+    delete = admin_client.post(
+        f"/ui/projects/{name}/glossary/term/delete",
+        data={"source": "A/B"},
+    )
+    assert delete.status_code == 200 and "Updated Slash" not in delete.text
+
+
+# --- slash-safe character mutation ------------------------------------------
+
+
+def test_characters_add_update_delete_with_slash_in_jp_name(admin_client: TestClient) -> None:
+    """Character with '/' in jp_name: update and delete via body-based routes."""
+    name = _name(admin_client)
+    assert admin_client.get(f"/ui/projects/{name}/characters").status_code == 200
+
+    add = admin_client.post(
+        f"/ui/projects/{name}/characters",
+        data={"jp_name": "A/B", "en_name": "Slash Char"},
+    )
+    assert add.status_code == 200 and "A/B" in add.text and "Slash Char" in add.text
+
+    edit = admin_client.post(
+        f"/ui/projects/{name}/character/update",
+        data={"jp_name": "A/B", "en_name": "Updated Char", "role": "hero"},
+    )
+    assert edit.status_code == 200 and "Updated Char" in edit.text and "hero" in edit.text
+
+    delete = admin_client.post(
+        f"/ui/projects/{name}/character/delete",
+        data={"jp_name": "A/B"},
+    )
+    assert delete.status_code == 200 and "Updated Char" not in delete.text
+
+
 # --- nav links --------------------------------------------------------------
 
 

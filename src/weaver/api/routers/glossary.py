@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from weaver.api.schemas import (
     GlossaryListResponse,
@@ -113,6 +113,47 @@ def update_glossary_term(
 @router.delete("/{name}/glossary/{source}", status_code=204)
 def remove_glossary_term(name: str, source: str, request: Request) -> Response:
     """Delete one glossary term identified by its source."""
+    project_toml = _project_toml(request, name)
+    try:
+        delete_term(project_toml, source=source, cwd=_base_dir(request))
+    except GlossaryTermNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return Response(status_code=204)
+
+
+@router.patch("/{name}/glossary", response_model=GlossaryTermResponse)
+def update_glossary_term_by_source(
+    name: str, body: GlossaryTermUpdateRequest, source: str = Query(...), request: Request = None  # type: ignore[assignment]
+) -> GlossaryTermResponse:
+    # FastAPI injects request; None default is for pyright compatibility
+    """Update an existing glossary term by source (query-param safe for '/' keys)."""
+    project_toml = _project_toml(request, name)
+    try:
+        term = update_term(
+            project_toml,
+            source=source,
+            target=body.target,
+            category=body.category,
+            notes=body.notes,
+            case_sensitive=body.case_sensitive,
+            cwd=_base_dir(request),
+        )
+    except GlossaryTermNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _to_response(term)
+
+
+@router.delete("/{name}/glossary", status_code=204)
+def remove_glossary_term_by_source(
+    name: str, source: str = Query(...), request: Request = None  # type: ignore[assignment]
+) -> Response:
+    """Delete one glossary term by source (query-param safe for '/' keys)."""
     project_toml = _project_toml(request, name)
     try:
         delete_term(project_toml, source=source, cwd=_base_dir(request))
