@@ -1,12 +1,21 @@
 # Weaver
 
-Offline-capable, glossary-aware **JP→EN** light-novel translation workbench with a **CLI** and local **web cockpit** (web-cockpit-first development). **Not:** SaaS, consumer product, hosted service, complex SPA.
+Offline-capable, glossary-aware **JP→EN light-novel translation workbench** with a **CLI** and local **web cockpit**. Development is **web-cockpit-first**, with the CLI serving as a supporting interface for automation and power-user workflows.
 
-> **Operating manual:** This file follows the global agent template `@WORKFLOW.md`. It cites and coordinates the docs in §1; it does not duplicate full strategy content. §5–§10 define how work is split across specialized agents/subagents and gated.
+**Not a SaaS platform, consumer-facing product, hosted service, collaborative platform, or complex SPA.**
+
+> **Operating Manual:** This repository follows the global agent workflow defined in `@WORKFLOW.md`. This document serves as the repository-level coordination layer and references supporting documentation rather than duplicating strategy, process, or implementation details.
 >
-> **Current Orchestrator:** repo owner (Trancend1) + Claude as Lead Technical Orchestrator.
-> **Active Sprint/Phase:** **none active** — Sprint Q (Workspace v2) and **Sprint R (AI glossary-target suggestion)** are both **COMPLETE and merged to `main`**. Next sprint scope TBD by the orchestrator.
+> **Current Orchestrator:** Repository Owner (Trancend1) + Claude acting as Lead Technical Orchestrator.
 >
+> **Current Phase:** Codebase Audit & Technical Debt Review.
+>
+> **Status:** No feature sprint is currently active. 
+
+> **Current Objective:** Perform a comprehensive repository audit to identify bugs, dead code, dead files, unused dependencies, architectural issues, performance bottlenecks, security concerns, and cleanup opportunities before defining the next development sprint.
+>
+> **Next Sprint:** TBD by the orchestrator following completion of the audit, validation, and cleanup planning phases.
+
 
 ---
 
@@ -33,112 +42,219 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 
 ### 2.1 Roadmap Snapshot
 
-Current status: **no active sprint**. Sprints through **R** are complete and merged to `main`; next sprint scope is TBD by the orchestrator.
+Current status: **active phase defined in §2.3**.
 
 ```txt
 Historical baseline ✅
-  Foundation → MVP Web Cockpit → Phases A–F → Sprints G–M
-Post-pivot desktop/workflow line ✅
-  Sprint N (Tauri shell alpha) → Sprint P (workflow coherence) → Sprint O (production desktop)
-Workspace + AI suggestion line ✅
-  Sprint Q (Workspace v2, PR #41/#42/#43/#44) → Sprint R (AI glossary-target suggestion, PR #46/#47)
+  Foundation work, MVP workflow, prior sprint lines, and completed implementation phases
+
+Current phase 🟡
+  See §2.3 for active scope, owner model, workflow, and acceptance rules
+
 Next ⬜
-  Open a scoped sprint from current carried follow-ups; do not continue historical sprint scaffolding by default.
+  Open only after current exit criteria pass with evidence
 ```
 
 Legend: ✅ complete · 🟡 active · ⬜ pending · 🚫 deferred/blocked
 
-**Progress wrapper — completed work:** `Foundation → Sprint R` is historical. Keep details in git history and linked source docs, not in this operating file:
-- Sprint Q historical refs: [SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md), [SPRINT_Q_FINAL_VALIDATION.md](.docs/audit/SPRINT_Q_FINAL_VALIDATION.md), [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md).
-- Sprint R refs: [ADR 014](docs/decisions/014-provider-complete-primitive-and-glossary-suggestion.md), [spec](docs/superpowers/specs/2026-06-12-glossary-ai-target-suggestion-design.md), [plan](docs/superpowers/plans/2026-06-12-sprint-r-glossary-ai-suggestion.md).
-- Roadmap/audit refs: [ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md), [SOURCEOFARCHITECTURE.md](.docs/audit/SOURCEOFARCHITECTURE.md), [ISSUE_BACKLOG.md](.docs/audit/ISSUE_BACKLOG.md).
+Completed work is historical. Keep detailed evidence in git history, ADRs, sprint plans, validation notes, and handoff docs. This operating file should only preserve information needed to guide current and future work.
+
+When starting a new sprint or phase:
+
+* Update §2.1 with the current status.
+* Define the active scope in §2.3.
+* Define exit criteria in §2.4.
+* Add only durable carry-forward lessons to §2.5.
+* Do not continue old sprint scaffolding by default.
 
 ### 2.2 Reusable Phase Gate
 
-Before starting any new sprint or stage:
+Before starting any new sprint, phase, or stage:
 
 1. **Define scope** in §2.3, including acceptance criteria and explicit non-goals.
 2. **List exit criteria** in §2.4 in plain language.
 3. **Verify each criterion** with a concrete command, test, file check, or manual inspection.
-4. **State user-facing status:** usable now, internal-only, not yet user-facing.
-5. **If all pass** — update §2.1 / §2.3 / §2.4 / §2.5 + write a handoff note (§8).
+4. **State user-facing status:** usable now, internal-only, not yet user-facing, or blocked.
+5. **If all pass** — update §2.1 / §2.3 / §2.4 / §2.5 and write a handoff note.
 6. **If any fails** — mark blocked, record missing proof, and stop.
 
-> Required reminder: **"Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection."**
+> Required reminder: **Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection.**
 
-### 2.3 Active Phase — none
 
-**Track(s) active:** none. Next sprint scope is TBD by the orchestrator.
+### 2.3 Active Phase — Codebase Audit & Cleanup
 
-**Recommended next-sprint inputs:** use [docs/MAINTENANCE.md](docs/MAINTENANCE.md) carried issues plus current user priority. Known forward-relevant candidates:
-- WV-014 ruby import flatten follow-up: importer currently flattens `<ruby>` via `itertext()`, leaking furigana into `source_text`; renderer preservation is not the defect.
-- Legacy project upgrade UX: v10 projects can show `needs_upgrade` until a writable open migrates them.
-- Export ledger semantics: `export_history.job_id` remains `NULL` because the registry id is known only after job closure.
-- `volume_lifecycle` exported overlay remains deferred; the export ledger is the source of truth.
+**Track(s) active:** Codebase Audit & Technical Debt Reduction
 
-**Carry-forward architecture invariants from closed sprints:**
-- One project DB remains the source of truth for that project. **No global mutable cross-project store without an ADR.**
-- Cross-project reads use the read-only `workspace_index` / workspace services pattern; read paths must not migrate, reset `in_progress`, call providers, run QA scans, or hash source files on render/list/hub paths.
-- Provider `complete()` is a domain-agnostic transport primitive only. Feature prompts/parsing stay in services; adding provider domain methods requires an ADR.
-- AI artifacts must be explicit, editable/dismissable, failure-visible, and cost-visible.
+Objective: identify bugs, dead code, dead files, unused dependencies, architectural drift, performance bottlenecks, security risks, and cleanup opportunities before implementation work continues.
 
-**Workspace UI invariants still active:**
-- `#seg-{id}` = full segment row swap target; `#seg-statusline-{id}` is **not** an HTMX swap target.
-- Review pills update optimistically in `workspace.html` and POST with `hx-swap="none"`; failed POST surfaces via `review-save-failed`.
-- Review labels/colours are single-sourced in `api/status_labels.py`.
-- Keep `#seg-{id}-history`, `#seg-{id}-candidates`, `#seg-{id}-gen-loader`, `.seg-row--review`, `.seg-row--edit`, `.seg-row--tools` stable.
-- Do not recreate deleted preview modal routes/buttons or removed workspace header/sidebar clutter.
+Audit workflow:
+
+1. **Primary codebase audit**
+
+   * Dead code
+   * Dead files
+   * Unused imports and dependencies
+   * Duplicate logic
+   * Architectural drift
+   * Technical debt findings
+
+2. **Skeptical validation review**
+
+   * Verify each finding
+   * Identify false positives
+   * Assess removal safety
+   * Check hidden dependencies, dynamic imports, runtime references, CLI entry points, background jobs, tests, and deployment scripts
+
+3. **Bug, reliability, and security audit**
+
+   * Runtime bugs
+   * Edge cases
+   * Error handling gaps
+   * Security concerns
+   * Performance bottlenecks
+   * Risky I/O, config, provider, database, and background-job behavior
+
+4. **Consolidated cleanup plan**
+
+   * Prioritize findings by impact and risk
+   * Separate quick wins from larger refactors
+   * Define implementation order
+   * Mark risky removals for extra verification
+   * List files/modules that must not be touched without an ADR or explicit approval
+
+5. **Manual verification**
+
+   * Search-based validation
+   * Runtime validation
+   * Test execution
+   * Linting, formatting, type-checking, and build verification
+   * Import/entry-point verification
+
+6. **Cleanup execution**
+
+   * Small, isolated commits
+   * One cleanup concern per commit
+   * Verification after each cleanup batch
+   * Rollback-safe changes only
+   * No unrelated refactors
 
 ### 2.4 Exit Criteria
 
-No active sprint means no sprint-specific exit criteria are open.
+The audit phase is complete only when all applicable items below are satisfied:
 
-When opening the next sprint, add only the criteria for that sprint here. Keep closed-sprint evidence in linked docs, not inline. Minimum gate:
-
-- [ ] Scope and non-goals documented in §2.3.
-- [ ] Relevant tests/lint/typecheck/build/browser checks identified before implementation.
-- [ ] Gate B1 impact stated for any web/render/list/hub path.
-- [ ] Security/reliability review required for I/O, secrets, filesystem, subprocess, network, or provider work.
-- [ ] Handoff note written with validation evidence before marking complete.
+* [ ] Dead code findings reviewed and classified.
+* [ ] Dead file findings reviewed and classified.
+* [ ] Unused imports and dependencies verified.
+* [ ] Potential bugs reviewed and prioritized.
+* [ ] Security and reliability findings documented.
+* [ ] Architecture and technical debt findings documented.
+* [ ] False positives removed through manual verification.
+* [ ] Risky removals marked with evidence and rollback notes.
+* [ ] Cleanup plan approved with impact/risk assessment.
+* [ ] Tests, lint, typecheck, and build pass after cleanup.
+* [ ] Runtime entry points still work after cleanup.
+* [ ] Validation evidence recorded in handoff notes.
+* [ ] Cleanup completed through small, traceable commits.
 
 ### 2.5 Phase Log
 
-Deep detail lives in git history and linked docs. This table preserves only operational lessons still useful for future work.
+Deep detail lives in git history, ADRs, sprint plans, and handoff notes. This section preserves only operational lessons still useful for future work.
 
-| Phase / Sprint wrapper | Key ref | Last verified gate | Operational lesson / carry-forward |
-|---|---|---|---|
-| Foundation → Sprint M | Git history + ADRs `001`–`012` | 1043 / 4 | Core CLI/cockpit/persistent-job/export/candidate/image-gate baseline is stable; prefer existing architecture over new layers. |
-| N → P → O | [ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md), `desktop/`, [INSTALL_DESKTOP.md](docs/INSTALL_DESKTOP.md) | 1102 / 4 | Workflow coherence preceded production desktop; Tauri remains isolated in `desktop/` and follows [SIDECAR_CONTRACT.md](docs/SIDECAR_CONTRACT.md). |
-| Sprint Q — Workspace v2 | [SPRINT_Q_FINAL_VALIDATION.md](.docs/audit/SPRINT_Q_FINAL_VALIDATION.md), [SPRINT_Q_HANDOFF.md](.docs/audit/SPRINT_Q_HANDOFF.md) | 1351 / 4, pyright 0, ruff clean, cargo check 0 | Gate B1 audits pay off. Preserve read-only workspace services, no render-path hashing/provider/QA, and no global mutable store. |
-| Sprint R — AI glossary-target suggestion | [ADR 014](docs/decisions/014-provider-complete-primitive-and-glossary-suggestion.md), [spec](docs/superpowers/specs/2026-06-12-glossary-ai-target-suggestion-design.md) | 1401 / 4, pyright 0, ruff+format clean | Abstract provider changes have broad blast radius; keep provider methods domain-agnostic and put validation in services. |
+| Area                       | Source of truth                                     | Carry-forward rule                                                                                                                                   |
+| -------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Architecture baseline      | Current architecture docs + ADRs                    | Prefer existing architecture over new layers. Do not introduce abstractions unless they remove real duplication or protect a proven boundary.        |
+| CLI / API / UI workflow    | Current workflow docs + tests                       | Preserve existing entry points and user workflows. Any route, command, selector, or schema rename requires tests and migration notes.                |
+| Desktop / sidecar boundary | Current desktop docs + sidecar contract, if present | Keep desktop integration isolated from core services. Do not let desktop code become a second source of business logic.                              |
+| Provider layer             | Current provider ADR/spec + provider tests          | Keep provider primitives domain-agnostic. Put workflow validation in services, not provider adapters.                                                |
+| Workspace/read models      | Current workspace services + tests                  | Read paths should stay cheap, deterministic, and side-effect-free. Avoid expensive scanning, hashing, provider calls, or QA work on render paths.    |
+| Cleanup/audit work         | Current audit plan + handoff notes                  | Treat audit findings as hypotheses until manually verified. Delete only when references, runtime paths, tests, and fallback behavior are understood. |
 
-> Test counts are historical evidence. Re-run relevant verification for the current sprint; do not assume counts without running them.
+> Historical test counts are evidence only at the time they were recorded. Re-run relevant verification for the current phase; do not assume old counts still apply.
+
 
 ---
+## 3. Stack
 
-## 3. Stack (Locked)
+This section describes the default project stack. Treat `pyproject.toml`, current ADRs, and lockfiles as the final source of truth.
 
-**Core:** Python 3.11+ · uv · pyproject.toml · ruff · pyright (basic) · pytest · typer · rich · pydantic v2 · tomllib · sqlite3 (WAL, no ORM) · ebooklib · openai SDK · google-generativeai · Jinja2
+### 3.1 Core
 
-**Web cockpit:** FastAPI (ADR `004`) behind optional `weaver[web]` extra. Server-rendered Jinja2 + HTMX (ADR `007`), no Node/build, no SPA. HTMX vendored as static asset (no CDN). asyncio unlocked **only** for the FastAPI web layer.
+**Runtime and tooling:** Python 3.11+ · uv · `pyproject.toml` · ruff · pyright basic · pytest
 
-**Desktop shell (Sprint N+, ADR `009`):** Tauri in `desktop/` — isolated subtree, not a Python dependency. Launches FastAPI as sidecar (`127.0.0.1`, random port, session token) per [docs/SIDECAR_CONTRACT.md](docs/SIDECAR_CONTRACT.md).
+**CLI and app foundation:** typer · rich · pydantic v2 · tomllib · pathlib · sqlite3
 
-**Providers:**
+**Storage:** SQLite in WAL mode, no ORM by default
 
-| Provider | Role | Auth |
-|---|---|---|
-| `deepseek` | Default cloud | `DEEPSEEK_API_KEY` |
-| `gemini` | Free-tier cloud | `GEMINI_API_KEY` |
-| `ollama` | Local, optional | None |
-| `custom` | OpenAI-compatible endpoint | env var named by `api_key_env` |
-| `fake` | CI/dev default | None |
+**Import/export and document handling:** ebook/document libraries currently declared in `pyproject.toml`
 
-Provider registry: `providers/registry.py`. API keys resolve from env vars or `~/.weaver/secrets.toml` (mode `0o600`, env wins) — never in config, never logged, never rendered.
+**Provider integration:** provider SDKs currently declared in `pyproject.toml`; do not add or replace provider dependencies without an ADR or explicit sprint scope
 
-**Deferred (not in Sprint Q scope):** OCR implementation, provider expansion, route rewrite, SPA/Node, external queue.
+### 3.2 Web Cockpit
 
-**Banned unless explicitly overridden (ADR required):** Flask · Django · SQLAlchemy · Celery · RQ · Docker · React/Node build · SPA framework · OpenTelemetry · Sentry. asyncio rejected outside the web layer. External job queue / worker daemon / multi-process worker pool rejected (ADR `010`; `api/jobs.py:8-10`). **No global mutable cross-project store without an ADR.**
+**Default web stack:** FastAPI · server-rendered Jinja2 · HTMX
+
+Rules:
+
+* Web cockpit is optional and isolated behind the web extra.
+* Keep the UI server-rendered.
+* No SPA by default.
+* No Node/build pipeline by default.
+* Vendor browser assets locally when practical; avoid CDN dependency for core UI behavior.
+* `asyncio` is allowed only where the FastAPI/web boundary requires it.
+* Routes/templates must stay thin. Business logic belongs in services.
+
+### 3.3 Desktop Shell
+
+**Default desktop boundary:** Tauri in `desktop/`, isolated from Python core.
+
+Rules:
+
+* Desktop code is not a Python dependency.
+* Desktop shell launches or connects to the local FastAPI sidecar according to the current sidecar contract.
+* Desktop must not duplicate business logic from CLI, API, services, or storage.
+* Desktop-specific behavior stays inside `desktop/` unless an ADR explicitly expands the boundary.
+
+### 3.4 Deferred / Out of Scope Unless Planned
+
+The following are not part of the default stack and must not be scaffolded casually:
+
+* OCR implementation
+* New provider families
+* Route rewrites
+* SPA migration
+* Node build pipeline
+* External queue
+* Cloud sync
+* Telemetry
+* Multi-user SaaS architecture
+
+### 3.5 Banned Unless Explicitly Approved
+
+The following require an ADR or explicit orchestrator approval before use:
+
+* Flask
+* Django
+* SQLAlchemy or another ORM
+* Celery, RQ, or external worker queues
+* Docker as a required local runtime
+* React/Vue/Svelte/SPA framework
+* Required Node build pipeline
+* OpenTelemetry
+* Sentry or external error tracking
+* External job queue, worker daemon, or multi-process worker pool
+* Global mutable cross-project store
+* `asyncio` outside the web layer without a documented reason
+
+### 3.6 Stack Change Rule
+
+A stack change is allowed only when it satisfies all of these:
+
+1. Solves a current, documented project problem.
+2. Has an ADR or explicit sprint scope.
+3. Includes migration impact.
+4. Includes rollback strategy.
+5. Keeps CLI, API, desktop, storage, and tests coherent.
+
 
 ---
 
@@ -146,59 +262,82 @@ Provider registry: `providers/registry.py`. API keys resolve from env vars or `~
 
 ### 4.1 Before Coding
 
-1. Read this file first, then the relevant doc/ADR from §1. No sprint is currently active (Sprint Q + R closed); when a new sprint opens, follow its execution plan/spec + the staging discipline modelled by [SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md), against [SOURCEOFARCHITECTURE.md](.docs/audit/SOURCEOFARCHITECTURE.md) + [ROADMAP_REPLAN.md](.docs/audit/ROADMAP_REPLAN.md).
-2. Check the active stage in §2.3 before starting any work. Respect stage order; stop at each stage gate (§2.2) for inspection.
-3. Run `rtk git status --short --branch`. If WIP overlaps the relevant area, tell the orchestrator before editing.
-4. Confirm scaffolding is actually requested. Docs/strategy request ≠ build code.
-5. Check the file tree before creating new files or folders. Use exact names/values from docs for types, schemas, exit codes — do not improvise. When unsure: ask.
-6. Before committing: scan the diff for AI attribution trailers, bot author metadata, or leaked credentials.
+1. Read this file first, then the relevant current doc/ADR from §1.
+2. Check the active stage in §2.3 before starting any work. If no sprint/stage is active, do not continue old scaffolding by default; open a new execution plan first.
+3. Respect the active execution plan, stage order, and gate rules defined for the current sprint.
+4. Run `rtk git status --short --branch`. If WIP overlaps the relevant area, tell the orchestrator before editing.
+5. Confirm scaffolding is actually requested. Docs/strategy request ≠ build code.
+6. Check the file tree before creating new files or folders. Use exact names/values from the current docs for types, schemas, exit codes, selectors, and routes. Do not improvise.
+7. Before committing: scan the diff for AI attribution trailers, bot author metadata, leaked credentials, and unrelated changes.
 
-### 4.2 Code Rules (Non-Negotiable)
+### 4.2 Code Rules
 
-ADR `002`. (Absorbs the former `ENGINEERING_STANDARDS.md`.)
+Follow the current engineering ADR/source-of-truth listed in §1.
 
-- **Types:** Type hints on every public function. Pyright basic must pass.
-- **Modularity:** One concept per file. Split if >400 lines or >5 public functions. Functions >50 lines or >4 params need justification.
-- **Naming:** Forbidden filenames: `utils.py`, `helpers.py`, `manager.py`. Avoid class names ending `Manager`/`Helper`/`Handler` unless they truly are that pattern. Name modules for purpose.
-- **No `**kwargs`** in public APIs. No bare `except:` or `except Exception:` outside the CLI/web boundary; never `except: pass`.
-- **Errors:** All via `WeaverError` hierarchy (`src/weaver/errors.py`). User-facing errors include: what failed / likely cause / next command. Process-exit errors use the documented exit-code table (README / [SIDECAR_CONTRACT.md](docs/SIDECAR_CONTRACT.md)).
-- **State discipline:** State writes go through services. CLI/web never touch SQLite directly. One segment translation = one transaction. Status transitions live in the same transaction as the data they describe.
-- **Layer boundaries:** Shared/core is framework-agnostic (no web `Request`/`Response`, no DI wiring, no template/CLI output). Pydantic only at the web boundary. UI templates/routes carry no business logic.
-- **API keys:** Env vars or `~/.weaver/secrets.toml` only — never in config, logged, rendered, or in an SSE event. Shell env wins. CI greps `provider.log` for zero keys.
-- **Value types:** `@dataclass(frozen=True)` for value types. `pathlib.Path` for paths (never string-concat). Atomic writes (`tempfile` + `replace`) for valuable state.
-- **Cockpit UI hooks (do not rename/remove):** `#tree`, `#ws-grid`, `#job-panel`, `#export-panel`, `#browser`, `#selected_source`, `#source_path`, `#qa-badge-status`, `#qa-issues`, `id="seg-{id}"`, and the `qa-badge-vol-*` / `qa-badge-ch-*` slots. Design tokens have a single source: `api/static/app.css` `:root`. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-- **Tests:** Mirror source tree. Use `FakeProvider`, never live LLMs in CI. Fixtures = public-domain only (e.g. Aozora Bunko). Mock external boundaries only, never your own code.
-- **Security (any PR touching I/O):** input parsed via pydantic (not raw dict chains); no user string to `os.system`/`subprocess(shell=True)`/`eval`/`exec`; cloud HTTPS only; malformed input handled without crashing. Performance budgets (init <30 s/200-ch; resume <5 s/10k seg; export <30 s/10k seg; <1 GB peak) — regressions >20% need justification.
-- **Tech-debt prevention:** No stub functions "for later", no commented-out code, no single-caller abstractions, no config flag to defer a decision. Dead code deleted on sight. TODO/FIXME carries an issue + cleanup plan.
-- **Git/PR:** Conventional Commits with scope (`feat(translate): …`); branches `feat|fix|docs|chore/<name>`; one PR = one concern; no force-push to `main`. ADRs (`docs/decisions/NNNN-*.md`): Context / Decision / Consequences, one page.
-- **Githooks:** `.githooks/` are mandatory. Keep `git config core.hooksPath .githooks` enabled.
+* **Types:** Type hints on every public function. Pyright basic must pass.
+* **Modularity:** One concept per file. Split if >400 lines or >5 public functions. Functions >50 lines or >4 params need justification.
+* **Naming:** Forbidden filenames: `utils.py`, `helpers.py`, `manager.py`. Avoid class names ending `Manager`/`Helper`/`Handler` unless they truly are that pattern. Name modules for purpose.
+* **Public APIs:** No `**kwargs` in public APIs. No bare `except:` or `except Exception:` outside CLI/web boundaries. Never use `except: pass`.
+* **Errors:** All domain errors go through the `WeaverError` hierarchy. User-facing errors must state what failed, likely cause, and next action.
+* **State discipline:** State writes go through services. CLI/web must not touch SQLite directly. One segment translation = one transaction. Status transitions live in the same transaction as the data they describe.
+* **Layer boundaries:** Shared/core code is framework-agnostic. No web `Request`/`Response`, DI wiring, template output, or CLI formatting in core services. Pydantic belongs at the web/API boundary. UI templates/routes carry no business logic.
+* **API keys:** Env vars or local secrets file only. Never store keys in config, logs, rendered HTML, SSE events, tests, or fixtures. Shell env wins.
+* **Value types:** Use `@dataclass(frozen=True)` for value objects. Use `pathlib.Path` for paths. Use atomic writes for valuable state.
+* **Cockpit UI hooks:** Do not rename/remove existing route, template, CSS, HTMX, or DOM hooks unless the active plan explicitly requires it and tests are updated.
+* **Tests:** Mirror the source tree. Use `FakeProvider`; never live LLMs in CI. Fixtures must be public-domain or synthetic. Mock external boundaries only, not internal code.
+* **Security for I/O changes:** Parse input through typed schemas/models, not raw dict chains. Never pass user strings to `os.system`, `subprocess(shell=True)`, `eval`, or `exec`. Malformed input must fail safely.
+* **Performance:** Preserve documented runtime budgets. Any regression over 20% needs evidence and justification.
+* **Tech-debt prevention:** No stub functions “for later”, no commented-out code, no single-caller abstractions, no config flag to defer a decision. Dead code is deleted on sight. TODO/FIXME must include an issue and cleanup plan.
+* **Git/PR:** Conventional Commits with scope, for example `feat(translate): ...`. Branches use `feat|fix|docs|chore/<name>`. One PR = one concern. No force-push to `main`.
+* **Githooks:** `.githooks/` are mandatory. Keep `git config core.hooksPath .githooks` enabled.
 
 ### 4.3 Anti-Slop
 
-(Absorbs the former `AI_SLOP_PREVENTION.md`.) The LLM must be load-bearing infrastructure, never decoration.
+The LLM must be load-bearing infrastructure, never decoration.
 
-- **No** "smart"/"AI-powered"/"magical"/"intelligent" feature names. No chat UIs, avatars, sparkles, fortune-cookie loaders, marketing language, telemetry/phone-home.
-- **No prompt-wrapper features:** a new "mode" that only changes the system prompt is not a feature. Real features change the data flow, state machine, or workflow.
-- A feature ships only if all six gates pass: **(1) real pain** (evidenced, not "would be cool") · **(2) falsifiable spec** · **(3) deterministic where possible** (LLM only when determinism is impossible AND output is verifiable) · **(4) user can override** (every AI artifact editable/dismissable) · **(5) failure visible** (failed output marked + surfaced, never silently substituted or retried-forever) · **(6) cost visible**.
-- No config flags for unbuilt features. No stub functions. No commented-out code. No abstractions with one caller.
+* No “smart”, “AI-powered”, “magical”, or “intelligent” feature names.
+* No chat UIs, avatars, sparkles, fortune-cookie loaders, marketing language, telemetry, or phone-home behavior.
+* No prompt-wrapper features. A new “mode” that only changes the system prompt is not a feature.
+* A feature ships only if all six gates pass:
+
+  1. Real pain: evidenced, not “would be cool”.
+  2. Falsifiable spec.
+  3. Deterministic where possible.
+  4. User can override every AI artifact.
+  5. Failure is visible and never silently substituted.
+  6. Cost is visible.
+* No config flags for unbuilt features. No stub functions. No commented-out code. No abstractions with one caller.
 
 ### 4.4 Scope Discipline
 
 Build vertically, not horizontally. One polished slice beats several half-finished ones. When in doubt between spectacle and correctness, prioritize correctness.
 
-- Build only what the active stage (§2.3) lists. Deferred items get no scaffolding "for later".
-- One PR = one concern. No bundled refactor + feature. **One closed-sprint stage = one branch + one PR.**
-- **Cross-project read layer** is **read-only**; **no global mutable store without an ADR**; **no source-file hashing on any render path** (Gate B1 extended). Add a **Non-Goals** line per stage (§2.3) to fence scope.
-- When no sprint is active, open a new scope by writing a Sprint-X execution plan (modelled on [SPRINT_Q_EXECUTION_PLAN.md](.docs/audit/SPRINT_Q_EXECUTION_PLAN.md)) and an entry in §2.3 / §2.4. Do not continue the previous sprint's scaffolding by default.
+* Build only what the active stage lists.
+* Deferred items get no scaffolding “for later”.
+* One PR = one concern. Do not bundle refactor + feature.
+* One implementation stage should map to one branch + one PR unless the active execution plan says otherwise.
+* Add a **Non-Goals** line per stage to fence scope.
+* No global mutable store without an ADR.
+* No cross-project write behavior without an ADR.
+* No expensive file hashing, scanning, or source inspection on render paths unless explicitly budgeted and tested.
+* When no sprint is active, open a new scope by writing a sprint execution plan and updating §2.3 / §2.4 before implementation.
 
-Build order (when a new sprint opens): **T6/T7/T8 validation gates for any prior carry-over** → **stage implementation in execution-plan order** → **T0 docs + handoff** → **T9 final gate**.
+Default build order:
+
+1. Validate prior carry-over.
+2. Implement stages in execution-plan order.
+3. Update docs and handoff notes.
+4. Run final gate validation.
 
 ### 4.5 Communication
 
-- Terse, technical. No filler, no apology, no marketing language.
-- Reference files as `[name](path/file.md)` or `src/weaver/foo.py:42`. State decisions directly.
-- Use concise Indonesian when the user writes in Indonesian.
-- When uncertain, present 2–3 concrete options with trade-offs. Flag conflicts early: locked-stack changes, phase jumps, scope creep, direction regressions. During debugging: state what is happening, what was expected, what evidence supports the conclusion.
+* Terse, technical. No filler, no apology, no marketing language.
+* Reference files as `[name](path/file.md)` or `src/weaver/foo.py:42`.
+* State decisions directly.
+* Use concise Indonesian when the user writes in Indonesian.
+* When uncertain, present 2–3 concrete options with trade-offs.
+* Flag conflicts early: locked-stack changes, phase jumps, scope creep, direction regressions.
+* During debugging: state what is happening, what was expected, and what evidence supports the conclusion.
 
 ### 4.6 Contribution Identity
 
@@ -206,12 +345,13 @@ Build order (when a new sprint opens): **T6/T7/T8 validation gates for any prior
 
 AI is a ghostwriter. Repository accountability remains with the human owner.
 
-- Do not add `Co-Authored-By: Claude` or any AI/model co-author trailer to commits.
-- Do not add "Generated with Claude Code" or equivalent tags to commit messages or PR bodies.
-- Do not push commits with AI or bot author identity.
-- Do not make AI appear in the GitHub contributor graph.
-- Author and committer identity must be the repo owner's human identity configured for the project.
-- If AI assistance needs to be disclosed, mention it only in normal prose in a PR description or changelog, never in git metadata.
+* Do not add `Co-Authored-By: Claude` or any AI/model co-author trailer to commits.
+* Do not add “Generated with Claude Code” or equivalent tags to commit messages or PR bodies.
+* Do not push commits with AI or bot author identity.
+* Do not make AI appear in the GitHub contributor graph.
+* Author and committer identity must be the repo owner’s human identity configured for the project.
+* If AI assistance needs to be disclosed, mention it only in normal prose in a PR description or changelog, never in git metadata.
+
 
 ---
 
