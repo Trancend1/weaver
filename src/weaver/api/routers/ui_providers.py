@@ -1,4 +1,4 @@
-"""UI router: global Providers hub (Sprint Q6) + provider/model + secret config editor (ADR ``015``).
+"""Providers hub (Sprint Q6) + provider/model + secret config editor (ADR ``015``).
 
 The hub GET is render-safe (Gate B1): it uses ``services/workspace_providers``
 (read-only DB) plus ``provider_config.read_config`` (TOML + secret-name list only)
