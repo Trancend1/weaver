@@ -20,6 +20,7 @@ Active ADRs only. Active numbering was reset to `001` during the controlled rese
 | [012](decisions/012-image-preview-ocr-security-gate.md) | Image Preview / OCR Security Gate | Allows read-only manifest-backed image preview with MIME/size/path controls; keeps OCR contract-only until explicit future approval. |
 | [013](decisions/013-qa-error-severity-tier.md) | QA `error` Severity Tier (Rejected/Deferred) | Sprint Q11 keeps the 3-tier `info\|warning\|critical` contract; no `error` tier. Structure findings (WV-007) map EPUB `error`→`warning` (advisory, never block Final export). Re-open point documented. |
 | [014](decisions/014-provider-complete-primitive-and-glossary-suggestion.md) | Provider `complete()` Primitive + Glossary Target Suggestion | Sprint R adds a domain-agnostic `complete()` transport primitive (4 providers); on-demand AI glossary-target suggestion lives in a service (prompt+validation), ephemeral (no migration), provider fully config-driven (**no hidden vendor default**). Gate B1: provider called only on explicit POST. |
+| [015](decisions/015-single-provider-config-surface.md) | Single provider-config surface at `/ui/providers` | Removes `/ui/config`; the Providers hub (`ui_providers.py`) owns provider/model + secret config + health. `ui_admin.py` is now glossary/characters/TM only. Hub GET remains Gate-B1-safe (TOML-only read, no provider build). |
 
 ## ADR rules
 

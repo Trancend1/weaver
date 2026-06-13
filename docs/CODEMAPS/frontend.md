@@ -28,7 +28,6 @@ base.html
 +- new.html
 +- characters.html
 +- memory.html
-+- config.html
 +- error.html / not_found.html
 
 partials/
@@ -51,7 +50,7 @@ partials/
 - Workspace: `#seg-{id}` (full segment row swap), `#seg-statusline-{id}` (not a swap target), `#seg-{id}-history`, `#seg-{id}-candidates`, `#seg-{id}-gen-loader`.
 
 ## Page Layout Modes (`api/ui_context.py`)
-- `global` (topbar only): `/ui`, `/ui/new`, `/ui/config`, hubs.
+- `global` (topbar only): `/ui`, `/ui/new`, hubs (including `/ui/providers` for provider/model + secret config).
 - `project` (topbar + 264px sidebar): project, glossary, characters, memory, quality.
 - `workspace` (topbar + 56px icon rail): chapter editor.
 
