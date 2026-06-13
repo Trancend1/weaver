@@ -382,8 +382,8 @@ class TranslationJob:
                 envelope["id"] = event_id
             self.queue.put(envelope)
         else:
-            terminal_status = "cancelled" if self.should_cancel() else "done"
             result = self.result
+            terminal_status = "cancelled" if result.cancelled else "done"
             terminal_data = {
                 "selected": result.selected,
                 "translated": result.translated,

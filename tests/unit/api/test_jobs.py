@@ -130,6 +130,33 @@ def test_request_cancel_stops_runner_and_marks_cancelled() -> None:
     assert [e["event"] for e in _drain(job.queue)] == ["cancelled"]
 
 
+def test_late_cancel_does_not_overwrite_done_status() -> None:
+    """A cancel flag raised *after* the runner returns with
+    ``result.cancelled=False`` must not flip the terminal status to
+    ``cancelled``.  Terminal status, terminal event, persisted state, and
+    ``result.cancelled`` must agree — mirroring batch/export semantics."""
+    registry = JobRegistry()
+    runner_done = threading.Event()
+    proceed = threading.Event()
+
+    def runner(should_cancel, on_progress) -> ChapterTranslationResult:
+        result = _result(translated=3, cancelled=False)
+        runner_done.set()
+        proceed.wait(timeout=5)
+        return result
+
+    job = _submit(registry, runner)
+    assert runner_done.wait(timeout=5)
+    job.request_cancel()
+    proceed.set()
+    job.wait(timeout=5)
+
+    assert job.status == "done"
+    assert job.result is not None
+    assert job.result.cancelled is False
+    assert [e["event"] for e in _drain(job.queue)] == ["done"]
+
+
 @pytest.mark.parametrize("mode", ["chapter", "selection"])
 def test_submit_records_mode_and_chapter(mode: str) -> None:
     registry = JobRegistry()
