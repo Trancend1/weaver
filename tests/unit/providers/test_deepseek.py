@@ -139,9 +139,7 @@ def test_deepseek_complete_jsonmode_rejection_is_visible_not_silent() -> None:
     class BadRequestError(Exception):
         pass
 
-    completions = _StubChatCompletions(
-        [BadRequestError("response_format json_object unsupported")]
-    )
+    completions = _StubChatCompletions([BadRequestError("response_format json_object unsupported")])
     provider = DeepSeekProvider(client=_StubClient(completions))
 
     with pytest.raises(ProviderResponseError):

@@ -41,9 +41,7 @@ class _StubProvider(LLMProvider):
             raise ProviderUnavailable(self.name, "stub provider is unavailable")
         if self._exc:
             raise self._exc
-        return Completion(
-            text=self._text, input_tokens=5, output_tokens=2, raw_response=self._text
-        )
+        return Completion(text=self._text, input_tokens=5, output_tokens=2, raw_response=self._text)
 
 
 def _candidate_source(project_toml: Path) -> tuple[int, str]:

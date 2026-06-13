@@ -27,6 +27,7 @@ from weaver.storage.db import connect_readonly_database
 
 _RECENT_FAILURES_PER_PROJECT = 5
 
+
 @dataclass(frozen=True)
 class ProviderFailure:
     """One recent failed job, for the recent-failures list (key-free)."""
