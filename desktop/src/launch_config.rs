@@ -9,17 +9,44 @@
 //! via `WEAVER_DATA_DIR`, making the agreement explicit rather than implied.
 
 use std::net::TcpListener;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Env var a maintainer can set to point at a specific `weaver` binary
 /// (e.g. a bundled sidecar in Sprint O). When unset, the host relies on
 /// `weaver` being resolvable on `PATH`.
 const SIDECAR_OVERRIDE_ENV: &str = "WEAVER_DESKTOP_SIDECAR";
+const BUNDLED_EXTERNAL_BIN_EXE: &str = "weaver.exe";
+const BUNDLED_SIDECAR_EXE: &str = "weaver-x86_64-pc-windows-msvc.exe";
+
+/// How `weaver_exe` was resolved. Recorded purely for startup diagnostics so a
+/// timeout/crash can report whether the override, the bundled sidecar, or the
+/// PATH fallback was used (Sprint P3b).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SidecarSource {
+    /// `WEAVER_DESKTOP_SIDECAR` was set and non-empty.
+    Override,
+    /// A bundled sidecar beside the desktop exe (with its `_internal` payload).
+    Bundled,
+    /// Bare `weaver`, resolved through `PATH` (dev / diagnostics fallback).
+    Path,
+}
+
+impl SidecarSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SidecarSource::Override => "override (WEAVER_DESKTOP_SIDECAR)",
+            SidecarSource::Bundled => "bundled",
+            SidecarSource::Path => "PATH",
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct LaunchConfig {
     /// The `weaver` executable to spawn (`Command::new` resolves bare names via PATH).
     pub weaver_exe: PathBuf,
+    /// How `weaver_exe` was resolved (override / bundled / PATH) — diagnostics only.
+    pub sidecar_source: SidecarSource,
     /// App-data root shared with the sidecar (passed as `WEAVER_DATA_DIR`).
     pub data_dir: PathBuf,
     /// `data_dir/logs` — where the cockpit writes `runtime.log` and where the
@@ -35,8 +62,10 @@ impl LaunchConfig {
     pub fn resolve() -> Result<Self, String> {
         let data_dir = resolve_data_dir();
         let logs_dir = data_dir.join("logs");
+        let (weaver_exe, sidecar_source) = resolve_weaver_exe();
         Ok(Self {
-            weaver_exe: resolve_weaver_exe(),
+            weaver_exe,
+            sidecar_source,
             data_dir,
             logs_dir,
             port: pick_free_port()?,
@@ -54,15 +83,49 @@ impl LaunchConfig {
     }
 }
 
-fn resolve_weaver_exe() -> PathBuf {
+fn resolve_weaver_exe() -> (PathBuf, SidecarSource) {
     if let Ok(v) = std::env::var(SIDECAR_OVERRIDE_ENV) {
         if !v.trim().is_empty() {
-            return PathBuf::from(v);
+            return (PathBuf::from(v), SidecarSource::Override);
         }
     }
+
+    if let Some(path) = resolve_bundled_weaver_exe() {
+        return (path, SidecarSource::Bundled);
+    }
+
     // Bare name; `std::process::Command` resolves it through PATH. On Windows
     // the `.exe` suffix is applied automatically by the OS loader.
-    PathBuf::from("weaver")
+    (PathBuf::from("weaver"), SidecarSource::Path)
+}
+
+fn resolve_bundled_weaver_exe() -> Option<PathBuf> {
+    let current_exe = std::env::current_exe().ok()?;
+    let exe_dir = current_exe.parent()?;
+    bundled_sidecar_candidates(exe_dir)
+        .into_iter()
+        .find(|candidate| is_bundled_sidecar_ready(candidate))
+}
+
+fn bundled_sidecar_candidates(exe_dir: &Path) -> Vec<PathBuf> {
+    vec![
+        exe_dir.join(BUNDLED_EXTERNAL_BIN_EXE),
+        exe_dir.join(BUNDLED_SIDECAR_EXE),
+        exe_dir.join("resources").join(BUNDLED_SIDECAR_EXE),
+        exe_dir.join("sidecar").join(BUNDLED_SIDECAR_EXE),
+    ]
+}
+
+fn is_bundled_sidecar_ready(candidate: &Path) -> bool {
+    if !candidate.is_file() {
+        return false;
+    }
+
+    let Some(parent) = candidate.parent() else {
+        return false;
+    };
+
+    parent.join("_internal").is_dir() || parent.join("sidecar").join("_internal").is_dir()
 }
 
 fn resolve_data_dir() -> PathBuf {

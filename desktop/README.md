@@ -9,19 +9,21 @@ This subtree is **isolated**: it is not a Python dependency and does not change
 `src/weaver/` (template diff = 0). The runtime contract it binds against is
 [`../docs/SIDECAR_CONTRACT.md`](../docs/SIDECAR_CONTRACT.md).
 
-> **Status: compile-verified, runtime-unverified (Q2F).**
-> As of 2026-06-14 the Rust host **compiles cleanly** (`cargo check` → 0 errors)
-> and the previously-`UNVERIFIED` Windows crate pins resolve exactly as declared
-> (`webview2-com 0.38.2`, `windows 0.61.3`, `tauri 2.11.2`). The **runtime** smoke
-> — `cargo tauri dev` spawning the real sidecar, opening the WebView, and the
-> no-orphan shutdown check — has **not** been run yet, so Sprint N exit criteria
-> N1–N4 (launch time, no orphan, crash screen) remain **unverified**. The full
-> validation path is [`../docs/DESKTOP_SMOKE_CHECKLIST.md`](../docs/DESKTOP_SMOKE_CHECKLIST.md).
+> **Status: runtime-verified; bundled sidecar shipped (Sprint P, PASS-WITH-CONDITIONS).**
+> Sprint N N1–N6 are owner-confirmed via `cargo tauri dev`. Sprint O packaged the
+> shell; Sprint P bundled the sidecar so the packaged app launches **without an
+> external `weaver` on `PATH`** — `/healthz` 200 → `/ui` 200, logs in
+> `%APPDATA%\Weaver\logs`, crash screen on failure, no orphan after close. The
+> Windows crate pins resolve as declared (`webview2-com 0.38.2`, `windows 0.61.3`,
+> `tauri 2.11.2`). Open conditions: human X-button close owner-confirm; signing /
+> auto-update / final installer / cross-platform deferred. Full validation path:
+> [`../docs/DESKTOP_SMOKE_CHECKLIST.md`](../docs/DESKTOP_SMOKE_CHECKLIST.md);
+> gate report `../docs/superpowers/handoffs/2026-06-14-sprint-p6-gate-report.md`.
 
 ## What it does (lifecycle)
 
 ```
-resolve config ─► loading window ─► spawn `weaver serve` ─► poll /healthz (≤5s)
+resolve config ─► loading window ─► spawn `weaver serve` ─► poll /healthz (≤20s)
                                                               │
                               ready ◄─────────────────────────┤
                                 │                              ├─► exited / timeout
@@ -42,7 +44,7 @@ wait 5s, then `taskkill /F /T` (forced) — so no orphan `weaver` process is lef
 | Desktop baseline via env (`WEAVER_ENV=desktop`, no `--env` flag exists) | `src/sidecar.rs` env block |
 | Reserve a free port host-side (§6) | `src/launch_config.rs` `pick_free_port` |
 | Session token, ≥32 bytes (§2) | `src/launch_config.rs` `generate_token` (32 bytes / 64 hex) |
-| Poll `/healthz`, 200 + `{ok:true}`, 5s budget (§6) | `src/sidecar.rs` `health_ok`, `src/lib.rs` `boot` |
+| Poll `/healthz`, 200 + `{ok:true}`, 20s budget (§6, P3b) | `src/sidecar.rs` `health_ok`, `src/lib.rs` `boot` |
 | Inject `X-Weaver-Session` on **every** request (§1) | `src/webview_session.rs` (WebView2 `WebResourceRequested`) |
 | Pipe sidecar console to `logs_dir` (§4) | `src/sidecar.rs` `spawn_tee` → `sidecar.console.log` |
 | Graceful shutdown then force, ≤5s (§7) | `src/sidecar.rs` `Sidecar::shutdown` |
@@ -64,8 +66,11 @@ N4's "sidecar logs land in `logs_dir`" holds, without a double-writer hazard.
 `WEAVER_PORT=<port>`, `WEAVER_DOCS=false`, `WEAVER_DATA_DIR=<resolved data dir>`.
 Provider API keys are **never** set in the spawn environment.
 
-Override the sidecar binary with `WEAVER_DESKTOP_SIDECAR=<path-to-weaver>`;
-otherwise `weaver` is resolved from `PATH`.
+The sidecar binary is resolved in this order (Sprint P / ADR 016):
+1. `WEAVER_DESKTOP_SIDECAR=<path-to-weaver>` override, when set and non-empty.
+2. The bundled sidecar staged via Tauri `bundle.externalBin` (the normal packaged
+   path — `weaver.exe` beside the host with its `_internal` payload).
+3. Bare `weaver` on `PATH` (development / diagnostics fallback only).
 
 ## Before the first build
 

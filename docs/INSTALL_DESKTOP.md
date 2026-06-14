@@ -118,7 +118,8 @@ After any build, verify the five critical paths:
 $env:PATH = "D:\DevSpace\Projects\weaver\.venv\Scripts;$env:PATH"
 Start-Process .\target\release\weaver-desktop.exe
 
-# Wait ~5 s for the loading screen → cockpit transition
+# Wait for the loading screen → cockpit transition (host startup budget is 20 s;
+# a bundled PyInstaller sidecar cold-starts slower than a PATH `weaver`)
 
 # 2. Verify sidecar console log shows healthz + /ui 200 OK
 Get-Content "$env:APPDATA\Weaver\logs\sidecar.console.log" -Tail 10

@@ -11,7 +11,7 @@
 use std::collections::VecDeque;
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -209,6 +209,21 @@ fn spawn_tee(
             }
         }
     });
+}
+
+/// Append a host-side diagnostic line to `sidecar.console.log`, tagged `[host]`
+/// to distinguish it from the child's teed `[out]`/`[err]` lines. This makes the
+/// resolved sidecar source/path and startup timing visible in the same log a
+/// packaged smoke already inspects — without a crash window (Sprint P3b).
+///
+/// Diagnostics only: never pass the session token or any secret here.
+pub fn append_host_log(log_path: &Path, message: &str) {
+    if let Some(dir) = log_path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path) {
+        let _ = writeln!(file, "[host] {message}");
+    }
 }
 
 /// `GET /healthz` → 200 with `{"ok": true}`. Any error/timeout is "not ready".

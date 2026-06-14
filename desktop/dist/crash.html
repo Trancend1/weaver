@@ -63,6 +63,11 @@
           var m = c.exitMeaning ? " — " + c.exitMeaning : "";
           bits.push("Exit code: " + c.exitCode + m);
         }
+        if (c.sidecarSource) bits.push("Sidecar: " + c.sidecarSource);
+        if (c.sidecarPath) bits.push("Path: " + c.sidecarPath);
+        if (c.waitedMs !== null && c.waitedMs !== undefined) {
+          bits.push("Waited: " + c.waitedMs + " ms");
+        }
         if (c.logPath) bits.push("Full log: " + c.logPath);
         meta.innerHTML = bits
           .map(function (b) { return "<code>" + b.replace(/[<>&]/g, function (ch) {

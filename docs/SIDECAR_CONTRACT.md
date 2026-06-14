@@ -23,7 +23,7 @@ host                     cockpit (FastAPI sidecar)
  │ ◄───────────────────────  "Weaver cockpit (FastAPI UI) on http://127.0.0.1:<port>"
  │
  │   GET http://127.0.0.1:<port>/healthz
- │ ───────────────────────►  poll (≤ 100 ms cadence, ≤ 5 s budget)
+ │ ───────────────────────►  poll (≤ 100 ms cadence, ≤ 20 s budget)
  │ ◄───────────────────────  200 {"ok": true, "ts": "..."}
  │
  │   open WebView at http://127.0.0.1:<port>/ui
@@ -123,7 +123,7 @@ Codes outside this table are **not** part of the contract — the host should tr
 
 ```text
 spawn cockpit; record stdout/stderr; record child exit_code if it dies early
-deadline = now + 5_000 ms
+deadline = now + 20_000 ms
 while now < deadline and child is alive:
   try: GET http://127.0.0.1:<port>/healthz
   except connection refused / timeout (200 ms): sleep 50 ms; continue
@@ -135,6 +135,18 @@ if child died before deadline:
 if deadline elapsed:
   treat as exit 65 equivalent (port may be ours but never bound).
 ```
+
+**Readiness budget.** The host startup budget is **20 s** (Sprint P3b),
+widened from the Sprint N/O value of 5 s because a bundled PyInstaller onedir
+sidecar (`bundle.externalBin`) has a slower cold start: the bootloader unpacks a
+large `_internal` payload and loads `python3xx.dll` before Uvicorn binds. The
+ceiling stays bounded — a child that *exits* is surfaced immediately via its exit
+code regardless of the budget, so 20 s only delays the "never became ready" case.
+A bare-`weaver`-on-`PATH` dev sidecar still becomes ready well inside this window.
+This budget is **not** part of the §8 stability guarantees and is independent of
+the §7 shutdown grace (still 5 s). On a timeout the host crash screen reports the
+resolved sidecar source/path and the elapsed wait, and the host writes a `[host]`
+diagnostic line to `sidecar.console.log`.
 
 **Random ports.** When `--port 0` is used, the host reads the chosen port from the stdout summary line **only as a hint**. The authoritative source is `GET /runtime/status` once `/healthz` returns 200. Implementations should bind a free port on the host side first (e.g. by opening a temporary socket on `127.0.0.1:0`, recording the port, closing the socket, and passing it as `--port`) — that is more deterministic than parsing stdout.
 

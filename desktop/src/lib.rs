@@ -4,7 +4,7 @@
 //!
 //!   1. resolve launch config (exe, data dir, free port, session token)
 //!   2. show a local loading window immediately (fast first paint)
-//!   3. on a background thread: spawn `weaver serve`, poll `/healthz` (≤5s)
+//!   3. on a background thread: spawn `weaver serve`, poll `/healthz` (≤20s)
 //!   4. on ready  → open the cockpit WebView (with the session-header
 //!      interceptor) and close the loading window
 //!   5. on failure → show a crash window with the mapped exit code + console tail
@@ -25,8 +25,18 @@ use launch_config::LaunchConfig;
 use sidecar::{Poll, Sidecar};
 
 /// Total budget for the cockpit to answer `/healthz` before we declare failure.
-const HEALTH_BUDGET: Duration = Duration::from_secs(5);
+///
+/// Sized for a bundled PyInstaller onedir sidecar cold start (Sprint P): the
+/// bootloader unpacks a large `_internal` payload and loads `python3xx.dll`
+/// before Uvicorn binds, which the Sprint N/O 5 s budget could exceed on first
+/// launch. 20 s is a bounded ceiling — a child that *exits* is still surfaced
+/// immediately via `Poll::Exited`, so this only delays the "never became ready"
+/// case, never a real crash (SIDECAR_CONTRACT.md §6).
+const HEALTH_BUDGET: Duration = Duration::from_secs(20);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
+/// Console-tail file the host tees the sidecar's stdout/stderr into; also where
+/// `boot` writes its `[host]` startup diagnostics.
+const CONSOLE_LOG: &str = "sidecar.console.log";
 
 /// The live sidecar, owned globally so the boot thread, the close handler, and
 /// the exit handler can all reach it. `None` before spawn and after shutdown.
@@ -47,6 +57,7 @@ pub fn run() {
                             None,
                             &cfg_fallback_log_path(),
                             &[],
+                            &StartupDiag::default(),
                         ),
                     );
                     return Ok(());
@@ -94,17 +105,35 @@ pub fn run() {
 /// Background boot sequence: spawn the sidecar and poll until healthy, dead, or
 /// timed out. Runs off the main thread; all window work is marshalled back.
 fn boot(handle: AppHandle, cfg: LaunchConfig) {
+    let boot_start = Instant::now();
+    let log_pathbuf = cfg.logs_dir.join(CONSOLE_LOG);
+    let log_path = log_pathbuf.display().to_string();
+
+    // Record which sidecar was selected and the budget BEFORE spawn, so even a
+    // hang or a slow cold start leaves a breadcrumb in the log a smoke inspects.
+    sidecar::append_host_log(
+        &log_pathbuf,
+        &format!(
+            "startup: sidecar source={} path={} health-budget={}s",
+            cfg.sidecar_source.as_str(),
+            cfg.weaver_exe.display(),
+            HEALTH_BUDGET.as_secs(),
+        ),
+    );
+
     let spawned = match Sidecar::spawn(&cfg) {
         Ok(sidecar) => sidecar,
         Err(err) => {
+            sidecar::append_host_log(&log_pathbuf, &format!("startup: spawn failed: {err}"));
             show_crash(
                 &handle,
                 crash_payload(
                     "Weaver could not start",
                     &err,
                     None,
-                    &cfg.logs_dir.join("sidecar.console.log").display().to_string(),
+                    &log_path,
                     &[],
+                    &StartupDiag::from_cfg(&cfg),
                 ),
             );
             return;
@@ -115,8 +144,7 @@ fn boot(handle: AppHandle, cfg: LaunchConfig) {
     *SIDECAR.lock().unwrap() = Some(spawned);
 
     let healthz = cfg.healthz_url();
-    let log_path = cfg.logs_dir.join("sidecar.console.log").display().to_string();
-    let deadline = Instant::now() + HEALTH_BUDGET;
+    let deadline = boot_start + HEALTH_BUDGET;
 
     loop {
         let tick = {
@@ -130,11 +158,28 @@ fn boot(handle: AppHandle, cfg: LaunchConfig) {
 
         match tick {
             Poll::Ready => {
+                sidecar::append_host_log(
+                    &log_pathbuf,
+                    &format!(
+                        "startup: /healthz ready after {} ms; opening cockpit",
+                        boot_start.elapsed().as_millis()
+                    ),
+                );
                 open_cockpit(handle, cfg);
                 return;
             }
             Poll::Exited(code) => {
+                let waited = boot_start.elapsed().as_millis();
                 let tail = console_tail();
+                sidecar::append_host_log(
+                    &log_pathbuf,
+                    &format!(
+                        "startup: sidecar exited code={code} after {waited} ms \
+                         (source={} path={})",
+                        cfg.sidecar_source.as_str(),
+                        cfg.weaver_exe.display(),
+                    ),
+                );
                 shutdown_sidecar();
                 show_crash(
                     &handle,
@@ -144,6 +189,7 @@ fn boot(handle: AppHandle, cfg: LaunchConfig) {
                         Some(code),
                         &log_path,
                         &tail,
+                        &StartupDiag::from_cfg(&cfg).waited(waited),
                     ),
                 );
                 return;
@@ -152,16 +198,31 @@ fn boot(handle: AppHandle, cfg: LaunchConfig) {
         }
 
         if Instant::now() >= deadline {
+            let waited = boot_start.elapsed().as_millis();
             let tail = console_tail();
+            sidecar::append_host_log(
+                &log_pathbuf,
+                &format!(
+                    "startup: timed out after {waited} ms waiting for /healthz \
+                     (source={} path={})",
+                    cfg.sidecar_source.as_str(),
+                    cfg.weaver_exe.display(),
+                ),
+            );
             shutdown_sidecar();
+            let detail = format!(
+                "The backend did not answer /healthz within {} seconds.",
+                HEALTH_BUDGET.as_secs()
+            );
             show_crash(
                 &handle,
                 crash_payload(
                     "The cockpit did not respond in time",
-                    "The backend did not answer /healthz within 5 seconds.",
+                    &detail,
                     None,
                     &log_path,
                     &tail,
+                    &StartupDiag::from_cfg(&cfg).waited(waited),
                 ),
             );
             return;
@@ -184,8 +245,9 @@ fn open_cockpit(handle: AppHandle, cfg: LaunchConfig) {
                         "Weaver could not open the cockpit",
                         &format!("Invalid cockpit URL: {err}"),
                         None,
-                        &cfg.logs_dir.join("sidecar.console.log").display().to_string(),
+                        &cfg.logs_dir.join(CONSOLE_LOG).display().to_string(),
                         &console_tail(),
+                        &StartupDiag::from_cfg(&cfg),
                     ),
                 );
                 return;
@@ -221,8 +283,9 @@ fn open_cockpit(handle: AppHandle, cfg: LaunchConfig) {
                         "Weaver could not open the cockpit",
                         &format!("Failed to create the application window: {err}"),
                         None,
-                        &cfg.logs_dir.join("sidecar.console.log").display().to_string(),
+                        &cfg.logs_dir.join(CONSOLE_LOG).display().to_string(),
                         &console_tail(),
+                        &StartupDiag::from_cfg(&cfg),
                     ),
                 );
             }
@@ -272,12 +335,39 @@ fn shutdown_sidecar() {
     }
 }
 
+/// Startup diagnostics shown on the crash screen so a packaged failure reports
+/// which sidecar was selected, how it was resolved, and how long the host waited
+/// for `/healthz` (Sprint P3b). Defaults to all-`None` for failures that occur
+/// before a `LaunchConfig` exists (e.g. port/token resolution).
+#[derive(Default)]
+struct StartupDiag {
+    sidecar_path: Option<String>,
+    sidecar_source: Option<&'static str>,
+    waited_ms: Option<u128>,
+}
+
+impl StartupDiag {
+    fn from_cfg(cfg: &LaunchConfig) -> Self {
+        Self {
+            sidecar_path: Some(cfg.weaver_exe.display().to_string()),
+            sidecar_source: Some(cfg.sidecar_source.as_str()),
+            waited_ms: None,
+        }
+    }
+
+    fn waited(mut self, ms: u128) -> Self {
+        self.waited_ms = Some(ms);
+        self
+    }
+}
+
 fn crash_payload(
     headline: &str,
     detail: &str,
     exit_code: Option<i32>,
     log_path: &str,
     tail: &[String],
+    diag: &StartupDiag,
 ) -> serde_json::Value {
     serde_json::json!({
         "headline": headline,
@@ -286,6 +376,9 @@ fn crash_payload(
         "exitMeaning": exit_meaning(exit_code),
         "logPath": log_path,
         "logTail": tail,
+        "sidecarPath": diag.sidecar_path,
+        "sidecarSource": diag.sidecar_source,
+        "waitedMs": diag.waited_ms.map(|ms| ms as u64),
     })
 }
 

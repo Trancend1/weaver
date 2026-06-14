@@ -169,7 +169,7 @@ cargo tauri dev
 | 4.1 | **Loading window first** | host UX (N1) | branded `loading.html` paints immediately on launch | blank window / long black screen |
 | 4.2 | **Sidecar spawn** | §1, §2 | `weaver serve` child process appears; `sidecar.console.log` created in `%APPDATA%\Weaver\logs\` | crash screen "Weaver could not start" |
 | 4.3 | **Random port + session token** | §2, §6 | host picked a free loopback port; `WEAVER_SESSION_TOKEN` (64 hex) set in the child env, never in any log | port-in-use crash (exit 65) |
-| 4.4 | **`/healthz` polling, ≤5s** | §3, §6 | `GET /healthz 200 OK` in `sidecar.console.log` within budget; loading → cockpit transition | crash "did not respond in time" |
+| 4.4 | **`/healthz` polling, ≤20s** | §3, §6 | `GET /healthz 200 OK` in `sidecar.console.log` within the 20s budget (bundled PyInstaller cold start is slower than a PATH sidecar); loading → cockpit transition | crash "did not respond in time" |
 | 4.5 | **WebView loads `/ui`** | §1, §3 | cockpit renders; `GET /ui 200 OK` (not 401) in console log | blank WebView / `GET /ui 401` |
 | 4.6 | **Session header on every request** | §1 | every request in the console log is 200 (no 401); `X-Weaver-Session` attached by `webview_session.rs` interceptor | intermittent 401 on HTMX/XHR/subresources |
 | 4.7 | **Shutdown cleanup, no orphan** | §7 (N3) | after closing the window, no `weaver`/`python`/`uvicorn` survives | orphan process left running |
