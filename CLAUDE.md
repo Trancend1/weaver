@@ -8,13 +8,13 @@ Offline-capable, glossary-aware **JP→EN light-novel translation workbench** wi
 >
 > **Current Orchestrator:** Repository Owner (Trancend1) + Claude acting as Lead Technical Orchestrator.
 >
-> **Current Phase:** Q2F **PASS** — Sprint N desktop runtime smoke complete.
+> **Current Phase:** Sprint O **PASS-WITH-CONDITIONS** — Windows packaged desktop alpha builds and runs.
 >
-> **Status:** PASS — Python/FastAPI contract + Rust compile verified; Sprint N runtime smoke N1–N6 owner-confirmed (`cargo tauri dev`).
+> **Status:** PASS-WITH-CONDITIONS — packaged `weaver-desktop.exe` (3.1 MB) launches, runs the cockpit, logs, and shuts down cleanly (O-V1–O-V7); but it still needs an external `weaver` (`.venv\Scripts` on PATH), and signing / auto-update / final installer remain deferred.
 
-> **Current Objective:** Desktop sidecar runtime validated end-to-end; proceed to Sprint O — Desktop Packaging / Installer Alpha.
+> **Current Objective:** Make the desktop alpha self-contained — remove the external PATH-sidecar dependency before any release-grade installer/signing work.
 >
-> **Next Sprint:** Sprint O — Desktop Packaging / Installer Alpha (Windows-first).
+> **Next Sprint:** Sprint P — Bundled Sidecar / Standalone Desktop Alpha (bundle Python via PyInstaller → `bundle.externalBin`).
 
 
 ---
@@ -52,7 +52,8 @@ Current status: **active phase defined in §2.3**.
 | **Q2E — Workspace Review & Export Confidence** | ✅ Done / merged | Review/export/QA readiness UX lebih jelas |
 | **Q2F — Tauri Sidecar Readiness Gate** | ✅ PASS | Python/FastAPI contract + Rust compile verified; runtime smoke N1–N6 owner-confirmed |
 | **Sprint N — Desktop Runtime Validation** | ✅ Done | `cargo tauri dev` smoke green — N1–N6 (window, transition, no-401, no-orphan, logs, crash screen) |
-| **Sprint O — Desktop Packaging / Installer Alpha** | 🔜 Next | Windows-first installable alpha, bundle config, code signing planning |
+| **Sprint O — Desktop Packaging / Installer Alpha** | 🟡 PASS-WITH-CONDITIONS | Packaged `weaver-desktop.exe` (3.1 MB) builds + runs (O-V1–O-V7); condition: external PATH sidecar; signing/auto-update/installer-final deferred |
+| **Sprint P — Bundled Sidecar / Standalone Desktop Alpha** | 🔜 Next | Bundle Python (PyInstaller → `bundle.externalBin`); remove `.venv\Scripts`-on-PATH requirement |
 
 Legend: ✅ complete · 🟡 pass-with-conditions · 🔜 next · ⏭️ blocked · 🚫 deferred
 
@@ -80,11 +81,17 @@ Before starting any new sprint, phase, or stage:
 > Required reminder: **Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection.**
 
 
-### 2.3 Active Phase — Sprint N complete; next is Sprint O
+### 2.3 Active Phase — Sprint O complete (PASS-WITH-CONDITIONS); next is Sprint P
 
-**Track(s) active:** None active — Q2F + Sprint N closed. Open Sprint O (Desktop Packaging) with a fresh execution plan before any packaging work.
+**Track(s) active:** None active — Q2F + Sprint N + Sprint O closed. Open **Sprint P — Bundled Sidecar / Standalone Desktop Alpha** with a fresh execution plan before any packaging-hardening work.
 
-**Status: ✅ Q2F PASS** (Sprint N runtime smoke N1–N6 owner-confirmed)
+**Status: 🟡 Sprint O PASS-WITH-CONDITIONS** — packaged Windows alpha builds + runs (O-V1–O-V7, owner-confirmed); remaining condition: external `weaver` PATH dependency (G2); signing / auto-update / final installer deferred. Earlier gates ✅ Q2F PASS, ✅ Sprint N N1–N6.
+
+Done (Sprint O — packaged alpha, owner-confirmed):
+- O1 packaging audit; O3 `cargo tauri build` → `weaver-desktop.exe` 3.1 MB (exit 0)
+- O4 packaged smoke: launch → cockpit `/ui`, `/healthz`+`/ui` 200 (no 401), no orphan, logs, crash screen
+- O5 logs/crash/uninstall behavior documented; O6 gate report (PASS-WITH-CONDITIONS)
+- Carry-forward condition: packaged exe still needs `.venv\Scripts` on PATH → Sprint P removes this
 
 Done (Q2F):
 - Sidecar contract fully audited against current FastAPI app
