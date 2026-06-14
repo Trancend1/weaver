@@ -1,4 +1,4 @@
-<!-- Generated: 2026-06-13 | Files scanned: pyproject.toml, src/weaver/providers/*.py, desktop/src/*.rs, remote origin/main:docs/{PROVIDER_AND_MODEL_CONFIG,SECURITY_AND_PERFORMANCE,INSTALL_DESKTOP,PROMPT_DESIGN}.md | Token estimate: ~900 -->
+<!-- Generated: 2026-06-14 | Files scanned: pyproject.toml, src/weaver/providers/*.py, desktop/src/*.rs, remote origin/main:docs/{PROVIDER_AND_MODEL_CONFIG,SECURITY_AND_PERFORMANCE,INSTALL_DESKTOP,PROMPT_DESIGN}.md | Token estimate: ~900 -->
 # Dependencies
 
 ## Runtime (`pyproject.toml`)
@@ -20,6 +20,7 @@
 
 ## Provider Adapters (`src/weaver/providers/`)
 Registry-driven: `known_provider_types()` from `providers/registry.py` is the single source of truth.
+Legacy aliases `deepseek`, `gemini`, `ollama`, and `fake` remain supported and normalize through the registry for compatibility.
 
 | Provider | Auth | Notes |
 | --- | --- | --- |
@@ -32,10 +33,12 @@ Registry-driven: `known_provider_types()` from `providers/registry.py` is the si
 All transport providers implement `translate()` and domain-agnostic `complete(prompt, system, max_output_tokens) -> Completion` (ADR `014`). Feature prompts/parsing stay in services (`providers/prompts.py`, `services/glossary_suggestion.py`, translation services).
 
 ## Provider Config / Secrets
+- `/ui/providers` is the canonical provider config UI. `/ui/config` is a GET-only compatibility redirect to `/ui/providers#config-editor` and has no edit form or POST route.
+- `/config` remains the JSON provider/model + secrets API; it is separate from the provider hub UI and returns redacted config only.
 - Project config: `.weaver/<name>/project.toml` `[provider] type/model/base_url/api_key_env/allow_insecure` plus `[translation]`, `[glossary]`, `[qa]`.
 - API keys: environment variables or `~/.weaver/secrets.toml` with restrictive mode; env wins.
 - Keys never appear in config responses, rendered HTML, logs, provider logs, or SSE events.
-- Web secrets endpoints accept POST/DELETE only; no endpoint returns a secret value.
+- Web secrets endpoints accept POST/DELETE only; the provider hub and JSON secret API store values but only render/return secret names and presence.
 - Cloud HTTP must be HTTPS unless `allow_insecure=true` for debug/local testing.
 
 ## Config Precedence

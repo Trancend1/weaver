@@ -1,8 +1,10 @@
 # Consolidate Provider Config into `/ui/providers` Implementation Plan
 
+> **Superseded note (Sprint Q2D, 2026-06-14):** This historical plan originally treated `/ui/config` as removable/404. Current policy is ADR 015 as amended: `/ui/providers` is canonical, while `/ui/config` is a compatibility-only GET redirect to `/ui/providers#config-editor` with no edit form or POST route.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Remove the `/ui/config` route/page entirely and make `/ui/providers` the single source of truth for provider type, model, API-key env name, base URL, config validation, and provider health.
+**Goal:** Make `/ui/providers` the single source of truth for provider type, model, API-key env name, base URL, config validation, and provider health. Sprint Q2D keeps `/ui/config` as a compatibility-only GET redirect.
 
 **Architecture:** `/ui/providers` keeps its read-only cross-project table (writes still flow through the `provider_config` service, never direct DB) and gains two editor panels on the same page: a **Provider / model config** panel (global-or-per-project, with a project selector) and a **Secrets** panel. The provider-config GET/POST/secret routes move from `ui_admin.py` to `ui_providers.py` under the `/ui/providers/...` prefix. The cross-project table's GET stays Gate-B1-safe: it only reads TOML via `read_config` (no DB connect, no provider build, no source hashing). Health stays an explicit per-project POST. The global topnav "Config" link is removed; the ws-hub sidebar "Providers" entry is the only config entry point.
 
@@ -623,7 +625,7 @@ names. The `provider_config` service and the JSON `/config` API are unchanged.
 
 - One place to configure providers; no duplicate config surface or legacy redirect.
 - The hub GET now also calls `read_config` (TOML-only) — still no provider call on render.
-- Any external bookmark to `/ui/config` 404s (acceptable: local single-user cockpit).
+- Any external bookmark to `/ui/config` redirects to `/ui/providers#config-editor`.
 - `ui_admin.py` is now glossary/characters/TM only.
 ```
 
@@ -669,7 +671,7 @@ Expected: clean.
 
 Start the cockpit, then verify:
 - `GET /ui/providers` renders the table + config editor + secrets panel.
-- `GET /ui/config` returns 404.
+- `GET /ui/config` redirects to `/ui/providers#config-editor`.
 - Selecting a project in the editor dropdown + Load preloads its `[provider]` block.
 - Saving config persists (re-open shows the value); a stored secret shows only its env-var name, never the value.
 - The "Check" health button still runs an explicit POST and is the only path that calls a provider.
@@ -682,12 +684,12 @@ Expected: PASS — secret values never rendered; env-var names only.
 
 - [ ] **Step 6: Final commit (if any doc/status tweaks remain) + handoff note**
 
-Write the §8 handoff note in the PR description: scope, files touched, what changed, what was intentionally not changed (service signatures, JSON `/config` API, schema), validation evidence (paste the suite/pyright/ruff output), known risks (external `/ui/config` bookmarks 404), recommended next step (open PR for Critic + Release gate).
+Write the §8 handoff note in the PR description: scope, files touched, what changed, what was intentionally not changed (service signatures, JSON `/config` API, schema), validation evidence (paste the suite/pyright/ruff output), known risks (legacy `/ui/config` bookmarks redirect rather than host an edit surface), recommended next step (open PR for Critic + Release gate).
 
 ---
 
 ## Self-Review Notes (author checklist — already applied)
 
-- **Spec coverage:** remove `/ui/config` (T4) · remove sidebar/link/internal refs (T3 dangling link, T5 topnav, T6 tests, T7 docs) · move config form/action to `/ui/providers` (T2/T3) · empty/legacy/custom base_url/api_key_env handled (reuses `read_config`/`write_config` + `normalize_provider_config`, unchanged) · health stays explicit POST (untouched) · no secret value rendered (T1/T8 assert) · update tests expecting `/ui/config` (T6). All covered.
+- **Spec coverage:** canonicalize `/ui/providers` while keeping `/ui/config` compatibility redirect · remove sidebar/link/internal edit refs (T3 dangling link, T5 topnav, T6 tests, T7 docs) · move config form/action to `/ui/providers` (T2/T3) · empty/legacy/custom base_url/api_key_env handled (reuses `read_config`/`write_config` + `normalize_provider_config`, unchanged) · health stays explicit POST (untouched) · no secret value rendered (T1/T8 assert) · update tests expecting `/ui/config` edit behavior (T6). All covered.
 - **Type/name consistency:** route fn names `config_save` / `config_secret_set` / `config_secret_delete` and context keys `view` / `project` / `projects` / `saved` / `error` / `secret_saved` / `secret_error` match the partials' existing variable names verbatim, so the moved partials render unchanged.
 - **Gate B1:** the only new GET-path call is `read_config` (TOML + secret-name read); no DB connect, no `build_provider`, no source hashing — `test_providers_get_route_is_thin` + `test_no_provider_call_on_hub_get` enforce it.

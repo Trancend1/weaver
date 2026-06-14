@@ -197,16 +197,23 @@ serve-api` runs the same FastAPI app headless.
 It binds **`127.0.0.1` only** (no remote access, no authentication —
 see [docs/WEB_WORKFLOW.md](docs/WEB_WORKFLOW.md) and ADR `004`), defaults to port `8765`, and discovers every project under
 `--books-dir` (default: current directory) so you never type a project path.
-API keys are read from environment variables only — never entered, written to
-disk, or rendered in the UI.
+API keys come from environment variables or the local secret store
+(`~/.weaver/secrets.toml`). The web UI may store a key through the provider hub,
+but secret values are never rendered, logged, returned by the API, or written to
+project/global config.
 
 From the browser you can:
 
 - **Create a project** — browse the sandboxed books directory or upload a source
   file (EPUB/TXT/HTML), pick a provider and template, and run `init` (no `..`
   traversal; uploads land in `.weaver/_uploads/`).
-- **Set provider/model** — write the project `[provider]` table or the global
-  `~/.weaver/config.toml` default from a dropdown (keys stay in env).
+- **Set provider/model** — use `/ui/providers`, the canonical provider config
+  page, to write the project `[provider]` table or the global
+  `~/.weaver/config.toml` default. `/ui/config` is a compatibility-only redirect
+  to the provider editor; it has no edit form. Legacy aliases (`deepseek`,
+  `gemini`, `ollama`, `fake`) remain supported.
+- **Check provider health** — run manual health checks from `/ui/providers`.
+  The hub GET does not call providers automatically.
 - **Translate** — translate a chapter or retranslate with an explicit mode
   (skip-existing / non-manual / force-selected), watch live Server-Sent Events
   progress, and **stop** a run cooperatively (already-translated segments stay

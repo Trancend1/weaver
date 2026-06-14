@@ -23,7 +23,7 @@ Real threats that remain:
 
 ### API Protection (Cloud Providers)
 
-- API keys come from environment variables only. Never read from `project.toml`. Never written to logs.
+- API keys come from environment variables or the local secret store (`~/.weaver/secrets.toml`); shell env wins. Never read key values from `project.toml` or `~/.weaver/config.toml`. Never written to logs or rendered in the UI.
 
   | Provider | Environment Variable | Where to get |
   |----------|---------------------|--------------|
