@@ -849,6 +849,7 @@ class ParseResult:
     nav_count: int
     image_count: int
     validation_count: int
+    cancelled: bool = False
 
 
 ParseJobRunner = Callable[[ShouldCancel], ParseResult]
@@ -913,7 +914,7 @@ class ParseJob:
         else:
             result = self.result
             assert result is not None
-            self.status = "cancelled" if self.should_cancel() else "done"
+            self.status = "cancelled" if result.cancelled else "done"
             with self._lock:
                 self.progress.current = 1
             data = {
@@ -925,7 +926,7 @@ class ParseJob:
                 "nav_count": result.nav_count,
                 "image_count": result.image_count,
                 "validation_count": result.validation_count,
-                "cancelled": self.status == "cancelled",
+                "cancelled": result.cancelled,
             }
             if self.storage is not None:
                 self.storage.flush_progress(
