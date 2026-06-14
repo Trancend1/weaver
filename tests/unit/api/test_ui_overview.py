@@ -60,6 +60,17 @@ def test_project_overview_shows_volume_grid(overview_client: TestClient) -> None
     assert "missing" in page or "fresh" in page
 
 
+def test_project_overview_shows_review_bar_when_all_not_reviewed(
+    overview_client: TestClient,
+) -> None:
+    # A fresh import has segments but no reviews — the review bar must still render
+    # the not_reviewed count instead of hiding the earliest review state.
+    name = _name(overview_client)
+    page = overview_client.get(f"/ui/projects/{name}").text
+    assert "not reviewed" in page
+    assert "approved" in page
+
+
 def test_project_overview_preserves_tree_and_import(overview_client: TestClient) -> None:
     name = _name(overview_client)
     page = overview_client.get(f"/ui/projects/{name}").text

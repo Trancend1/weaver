@@ -134,6 +134,27 @@ def test_severity_filter_narrows_issues(ctx) -> None:
     assert "untranslated_segment" not in body  # warning filtered out
 
 
+def test_filtered_empty_state_says_no_matching_issues(ctx) -> None:
+    client, chapter_id, _ = ctx
+    # The "issues" project has completeness issues but no consistency issues, so a
+    # consistency filter hides everything — the empty state must say the filter is
+    # the cause, not that the report is clean.
+    response = client.get(
+        f"/ui/projects/issues/chapters/{chapter_id}/qa?category=consistency"
+    )
+    assert response.status_code == 200
+    body = response.text
+    assert "No matching issues" in body
+    assert "No quality issues found" not in body
+
+
+def test_qa_summary_clarifies_final_export_gate(ctx) -> None:
+    client, chapter_id, _ = ctx
+    body = client.get(f"/ui/projects/issues/chapters/{chapter_id}/qa").text
+    assert "Draft export is never blocked" in body
+    assert "require clean" in body
+
+
 def test_project_page_links_to_qa(ctx) -> None:
     client, chapter_id, _ = ctx
     project_page = client.get("/ui/projects/issues").text

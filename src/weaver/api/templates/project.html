@@ -44,8 +44,9 @@
       <span>Failed / Stale</span>
     </div>
   </div>
+  <p class="meta">"Done" counts translated/manual segments only — not review approval or export readiness. Final export readiness also depends on QA/preflight. Review status is tracked separately.</p>
 
-  {% if overview.review_counts.approved or overview.review_counts.needs_review or overview.review_counts.needs_revision %}
+  {% if overview.segment_count %}
   <div class="overview-review-bar">
     <span class="meta">Review:</span>
     <span class="badge ok">{{ overview.review_counts.approved }} approved</span>
@@ -84,9 +85,9 @@
         <progress value="{{ v.done_count }}" max="{{ v.segment_count or 1 }}"></progress>
         <span class="meta">{{ v.done_count }}/{{ v.segment_count }} done</span>
       </div>
-      {% if v.review_counts.approved or v.review_counts.needs_review or v.review_counts.needs_revision %}
+      {% if v.segment_count %}
       <div class="meta">
-        Review: {{ v.review_counts.approved }} approved · {{ v.review_counts.needs_review }} needs review · {{ v.review_counts.needs_revision }} needs revision
+        Review: {{ v.review_counts.approved }} approved · {{ v.review_counts.needs_review }} needs review · {{ v.review_counts.needs_revision }} needs revision · {{ v.review_counts.not_reviewed }} not reviewed
       </div>
       {% endif %}
       <div class="toolbar-row">
