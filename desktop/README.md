@@ -9,11 +9,14 @@ This subtree is **isolated**: it is not a Python dependency and does not change
 `src/weaver/` (template diff = 0). The runtime contract it binds against is
 [`../docs/SIDECAR_CONTRACT.md`](../docs/SIDECAR_CONTRACT.md).
 
-> **Status: scaffold complete, build/runtime validation pending toolchain.**
-> The Rust toolchain (cargo/rustc) and MSVC C++ build tools are not installed on
-> the dev machine, so this has **not** been compiled or run yet. Sprint N exit
-> criteria N1–N4 (launch time, no orphan, crash screen) remain **unverified**
-> until the toolchain is installed. See "Before the first build" below.
+> **Status: compile-verified, runtime-unverified (Q2F).**
+> As of 2026-06-14 the Rust host **compiles cleanly** (`cargo check` → 0 errors)
+> and the previously-`UNVERIFIED` Windows crate pins resolve exactly as declared
+> (`webview2-com 0.38.2`, `windows 0.61.3`, `tauri 2.11.2`). The **runtime** smoke
+> — `cargo tauri dev` spawning the real sidecar, opening the WebView, and the
+> no-orphan shutdown check — has **not** been run yet, so Sprint N exit criteria
+> N1–N4 (launch time, no orphan, crash screen) remain **unverified**. The full
+> validation path is [`../docs/DESKTOP_SMOKE_CHECKLIST.md`](../docs/DESKTOP_SMOKE_CHECKLIST.md).
 
 ## What it does (lifecycle)
 
@@ -74,7 +77,8 @@ otherwise `weaver` is resolved from `PATH`.
    `cargo tree -p webview2-com -p windows` and adjust the pins; a mismatch is
    the usual first-compile error in `src/webview_session.rs`.
 4. **Generate icons (only for packaging)** — `cargo tauri icon <logo.png>`.
-   `bundle.active` is `false` until Sprint O, so dev runs don't need them.
+   `bundle.active` is `true` in `tauri.conf.json` (Sprint O packaging is enabled),
+   but `cargo tauri dev` does not build the bundle, so dev runs don't need icons.
 5. **Install the Tauri CLI** — `cargo install tauri-cli --version "^2"`.
 
 ## Run (after toolchain install)

@@ -105,6 +105,12 @@ Produces an `.exe` installer (requires NSIS):
 
 ## Smoke test
 
+> **Validated 2026-06-14 (Sprint O4).** The packaged `weaver-desktop.exe` (3.1 MB)
+> was launched with `.venv\Scripts` on `PATH` and passed the full smoke: loading →
+> cockpit `/ui`, `GET /healthz 200` → `GET /ui 200` with no 401 loop, both log
+> files generated, no orphan after close, and the crash screen on a forced bad
+> sidecar path. See `docs/superpowers/handoffs/2026-06-14-sprint-o4-o5-packaged-runtime-and-behavior.md`.
+
 After any build, verify the five critical paths:
 
 ```powershell
@@ -218,6 +224,17 @@ The session-header interceptor (`install_session_header`) must register before n
 4. **No macOS package.** Windows-only in Sprint O; macOS requires `darwin` target + `.app` bundle tweaks.
 5. **NSIS not installed by default.** The portable `app` target works without NSIS; the `.exe` installer requires it.
 6. **Headless environment orphans.** In CI/headless environments (no display), the WebView cannot open and the app exits before the graceful-shutdown path runs, leaving sidecar processes. This does **not** affect real desktop use — window-close triggers `taskkill /T`.
+
+---
+
+## Uninstall & data retention
+
+| What | Behavior |
+|---|---|
+| **App binary** | Portable build: delete `weaver-desktop.exe`. NSIS installer (if built): standard Windows uninstall removes the binary. |
+| **Running processes** | Close the window first — graceful `taskkill /T`→`/F` leaves no orphan. Do not uninstall while the app is running. |
+| **User data + logs** | `%APPDATA%\Weaver\` (projects, database, logs) **is preserved** after uninstall. This is intentional — it holds your novels and translations. Remove it manually only if you want a clean slate: `Remove-Item "$env:APPDATA\Weaver" -Recurse`. |
+| **Python sidecar** | The package does not install Python; uninstall does not touch your venv/Python. |
 
 ---
 

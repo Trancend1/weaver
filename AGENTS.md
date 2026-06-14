@@ -8,13 +8,13 @@ Offline-capable, glossary-aware **JP→EN light-novel translation workbench** wi
 >
 > **Current Orchestrator:** Repository Owner (Trancend1) + Claude acting as Lead Technical Orchestrator.
 >
-> **Current Phase:** Codebase Audit & Technical Debt Review.
+> **Current Phase:** Sprint O **PASS-WITH-CONDITIONS** — Windows packaged desktop alpha builds and runs.
 >
-> **Status:** No feature sprint is currently active. 
+> **Status:** PASS-WITH-CONDITIONS — packaged `weaver-desktop.exe` (3.1 MB) launches, runs the cockpit, logs, and shuts down cleanly (O-V1–O-V7); but it still needs an external `weaver` (`.venv\Scripts` on PATH), and signing / auto-update / final installer remain deferred.
 
-> **Current Objective:** Perform a comprehensive repository audit to identify bugs, dead code, dead files, unused dependencies, architectural issues, performance bottlenecks, security concerns, and cleanup opportunities before defining the next development sprint.
+> **Current Objective:** Make the desktop alpha self-contained — remove the external PATH-sidecar dependency before any release-grade installer/signing work.
 >
-> **Next Sprint:** TBD by the orchestrator following completion of the audit, validation, and cleanup planning phases.
+> **Next Sprint:** Sprint P — Bundled Sidecar / Standalone Desktop Alpha (bundle Python via PyInstaller → `bundle.externalBin`).
 
 
 ---
@@ -44,18 +44,18 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 
 Current status: **active phase defined in §2.3**.
 
-```txt
-Historical baseline ✅
-  Foundation work, MVP workflow, prior sprint lines, and completed implementation phases
+| Sprint | Status | Hasil utama |
+|---|---|---|
+| **Audit Cleanup Sprint** | ✅ Done | Dead code kecil dihapus, bug audit utama dibereskan, full gate hijau |
+| **Q2C — Runtime Edge-Case Hardening** | ✅ Done | ParseJob cancellation consistency, EPUB import snapshot atomicity |
+| **Q2D — Provider Config UX Consolidation** | ✅ Done / merged | `/ui/providers` jadi canonical config surface, `/ui/config` jadi compatibility redirect |
+| **Q2E — Workspace Review & Export Confidence** | ✅ Done / merged | Review/export/QA readiness UX lebih jelas |
+| **Q2F — Tauri Sidecar Readiness Gate** | ✅ PASS | Python/FastAPI contract + Rust compile verified; runtime smoke N1–N6 owner-confirmed |
+| **Sprint N — Desktop Runtime Validation** | ✅ Done | `cargo tauri dev` smoke green — N1–N6 (window, transition, no-401, no-orphan, logs, crash screen) |
+| **Sprint O — Desktop Packaging / Installer Alpha** | 🟡 PASS-WITH-CONDITIONS | Packaged `weaver-desktop.exe` (3.1 MB) builds + runs (O-V1–O-V7); condition: external PATH sidecar; signing/auto-update/installer-final deferred |
+| **Sprint P — Bundled Sidecar / Standalone Desktop Alpha** | 🔜 Next | Bundle Python (PyInstaller → `bundle.externalBin`); remove `.venv\Scripts`-on-PATH requirement |
 
-Current phase 🟡
-  See §2.3 for active scope, owner model, workflow, and acceptance rules
-
-Next ⬜
-  Open only after current exit criteria pass with evidence
-```
-
-Legend: ✅ complete · 🟡 active · ⬜ pending · 🚫 deferred/blocked
+Legend: ✅ complete · 🟡 pass-with-conditions · 🔜 next · ⏭️ blocked · 🚫 deferred
 
 Completed work is historical. Keep detailed evidence in git history, ADRs, sprint plans, validation notes, and handoff docs. This operating file should only preserve information needed to guide current and future work.
 
@@ -81,80 +81,59 @@ Before starting any new sprint, phase, or stage:
 > Required reminder: **Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection.**
 
 
-### 2.3 Active Phase — Codebase Audit & Cleanup
+### 2.3 Active Phase — Sprint O complete (PASS-WITH-CONDITIONS); next is Sprint P
 
-**Track(s) active:** Codebase Audit & Technical Debt Reduction
+**Track(s) active:** None active — Q2F + Sprint N + Sprint O closed. Open **Sprint P — Bundled Sidecar / Standalone Desktop Alpha** with a fresh execution plan before any packaging-hardening work.
 
-Objective: identify bugs, dead code, dead files, unused dependencies, architectural drift, performance bottlenecks, security risks, and cleanup opportunities before implementation work continues.
+**Status: 🟡 Sprint O PASS-WITH-CONDITIONS** — packaged Windows alpha builds + runs (O-V1–O-V7, owner-confirmed); remaining condition: external `weaver` PATH dependency (G2); signing / auto-update / final installer deferred. Earlier gates ✅ Q2F PASS, ✅ Sprint N N1–N6.
 
-Audit workflow:
+Done (Sprint O — packaged alpha, owner-confirmed):
+- O1 packaging audit; O3 `cargo tauri build` → `weaver-desktop.exe` 3.1 MB (exit 0)
+- O4 packaged smoke: launch → cockpit `/ui`, `/healthz`+`/ui` 200 (no 401), no orphan, logs, crash screen
+- O5 logs/crash/uninstall behavior documented; O6 gate report (PASS-WITH-CONDITIONS)
+- Carry-forward condition: packaged exe still needs `.venv\Scripts` on PATH → Sprint P removes this
 
-1. **Primary codebase audit**
+Done (Q2F):
+- Sidecar contract fully audited against current FastAPI app
+- `/healthz`, `/health`, `/version`, `/runtime/status` verified over real HTTP
+- Random port + session token startup contract validated
+- Token boundary verified: public paths vs protected paths
+- Startup diagnostics tested: exit 64 (non-loopback in desktop), exit 65 (port-in-use), exit 66 reserved
+- `/ui` rendered HTML contains no hardcoded `127.0.0.1:8765` (static grep + runtime test)
+- Templates contain zero `127.0.0.1` references
+- CORS lockdown, docs-disabled, same-origin-only all verified
+- Rust/Tauri `cargo check` passes, crate version pins confirmed via `cargo tree`
+- Desktop smoke checklist created
+- Q2F readiness report produced
 
-   * Dead code
-   * Dead files
-   * Unused imports and dependencies
-   * Duplicate logic
-   * Architectural drift
-   * Technical debt findings
-
-2. **Skeptical validation review**
-
-   * Verify each finding
-   * Identify false positives
-   * Assess removal safety
-   * Check hidden dependencies, dynamic imports, runtime references, CLI entry points, background jobs, tests, and deployment scripts
-
-3. **Bug, reliability, and security audit**
-
-   * Runtime bugs
-   * Edge cases
-   * Error handling gaps
-   * Security concerns
-   * Performance bottlenecks
-   * Risky I/O, config, provider, database, and background-job behavior
-
-4. **Consolidated cleanup plan**
-
-   * Prioritize findings by impact and risk
-   * Separate quick wins from larger refactors
-   * Define implementation order
-   * Mark risky removals for extra verification
-   * List files/modules that must not be touched without an ADR or explicit approval
-
-5. **Manual verification**
-
-   * Search-based validation
-   * Runtime validation
-   * Test execution
-   * Linting, formatting, type-checking, and build verification
-   * Import/entry-point verification
-
-6. **Cleanup execution**
-
-   * Small, isolated commits
-   * One cleanup concern per commit
-   * Verification after each cleanup batch
-   * Rollback-safe changes only
-   * No unrelated refactors
+Done (Sprint N — runtime smoke, owner-confirmed via `cargo tauri dev`):
+- N1 native window + loading screen ✅; N2 loading→cockpit `/ui` transition ✅
+- N3 no 401 loop; protected routes work via `X-Weaver-Session` ✅
+- N4 close window → sidecar killed, no orphan `weaver`/`python`/`uvicorn` ✅
+- N5 `runtime.log` + `sidecar.console.log` generated in `logs_dir` ✅
+- N6 forced startup failure → crash screen with mapped exit code ✅
 
 ### 2.4 Exit Criteria
 
-The audit phase is complete only when all applicable items below are satisfied:
+#### Q2F exit (already met)
+* [x] Sidecar contract documented and mapped.
+* [x] Health/readiness endpoints tested over real HTTP.
+* [x] Random port + session token contract validated.
+* [x] Token boundary verified.
+* [x] Exit codes 64/65 tested; 66 documented reserved.
+* [x] Startup diagnostics (no secret leakage, stdout summary) verified.
+* [x] Rust/Tauri compile verified (`cargo check`).
+* [x] Desktop smoke checklist documented.
+* [x] Q2F readiness report completed.
 
-* [ ] Dead code findings reviewed and classified.
-* [ ] Dead file findings reviewed and classified.
-* [ ] Unused imports and dependencies verified.
-* [ ] Potential bugs reviewed and prioritized.
-* [ ] Security and reliability findings documented.
-* [ ] Architecture and technical debt findings documented.
-* [ ] False positives removed through manual verification.
-* [ ] Risky removals marked with evidence and rollback notes.
-* [ ] Cleanup plan approved with impact/risk assessment.
-* [ ] Tests, lint, typecheck, and build pass after cleanup.
-* [ ] Runtime entry points still work after cleanup.
-* [ ] Validation evidence recorded in handoff notes.
-* [ ] Cleanup completed through small, traceable commits.
+#### Sprint N exit — ✅ MET (owner-confirmed runtime smoke); Q2F promoted to **PASS**
+* [x] N1 — Native window opens and the loading screen appears.
+* [x] N2 — Loading screen transitions to the Cockpit `/ui`.
+* [x] N3 — No 401 loop; protected routes work via the `X-Weaver-Session` header.
+* [x] N4 — Closing the window kills the sidecar; no orphan `weaver`/`python`/`uvicorn` process remains.
+* [x] N5 — `runtime.log` and `sidecar.console.log` generated in `logs_dir`.
+* [x] N6 — Forced startup failure shows the crash screen with a mapped exit code.
+* [x] `cargo tauri dev` smoke run; N1–N6 owner-confirmed. **Sprint O — Desktop Packaging / Installer Alpha** is now unblocked.
 
 ### 2.5 Phase Log
 
@@ -168,6 +147,10 @@ Deep detail lives in git history, ADRs, sprint plans, and handoff notes. This se
 | Provider layer             | Current provider ADR/spec + provider tests          | Keep provider primitives domain-agnostic. Put workflow validation in services, not provider adapters.                                                |
 | Workspace/read models      | Current workspace services + tests                  | Read paths should stay cheap, deterministic, and side-effect-free. Avoid expensive scanning, hashing, provider calls, or QA work on render paths.    |
 | Cleanup/audit work         | Current audit plan + handoff notes                  | Treat audit findings as hypotheses until manually verified. Delete only when references, runtime paths, tests, and fallback behavior are understood. |
+| Sidecar contract testing   | `tests/integration/test_runtime_random_port.py` · `tests/unit/api/test_desktop_security.py` | Real HTTP/Uvicorn is preferred over TestClient for sidecar contract tests. Reuse the `sidecar_server` fixture pattern rather than reimplementing Uvicorn threading. |
+| CLI startup diagnostics    | `tests/unit/api/test_desktop_security.py`           | Mock `uvicorn.run` for exit-code tests (64/65). Use `_make_fake_uvicorn` helper. Assert no secret/token leakage in error output.                     |
+| Sprint N readiness         | `docs/SIDECAR_CONTRACT.md` · `desktop/README.md`    | Desktop shell must be compile-verified (`cargo check`) before runtime smoke (`cargo tauri dev`). Do not skip compile gate.                           |
+| Desktop packaging (Q2F/N/O) | `docs/INSTALL_DESKTOP.md` · Sprint O handoffs (`docs/superpowers/handoffs/2026-06-14-sprint-o*`) | Packaged `weaver-desktop.exe` (3.1 MB) builds + runs, but still needs an external `weaver` on PATH. `desktop/Cargo.lock` is now **tracked** for reproducible builds. **Sprint P is higher-risk** (PyInstaller, bundled sidecar, `bundle.externalBin`, PATH removal): it adds a packaging toolchain/dependency, so it requires a **fresh execution plan + an ADR** before any code — do not scaffold PyInstaller casually. Keep the desktop subtree isolated; bundling logic lives in `desktop/`/CI, never in `src/weaver/`. |
 
 > Historical test counts are evidence only at the time they were recorded. Re-run relevant verification for the current phase; do not assume old counts still apply.
 
