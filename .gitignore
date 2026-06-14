@@ -41,6 +41,10 @@ Thumbs.db
 .weaver/
 .tmp_*/
 
+# Desktop sidecar staging artifacts
+/desktop/sidecar/weaver-*.exe
+/desktop/sidecar/_internal/
+
 # Accidental nested clone (root-level only; never src/weaver)
 /weaver/
 

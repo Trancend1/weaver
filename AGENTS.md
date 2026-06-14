@@ -8,13 +8,13 @@ Offline-capable, glossary-aware **JP→EN light-novel translation workbench** wi
 >
 > **Current Orchestrator:** Repository Owner (Trancend1) + Claude acting as Lead Technical Orchestrator.
 >
-> **Current Phase:** Sprint O **PASS-WITH-CONDITIONS** — Windows packaged desktop alpha builds and runs.
+> **Current Phase:** Sprint P **✅ PASS** — bundled sidecar shipped; packaged Windows alpha launches PATH-free, serves `/healthz`+`/ui`, logs, crashes, and shuts down cleanly (human X-close owner-confirmed 2026-06-14).
 >
-> **Status:** PASS-WITH-CONDITIONS — packaged `weaver-desktop.exe` (3.1 MB) launches, runs the cockpit, logs, and shuts down cleanly (O-V1–O-V7); but it still needs an external `weaver` (`.venv\Scripts` on PATH), and signing / auto-update / final installer remain deferred.
+> **Status:** Sprint P P1–P6 complete and **PASS**. The packaged `weaver-desktop.exe` (3.27 MB) + bundled `weaver.exe` (17.2 MB PyInstaller onedir) launches with **no external `weaver` on `PATH`**, returns `/healthz` 200 then `/ui` 200 (no 401 loop), generates logs in `%APPDATA%\Weaver\logs`, shows the crash screen on failure, and leaves no orphan after both WM_CLOSE and owner-confirmed native X-button close. Deferred (not blockers): signing / auto-update / final installer / cross-platform.
 
-> **Current Objective:** Make the desktop alpha self-contained — remove the external PATH-sidecar dependency before any release-grade installer/signing work.
+> **Current Objective:** Sprint P closed the external PATH-sidecar dependency. Next is release-grade hardening (signing + installer), tracked as a separate sprint.
 >
-> **Next Sprint:** Sprint P — Bundled Sidecar / Standalone Desktop Alpha (bundle Python via PyInstaller → `bundle.externalBin`).
+> **Current Sprint:** Sprint P — Bundled Sidecar / Standalone Desktop Alpha (PASS). Next step: open the **Desktop Installer & Release Hardening** sprint (Windows `nsis`/`msi` installer + code signing + auto-update + upgrade testing); see §2.1 / §2.1.1.
 
 
 ---
@@ -29,7 +29,7 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 | Navigation supplement — module map, CLI/web flow, data, deps | [docs/CODEMAPS/architecture.md](docs/CODEMAPS/architecture.md) · [backend](docs/CODEMAPS/backend.md) · [frontend](docs/CODEMAPS/frontend.md) · [data](docs/CODEMAPS/data.md) · [dependencies](docs/CODEMAPS/dependencies.md) |
 | Runtime contract for Tauri (or any) host shell | [docs/SIDECAR_CONTRACT.md](docs/SIDECAR_CONTRACT.md) |
 | Testing, regression, release, migration discipline | [docs/MAINTENANCE.md](docs/MAINTENANCE.md) |
-| Architecture decisions (ADR `001`–`014`) | [docs/DECISIONS.md](docs/DECISIONS.md) · [docs/decisions/](docs/decisions/) |
+| Architecture decisions (ADR `001`–`016`) | [docs/DECISIONS.md](docs/DECISIONS.md) · [docs/decisions/](docs/decisions/) |
 | Active reference specs | [docs/PROMPT_DESIGN.md](docs/PROMPT_DESIGN.md) · [docs/SECURITY_AND_PERFORMANCE.md](docs/SECURITY_AND_PERFORMANCE.md) |
 | RTK shell tooling rule | `C:\Users\transcend\.claude\RTK.md` |
 | Global workflow template (this file follows it) | `C:\Users\transcend\.claude\WORKFLOW.md` |
@@ -53,9 +53,12 @@ Current status: **active phase defined in §2.3**.
 | **Q2F — Tauri Sidecar Readiness Gate** | ✅ PASS | Python/FastAPI contract + Rust compile verified; runtime smoke N1–N6 owner-confirmed |
 | **Sprint N — Desktop Runtime Validation** | ✅ Done | `cargo tauri dev` smoke green — N1–N6 (window, transition, no-401, no-orphan, logs, crash screen) |
 | **Sprint O — Desktop Packaging / Installer Alpha** | 🟡 PASS-WITH-CONDITIONS | Packaged `weaver-desktop.exe` (3.1 MB) builds + runs (O-V1–O-V7); condition: external PATH sidecar; signing/auto-update/installer-final deferred |
-| **Sprint P — Bundled Sidecar / Standalone Desktop Alpha** | 🔜 Next | Bundle Python (PyInstaller → `bundle.externalBin`); remove `.venv\Scripts`-on-PATH requirement |
+| **Sprint P — Bundled Sidecar / Standalone Desktop Alpha** | ✅ PASS | P1–P6 done; packaged app launches PATH-free, `/healthz`+`/ui` 200 (no 401), logs, crash screen, no orphan (WM_CLOSE + owner-confirmed native X-close 2026-06-14); `HEALTH_BUDGET` 5→20 s for PyInstaller cold start; signing/auto-update/installer/cross-platform deferred (not blockers) |
+| **Desktop Installer & Release Hardening** | 🔜 Next | Tauri `nsis`/`msi` installer, code signing, auto-update, and upgrade testing (plus exit-66 data-dir handling); produces a public, installable, signed Windows build. Requires a fresh plan + ADR (packaging-shape change). See §2.1.1. |
+| **Cross-Platform Desktop (macOS/Linux)** | 📋 Planned | WKWebView (macOS) + WebKitGTK (Linux) session-header injection and POSIX graceful shutdown (SIGTERM), plus per-OS bundled sidecar. See §2.1.1. |
+| **Desktop Optimization** | 📋 Backlog | onedir→onefile or payload trim and cold-start budget tuning, only after the installer ships and with evidence. See §2.1.1. |
 
-Legend: ✅ complete · 🟡 pass-with-conditions · 🔜 next · ⏭️ blocked · 🚫 deferred
+Legend: ✅ complete · 🟡 pass-with-conditions · 🔜 next · 📋 planned/backlog · ⏭️ blocked · 🚫 deferred
 
 Completed work is historical. Keep detailed evidence in git history, ADRs, sprint plans, validation notes, and handoff docs. This operating file should only preserve information needed to guide current and future work.
 
@@ -66,6 +69,53 @@ When starting a new sprint or phase:
 * Define exit criteria in §2.4.
 * Add only durable carry-forward lessons to §2.5.
 * Do not continue old sprint scaffolding by default.
+
+### 2.1.1 Deferred / Backlog (not yet scheduled)
+
+Evidence-linked carry-forward. These are proposals, not active scope: each needs its own plan (and an ADR where it changes packaging shape, the stack, or a contract) before implementation. Do not scaffold ahead of a plan.
+
+> Naming: forward sprints use **descriptive names, not alphabet letters**. Completed sprints keep their historical labels (Sprint N/O/P, Q2x) only because handoff filenames, ADRs, and git history already reference them.
+
+**Desktop track pipeline:**
+
+```text
+Packaging Alpha                ✅ done   (was Sprint O)
+   ↓
+Bundled Sidecar                ✅ done   (was Sprint P)
+   ↓
+Installer & Release Hardening  🔜 next
+   • Windows installer (nsis/msi)
+   • Code signing
+   • Auto-update
+   • Upgrade testing
+   ↓
+Cross-Platform Desktop         📋 planned   (macOS / Linux)
+   ↓
+Desktop Optimization           📋 backlog
+```
+
+**Desktop (carried out of Sprint N/O/P):**
+
+| Item | Source of truth | Proposed sprint |
+|---|---|---|
+| Windows installer (`nsis`/`msi`), code signing, auto-update, upgrade testing | ADR 016 (deferred); `desktop/tauri.conf.json` `targets:["app"]` only | **Installer & Release Hardening** |
+| Exit code `66` data-dir error implementation | `docs/SIDECAR_CONTRACT.md` §5 (reserved) → `services/app_paths.ensure_runtime_dirs` | Installer & Release Hardening (minor) |
+| macOS WKWebView + Linux WebKitGTK session-header injection | `desktop/src/webview_session.rs` (`#[cfg(not(windows))]` no-op) | **Cross-Platform Desktop** |
+| POSIX graceful shutdown (SIGTERM before SIGKILL) | `desktop/src/sidecar.rs` (`kill()` SIGKILL-only on non-Windows) | Cross-Platform Desktop |
+| onedir→onefile / payload-size + cold-start tuning | ADR 016 ("onefile remains a future optimization") | Desktop Optimization |
+
+**Product / feature backlog (deferred by their ADRs, no owner schedule yet):**
+
+| Item | Source of truth | Status |
+|---|---|---|
+| OCR implementation beyond the contract | ADR 012 + `services/ocr_contract.py` (contract only) | Deferred feature; reopen with a plan |
+| Per-chapter QA tree badges | ADR 008 (deferred to avoid full novel-scope scan) | Deferred UX; gate on render-path budget (Gate B1) |
+| QA `error` severity tier | ADR 013 (**Rejected / Deferred**) | Do **not** plan unless explicitly reopened |
+| Provider-complete cost auditing | ADR 014 (out of scope) | Reopen only with a migration + ADR |
+
+**Permanently out of scope unless an ADR reopens (CLAUDE.md §3.4/§3.5):** new provider families, route rewrites, SPA migration, Node build pipeline, external queue/worker daemon, cloud sync, telemetry/phone-home, multi-user SaaS architecture.
+
+> Sequencing rule: ship **Installer & Release Hardening** (public, signed Windows installer) before Cross-Platform Desktop and Desktop Optimization. Those two are lower priority than a signed, installable Windows build, which is the nearest user-facing gap after the bundled sidecar.
 
 ### 2.2 Reusable Phase Gate
 
@@ -81,11 +131,24 @@ Before starting any new sprint, phase, or stage:
 > Required reminder: **Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection.**
 
 
-### 2.3 Active Phase — Sprint O complete (PASS-WITH-CONDITIONS); next is Sprint P
+### 2.3 Active Phase — Sprint P complete (✅ PASS)
 
-**Track(s) active:** None active — Q2F + Sprint N + Sprint O closed. Open **Sprint P — Bundled Sidecar / Standalone Desktop Alpha** with a fresh execution plan before any packaging-hardening work.
+**Track(s) active:** None active — Sprint P P1–P6 closed under ADR 016, **PASS** (owner human-close confirmed 2026-06-14). Q2F + Sprint N + Sprint O also closed. Next is the **Desktop Installer & Release Hardening** sprint (Windows `nsis`/`msi` installer + code signing + auto-update + upgrade testing); open it with a fresh plan + ADR before further packaging work. Full backlog in §2.1.1.
 
-**Status: 🟡 Sprint O PASS-WITH-CONDITIONS** — packaged Windows alpha builds + runs (O-V1–O-V7, owner-confirmed); remaining condition: external `weaver` PATH dependency (G2); signing / auto-update / final installer deferred. Earlier gates ✅ Q2F PASS, ✅ Sprint N N1–N6.
+**Status: ✅ Sprint P PASS** — the packaged Windows alpha is self-contained. Bundled PyInstaller onedir sidecar staged via Tauri `bundle.externalBin`; resolver order per ADR 016: `WEAVER_DESKTOP_SIDECAR` override → bundled sidecar → PATH `weaver` fallback. Packaged PATH-free launch returns `/healthz` 200 then `/ui` 200 (no 401 loop), generates logs in `%APPDATA%\Weaver\logs`, shows the crash screen on forced failure, and leaves no orphan after WM_CLOSE and the owner-confirmed native X-button close.
+
+Done (Sprint P — P1–P6):
+- P1 audit: `externalBin` alone is insufficient; a Rust resolver is required.
+- ADR 016 accepted: PyInstaller onedir + Tauri externalBin staging + minimal bundled-sidecar resolver.
+- P2 built `desktop/target/sidecar/weaver/weaver.exe`; direct sidecar serve passed `/healthz` 200 and `/ui` 200.
+- P3 staged `desktop/sidecar/weaver-x86_64-pc-windows-msvc.exe`, configured Tauri `externalBin`, mapped PyInstaller `_internal`, added resolver order.
+- P3b fixed the startup-readiness race: `HEALTH_BUDGET` 5→20 s (bounded) for PyInstaller cold start, plus `[host]` startup diagnostics (source/path/budget, elapsed) in `sidecar.console.log` and on the crash screen.
+- P4/P5 packaged standalone smoke + regression audit: PATH-free `/healthz`+`/ui` 200, 0 new 401, 6 logs, `NO_SECRET_TOKEN_MATCHES`, WM_CLOSE → no orphan, bad-override crash screen, scope fence held.
+- P6 gate report: PASS-WITH-CONDITIONS. Sizes: host 3.27 MB, sidecar 17.2 MB, onedir ~171 MB.
+
+Carry-forward (deferred, not blockers):
+- Human X-button close owner-confirmed 2026-06-14 (P-V8 PASS) → Sprint P promoted to PASS.
+- Signing / auto-update / final installer / cross-platform deferred to a release-hardening sprint.
 
 Done (Sprint O — packaged alpha, owner-confirmed):
 - O1 packaging audit; O3 `cargo tauri build` → `weaver-desktop.exe` 3.1 MB (exit 0)
@@ -135,6 +198,18 @@ Done (Sprint N — runtime smoke, owner-confirmed via `cargo tauri dev`):
 * [x] N6 — Forced startup failure shows the crash screen with a mapped exit code.
 * [x] `cargo tauri dev` smoke run; N1–N6 owner-confirmed. **Sprint O — Desktop Packaging / Installer Alpha** is now unblocked.
 
+#### Sprint P exit — ✅ MET (PASS)
+* [x] P1 — Audit current sidecar launch path and Tauri `externalBin` expectations.
+* [x] P2 — Build experimental PyInstaller onedir sidecar and direct-test via `WEAVER_DESKTOP_SIDECAR`.
+* [x] P3 — Stage `externalBin` + add minimal bundled-sidecar resolver.
+* [x] P3b — Fix startup-readiness race (`HEALTH_BUDGET` 5→20 s) + add `[host]` startup diagnostics.
+* [x] P4 — Packaged app launches without `.venv\Scripts` on PATH; `/healthz` 200 + WebView `/ui` 200 proven (isolated + default `%APPDATA%`).
+* [x] P5 — Logs, crash, shutdown, no orphan (WM_CLOSE), `NO_SECRET_TOKEN_MATCHES` validated against the bundled sidecar.
+* [x] P-V8 — Human native X-button close owner-confirmed 2026-06-14: no orphan, no restart/hang.
+* [x] P6 — Final gate report: PASS.
+
+Deferred (not blockers): signing / auto-update / final installer / cross-platform → release-hardening sprint.
+
 ### 2.5 Phase Log
 
 Deep detail lives in git history, ADRs, sprint plans, and handoff notes. This section preserves only operational lessons still useful for future work.
@@ -150,7 +225,7 @@ Deep detail lives in git history, ADRs, sprint plans, and handoff notes. This se
 | Sidecar contract testing   | `tests/integration/test_runtime_random_port.py` · `tests/unit/api/test_desktop_security.py` | Real HTTP/Uvicorn is preferred over TestClient for sidecar contract tests. Reuse the `sidecar_server` fixture pattern rather than reimplementing Uvicorn threading. |
 | CLI startup diagnostics    | `tests/unit/api/test_desktop_security.py`           | Mock `uvicorn.run` for exit-code tests (64/65). Use `_make_fake_uvicorn` helper. Assert no secret/token leakage in error output.                     |
 | Sprint N readiness         | `docs/SIDECAR_CONTRACT.md` · `desktop/README.md`    | Desktop shell must be compile-verified (`cargo check`) before runtime smoke (`cargo tauri dev`). Do not skip compile gate.                           |
-| Desktop packaging (Q2F/N/O) | `docs/INSTALL_DESKTOP.md` · Sprint O handoffs (`docs/superpowers/handoffs/2026-06-14-sprint-o*`) | Packaged `weaver-desktop.exe` (3.1 MB) builds + runs, but still needs an external `weaver` on PATH. `desktop/Cargo.lock` is now **tracked** for reproducible builds. **Sprint P is higher-risk** (PyInstaller, bundled sidecar, `bundle.externalBin`, PATH removal): it adds a packaging toolchain/dependency, so it requires a **fresh execution plan + an ADR** before any code — do not scaffold PyInstaller casually. Keep the desktop subtree isolated; bundling logic lives in `desktop/`/CI, never in `src/weaver/`. |
+| Desktop packaging (Q2F/N/O/P) | `docs/INSTALL_DESKTOP.md` · Sprint P gate report (`docs/superpowers/handoffs/2026-06-14-sprint-p6-gate-report.md`) · ADR 016 (per-stage Q2F/N/O/P handoffs consolidated into the gate report; full logs in git history) | Sprint P (PASS) shipped the self-contained Windows alpha: PyInstaller onedir + Tauri `bundle.externalBin` + runtime resolver. Resolver order is mandatory: `WEAVER_DESKTOP_SIDECAR` override → bundled sidecar → PATH `weaver` fallback; `externalBin` config alone is insufficient and the PATH fallback must stay. Desktop startup `HEALTH_BUDGET` is **20 s** (bounded, P3b) because PyInstaller cold start exceeds the old 5 s — independent of the §7 5 s shutdown grace. Do not switch onedir→onefile, drop the PATH fallback/override, or add `tauri-plugin-shell` without evidence + an ADR. Bundling logic stays in `desktop/`/CI, never in `src/weaver/`. Sprint P = PASS (human X-close owner-confirmed 2026-06-14); signing/installer deferred to release-hardening. |
 
 > Historical test counts are evidence only at the time they were recorded. Re-run relevant verification for the current phase; do not assume old counts still apply.
 

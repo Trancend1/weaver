@@ -21,6 +21,7 @@ Active ADRs only. Active numbering was reset to `001` during the controlled rese
 | [013](decisions/013-qa-error-severity-tier.md) | QA `error` Severity Tier (Rejected/Deferred) | Sprint Q11 keeps the 3-tier `info\|warning\|critical` contract; no `error` tier. Structure findings (WV-007) map EPUB `error`→`warning` (advisory, never block Final export). Re-open point documented. |
 | [014](decisions/014-provider-complete-primitive-and-glossary-suggestion.md) | Provider `complete()` Primitive + Glossary Target Suggestion | Sprint R adds a domain-agnostic `complete()` transport primitive (4 providers); on-demand AI glossary-target suggestion lives in a service (prompt+validation), ephemeral (no migration), provider fully config-driven (**no hidden vendor default**). Gate B1: provider called only on explicit POST. |
 | [015](decisions/015-single-provider-config-surface.md) | Single provider-config surface at `/ui/providers` | Providers hub (`ui_providers.py`) is the canonical provider/model + secret config + health UI. `/ui/config` is a compatibility-only GET redirect to the hub editor. `ui_admin.py` is glossary/characters/TM only. Hub GET remains Gate-B1-safe (TOML-only read, no provider build). |
+| [016](decisions/016-bundled-python-sidecar.md) | Bundled Python Sidecar (Windows Desktop Alpha) | PyInstaller onedir sidecar + Tauri `bundle.externalBin` staging + minimal Rust resolver (override → bundled → PATH fallback). Removes the Sprint O PATH dependency; FastAPI stays the sidecar. Shipped in Sprint P (PASS). |
 
 ## ADR rules
 
