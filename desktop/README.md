@@ -9,14 +9,15 @@ This subtree is **isolated**: it is not a Python dependency and does not change
 `src/weaver/` (template diff = 0). The runtime contract it binds against is
 [`../docs/SIDECAR_CONTRACT.md`](../docs/SIDECAR_CONTRACT.md).
 
-> **Status: runtime-verified; bundled sidecar shipped (Sprint P, PASS-WITH-CONDITIONS).**
+> **Status: runtime-verified; bundled sidecar shipped (Sprint P, ✅ PASS).**
 > Sprint N N1–N6 are owner-confirmed via `cargo tauri dev`. Sprint O packaged the
 > shell; Sprint P bundled the sidecar so the packaged app launches **without an
 > external `weaver` on `PATH`** — `/healthz` 200 → `/ui` 200, logs in
 > `%APPDATA%\Weaver\logs`, crash screen on failure, no orphan after close. The
 > Windows crate pins resolve as declared (`webview2-com 0.38.2`, `windows 0.61.3`,
-> `tauri 2.11.2`). Open conditions: human X-button close owner-confirm; signing /
-> auto-update / final installer / cross-platform deferred. Full validation path:
+> `tauri 2.11.2`). Human native X-button close owner-confirmed 2026-06-14 (no
+> orphan). Deferred (not blockers): signing / auto-update / final installer /
+> cross-platform. Full validation path:
 > [`../docs/DESKTOP_SMOKE_CHECKLIST.md`](../docs/DESKTOP_SMOKE_CHECKLIST.md);
 > gate report `../docs/superpowers/handoffs/2026-06-14-sprint-p6-gate-report.md`.
 

@@ -1,12 +1,23 @@
 # Sprint P6 — Bundled Sidecar Gate Report
 
-**Verdict: 🟡 PASS-WITH-CONDITIONS**
+**Verdict: ✅ PASS** (promoted from PASS-WITH-CONDITIONS on 2026-06-14 after owner
+human-close confirmation).
 
 The Windows desktop alpha is now **self-contained**: the packaged app launches,
 serves the cockpit, and shuts down cleanly with **no external `weaver` on `PATH`**
-— closing the primary Sprint O condition. Remaining conditions are a human
-window-close confirmation and the always-deferred release-grade work (signing,
-auto-update, final installer, cross-platform).
+— closing the primary Sprint O condition. The last open condition (human
+window-close) was owner-confirmed on 2026-06-14 (see Owner Confirmation below).
+Release-grade work (signing, auto-update, final installer, cross-platform) remains
+**deferred future work — not a Sprint P blocker**.
+
+## Owner Confirmation — Human Close (P-V8), 2026-06-14
+
+The owner manually launched the packaged app in PATH-free mode (bundled sidecar),
+saw the loading screen → cockpit, then closed it with the **native window X
+button** (real user interaction, not WM_CLOSE automation). After closure no
+attributable `weaver` / `python` / `uvicorn` / bundled-sidecar process remained;
+no restart, hang, or orphan. **P-V8 = PASS.** This closes the final
+owner-confirmation condition carried from Sprint P.
 
 ## What Sprint P Actually Closed
 
@@ -57,7 +68,7 @@ contract is intact, local-first/offline, no telemetry, Windows-only.
 | P-V5 | PATH-free packaged launch | PASS |
 | P-V6 | No 401 loop | PASS |
 | P-V7 | Logs exist + safe (default `%APPDATA%`) | PASS |
-| P-V8 | No orphan on close (WM_CLOSE) | PASS — human X-close owner-confirm pending |
+| P-V8 | No orphan on close (WM_CLOSE + human X-close) | PASS — human X-close owner-confirmed 2026-06-14 |
 | P-V9 | Crash screen on failure | PASS |
 | P-V10 | ruff + pyright | PASS |
 | P-V11 | Scope fence held | PASS |
@@ -88,7 +99,7 @@ uv run pyright              # 0 errors, 0 warnings
 
 | Risk | Severity | Mitigation / status |
 | --- | --- | --- |
-| Human X-button close not owner-confirmed | Low | WM_CLOSE path verified clean (no orphan); needs one owner click-to-close confirmation, as in Sprint N N4 / O |
+| Human X-button close (was a condition) | Closed | Owner-confirmed 2026-06-14: native X-close leaves no orphan |
 | Cold first-launch may approach the 20 s budget | Low | Budget bounded at 20 s; `[host]` elapsed diagnostic quantifies real cold start; warm runs were 2.1–2.7 s |
 | ~171 MB onedir payload (size) | Medium (accepted) | Alpha tradeoff per ADR 016; onefile/compression is future optimization, **not** in scope |
 | PyInstaller hidden-import gaps on rarely-hit routes | Medium | P2 added `collect_submodules("weaver.api")`; full cockpit nav + static assets verified 200; monitor on new routes |
@@ -112,9 +123,9 @@ touches only `desktop/` + docs — never `src/weaver/`.
 
 ## Next-sprint recommendation
 
-1. Owner confirms human X-button close leaves no orphan (closes the last P-V8
-   condition → eligible to promote Sprint P to PASS).
-2. Then a release-hardening sprint: signing + final installer (and optionally
+1. ✅ Done — owner confirmed human X-button close leaves no orphan (2026-06-14);
+   Sprint P promoted to PASS.
+2. Open a release-hardening sprint: signing + final installer (and optionally
    payload-size reduction) — separate scope, separate ADR if it changes packaging
    shape.
 
@@ -124,10 +135,11 @@ touches only `desktop/` + docs — never `src/weaver/`.
 **Scope:** Final Sprint P verdict, risks, deferred work, rollback, sizes.
 **Files/Areas Touched:** this report; `CLAUDE.md` phase ledger; `desktop/README.md`
 status refresh (docs only).
-**What Changed:** Sprint P closed at PASS-WITH-CONDITIONS; no code changed in P6.
+**What Changed:** Sprint P closed at PASS (owner human-close confirmed 2026-06-14);
+no code changed in P6.
 **What Was Intentionally Not Changed:** no `src/weaver/`, provider, translation,
 QA/export, schema, cockpit UI, resolver strategy, or PyInstaller shape.
-**Validation Performed:** see matrix + P4/P5 handoff.
-**Known Risks:** human X-close confirmation pending; size/signing deferred.
-**Recommended Next Role / Next Step:** Owner confirms human close, then open a
-release-hardening sprint plan for signing + installer.
+**Validation Performed:** see matrix + P4/P5 handoff + Owner Confirmation section.
+**Known Risks:** size/signing/installer/cross-platform deferred (not blockers).
+**Recommended Next Role / Next Step:** open a release-hardening sprint plan for
+signing + installer.
