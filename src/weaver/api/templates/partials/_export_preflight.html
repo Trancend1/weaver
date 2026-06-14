@@ -38,6 +38,22 @@
   <p><a href="/ui/projects/{{ name }}/qa">Review the quality report</a></p>
   {% endif %}
 
+  {% if review_counts is not none %}
+  <div class="review-readiness">
+    <p class="hint">Review readiness (informational — does not block Draft or Final export):</p>
+    <ul class="review-readiness__counts plain-list">
+      <li><span class="badge c-badge ok">{{ review_counts.approved }} approved</span></li>
+      <li><span class="badge c-badge warn">{{ review_counts.needs_review }} needs review</span></li>
+      <li><span class="badge c-badge bad">{{ review_counts.needs_revision }} needs revision</span></li>
+      <li><span class="badge c-badge">{{ review_counts.not_reviewed }} not reviewed</span></li>
+    </ul>
+    {% if review_attention %}
+    <p class="hint">{{ review_counts.not_reviewed }} not reviewed · {{ review_counts.needs_revision }} needs revision
+      still need human attention. Review status is informational and does not block export.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <div class="export-actions">
     <form hx-post="/ui/projects/{{ name }}/export"
           hx-target="#export-panel" hx-swap="outerHTML" class="inline-form form-row">

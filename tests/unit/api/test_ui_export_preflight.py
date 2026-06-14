@@ -79,6 +79,33 @@ def client(tmp_path: Path) -> TestClient:
     return TestClient(create_api_app(tmp_path))
 
 
+def test_preflight_shows_review_counts(client: TestClient) -> None:
+    body = client.get("/ui/projects/issues/export/preflight?target=epub").text
+    assert "Review readiness" in body
+    assert "approved" in body
+    assert "needs review" in body
+    assert "needs revision" in body
+    assert "not reviewed" in body
+
+
+def test_preflight_review_advisory_when_unreviewed(client: TestClient) -> None:
+    # A fresh import is entirely not_reviewed, so the advisory must appear and
+    # state plainly that review status is informational and never blocks export.
+    body = client.get("/ui/projects/issues/export/preflight?target=epub").text
+    assert "still need human attention" in body
+    assert "does not block" in body
+    # the export actions remain available regardless of review state
+    assert "Export Draft (advisory)" in body
+    assert "Export Final" in body
+
+
+def test_overview_get_does_not_render_preflight(client: TestClient) -> None:
+    # Preflight is explicit-only: the project overview GET must not run it.
+    page = client.get("/ui/projects/issues").text
+    assert "Pre-export quality check" not in page
+    assert "Review readiness" not in page
+
+
 def test_preflight_clean_state(client: TestClient) -> None:
     response = client.get("/ui/projects/clean/export/preflight?target=epub")
     assert response.status_code == 200
