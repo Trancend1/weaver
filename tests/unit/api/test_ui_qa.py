@@ -139,9 +139,7 @@ def test_filtered_empty_state_says_no_matching_issues(ctx) -> None:
     # The "issues" project has completeness issues but no consistency issues, so a
     # consistency filter hides everything — the empty state must say the filter is
     # the cause, not that the report is clean.
-    response = client.get(
-        f"/ui/projects/issues/chapters/{chapter_id}/qa?category=consistency"
-    )
+    response = client.get(f"/ui/projects/issues/chapters/{chapter_id}/qa?category=consistency")
     assert response.status_code == 200
     body = response.text
     assert "No matching issues" in body

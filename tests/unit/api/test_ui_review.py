@@ -160,9 +160,7 @@ def test_empty_state_nothing_ready_when_nothing_translated(tmp_path: Path) -> No
     client = TestClient(create_api_app(tmp_path))
     name = _name(client)
 
-    page = client.get(
-        f"/ui/projects/{name}/volumes/{volume_id}/review?status_filter=approved"
-    ).text
+    page = client.get(f"/ui/projects/{name}/volumes/{volume_id}/review?status_filter=approved").text
     assert "Nothing ready for review yet" in page
 
 
@@ -218,9 +216,7 @@ def test_empty_state_filter_no_match_when_reviewable_unhandled(tmp_path: Path) -
 
     # There is reviewable, still-unhandled content; the approved filter is simply
     # not matched yet.
-    page = client.get(
-        f"/ui/projects/{name}/volumes/{volume_id}/review?status_filter=approved"
-    ).text
+    page = client.get(f"/ui/projects/{name}/volumes/{volume_id}/review?status_filter=approved").text
     assert "No segments match this review filter" in page
 
 
