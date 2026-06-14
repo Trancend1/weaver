@@ -24,10 +24,11 @@
       <tr>
         <td>{{ t.source }}</td>
         <td>
-          <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/terms/{{ t.source }}/update"
+          <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/term/update"
                 hx-target="#glossary-terms" hx-swap="outerHTML">
             <input type="hidden" name="offset" value="{{ page.offset }}">
             <input type="hidden" name="find" value="{{ find }}">
+            <input type="hidden" name="source" value="{{ t.source }}">
             <input name="target" value="{{ t.target }}" aria-label="Target (English)">
             <input name="category" value="{{ t.category or '' }}" placeholder="category" aria-label="Category">
             <input name="notes" value="{{ t.notes or '' }}" placeholder="notes" aria-label="Notes">
@@ -38,11 +39,12 @@
         <td>{{ t.notes or "—" }}</td>
         <td>
           <form class="row-form" style="display:inline"
-                hx-post="/ui/projects/{{ name }}/glossary/terms/{{ t.source }}/delete"
+                hx-post="/ui/projects/{{ name }}/glossary/term/delete"
                 hx-target="#glossary-terms" hx-swap="outerHTML"
                 hx-confirm="Delete glossary term '{{ t.source }}'? This cannot be undone.">
             <input type="hidden" name="offset" value="{{ page.offset }}">
             <input type="hidden" name="find" value="{{ find }}">
+            <input type="hidden" name="source" value="{{ t.source }}">
             <button type="submit" class="link-btn">Delete</button>
           </form>
         </td>

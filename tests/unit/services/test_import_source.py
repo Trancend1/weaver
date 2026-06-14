@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -63,3 +64,28 @@ def test_import_volume_rejects_unsupported_format(tmp_path) -> None:
 
     with pytest.raises(WeaverError, match="Unsupported source format"):
         import_volume(init.project_toml, bad_source, cwd=tmp_path)
+
+
+def test_import_volume_snapshot_failure_rolls_back(tmp_path) -> None:
+    """If EPUB snapshot persistence fails during import, the volume and
+    its associated rows must roll back — no orphan volume without snapshot."""
+    init = initialize_project(FIXTURE_EPUB_A, cwd=tmp_path, provider="fake")
+    original_volume_count = _count_volumes(init.database_path)
+
+    with (
+        patch(
+            "weaver.services.import_source.store_snapshot",
+            side_effect=WeaverError("simulated snapshot failure"),
+        ),
+        pytest.raises(WeaverError, match="simulated snapshot failure"),
+    ):
+        import_volume(init.project_toml, FIXTURE_EPUB_B, cwd=tmp_path)
+
+    assert _count_volumes(init.database_path) == original_volume_count, (
+        "Volume must NOT be committed when snapshot persistence fails"
+    )
+
+
+def _count_volumes(db_path: Path) -> int:
+    with connect_readonly_database(db_path) as connection:
+        return int(connection.execute("SELECT COUNT(*) AS n FROM volumes").fetchone()["n"])

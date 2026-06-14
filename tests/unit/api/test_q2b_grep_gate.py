@@ -24,7 +24,7 @@ from weaver.api.routers import (
 )
 from weaver.errors import WeaverError
 from weaver.services.image_preview import read_image_preview
-from weaver.storage.db import connect_database
+from weaver.storage.db import connect_database, initialize_database
 
 ROUTER_MODULES = [
     candidates,
@@ -135,25 +135,21 @@ def test_api_routers_no_suppress_httpexception() -> None:
 def test_connect_database_no_longer_resets_in_progress(tmp_path: Path) -> None:
     """Opening a DB with connect_database must not reset in_progress segments."""
     db_path = tmp_path / "test.db"
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.executescript(
-        """
-        CREATE TABLE projects (id INTEGER PRIMARY KEY);
-        CREATE TABLE chapters (id INTEGER PRIMARY KEY, volume_id INTEGER);
-        CREATE TABLE segments (
-            id TEXT PRIMARY KEY,
-            chapter_id INTEGER,
-            status TEXT
-        );
-        INSERT INTO segments VALUES ('s1', 1, 'in_progress');
-        """
+
+    # Build a schema-compliant database via initialize_database, then
+    # insert an in_progress segment through a separate connection so
+    # connect_database can exercise the migration path without a spurious
+    # reset_interrupted_segments from initialize_database.
+    init = initialize_database(db_path)
+    init.execute(
+        "INSERT INTO segments "
+        "(id, chapter_id, block_order, kind, source_text, source_hash, status) "
+        "VALUES ('s1', NULL, 0, 'text', 'source', 'hash', 'in_progress')"
     )
-    conn.commit()
-    conn.close()
+    init.commit()
+    init.close()
 
-    # connect_database should open without resetting
-
+    # connect_database must open without resetting the segment
     fresh = connect_database(db_path)
     row = fresh.execute("SELECT status FROM segments WHERE id = 's1'").fetchone()
     assert row is not None

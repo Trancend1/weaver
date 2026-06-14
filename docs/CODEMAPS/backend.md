@@ -1,4 +1,4 @@
-<!-- Generated: 2026-06-13 | Files scanned: src/weaver/api/app.py, src/weaver/api/routers/*.py, src/weaver/services/*.py, src/weaver/cli/main.py, remote origin/main:docs/{CLI_WORKFLOW,WEB_WORKFLOW,TRANSLATION_PIPELINE,MAINTENANCE}.md | Token estimate: ~950 -->
+<!-- Generated: 2026-06-14 | Files scanned: src/weaver/api/app.py, src/weaver/api/routers/*.py, src/weaver/services/*.py, src/weaver/cli/main.py, remote origin/main:docs/{CLI_WORKFLOW,WEB_WORKFLOW,TRANSLATION_PIPELINE,MAINTENANCE}.md | Token estimate: ~950 -->
 # Backend
 
 ## CLI Flow
@@ -49,9 +49,9 @@ Limitations: import is EPUB-only via CLI; volume-aware EPUB/TXT/HTML/DOCX export
 | `api/routers/candidates.py` | `/projects` | candidate review, character drafts |
 | `api/routers/characters.py` | `/projects` | character CRUD |
 | `api/routers/translation_memory.py` | `/projects` | TM overview + delete |
-| `api/routers/config.py` | `/config` | provider/model + secrets; no key values returned |
+| `api/routers/config.py` | `/config` | JSON provider/model + secrets API; unchanged by `/ui/providers` consolidation; no key values returned |
 | `api/routers/qa.py` | `/projects` | QA report (novel/volume/chapter) |
-| `api/routers/ui*.py` | `/ui` | dashboard, workspace, jobs, hubs, explorer, review, QA, analytics, admin |
+| `api/routers/ui*.py` | `/ui` | dashboard, workspace, jobs, hubs, explorer, review, QA, analytics, admin; `/ui/config` is GET-only compatibility redirect to `/ui/providers#config-editor` |
 
 ## HTML Cockpit Surface
 ```txt
@@ -64,6 +64,7 @@ Limitations: import is EPUB-only via CLI; volume-aware EPUB/TXT/HTML/DOCX export
 /ui/projects/{name}/chapters/{id}/preview           -> reading preview
 /ui/projects/{name}/volumes/{id}/review             -> review queue
 /ui/queue, /ui/resources, /ui/providers, /ui/exports -> cross-project hubs
+/ui/config                                         -> compatibility redirect to /ui/providers#config-editor (GET only; no edit surface)
 /ui/projects/{name}/analytics                       -> project analytics
 /ui/projects/{name}/exports                         -> export history
 /ui/projects/{name}/jobs[/{id}/detail]              -> job dashboard
@@ -85,7 +86,8 @@ approved glossary + characters + TM + prompt templates
 ## Service Mapping
 - Routers call services; services own workflow decisions and writes.
 - `api/jobs.py` + `services/job_store.py` implement SQLite-backed in-process persistent jobs (ADR `010`). No external queue.
-- Provider calls flow through `providers/registry.py`; prompts/parsers live in services (ADR `014`).
+- Provider config UI writes flow through `services/provider_config.py`; the JSON `/config` API remains available for redacted config reads/writes.
+- Provider calls flow through `providers/registry.py`; legacy aliases (`deepseek`, `gemini`, `ollama`, `fake`) remain supported; prompts/parsers live in services (ADR `014`).
 - Templates consume service DTOs; templates carry no business logic.
 - `services/export_book.py` is canonical for UI/API export; `services/export.py` is CLI-only legacy.
 

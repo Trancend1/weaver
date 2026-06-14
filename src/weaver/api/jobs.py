@@ -60,7 +60,7 @@ from weaver.services.job_store import (
 from weaver.services.logging_setup import log_job_event
 from weaver.services.translation import ProgressCallback
 from weaver.services.workspace_translate import ChapterTranslationResult
-from weaver.storage.db import connect_database
+from weaver.storage.db import connect_database, connect_readonly_database
 from weaver.storage.segments import SegmentRecord
 
 logger = logging.getLogger("weaver.job")
@@ -382,8 +382,8 @@ class TranslationJob:
                 envelope["id"] = event_id
             self.queue.put(envelope)
         else:
-            terminal_status = "cancelled" if self.should_cancel() else "done"
             result = self.result
+            terminal_status = "cancelled" if result.cancelled else "done"
             terminal_data = {
                 "selected": result.selected,
                 "translated": result.translated,
@@ -849,6 +849,7 @@ class ParseResult:
     nav_count: int
     image_count: int
     validation_count: int
+    cancelled: bool = False
 
 
 ParseJobRunner = Callable[[ShouldCancel], ParseResult]
@@ -913,7 +914,7 @@ class ParseJob:
         else:
             result = self.result
             assert result is not None
-            self.status = "cancelled" if self.should_cancel() else "done"
+            self.status = "cancelled" if result.cancelled else "done"
             with self._lock:
                 self.progress.current = 1
             data = {
@@ -925,7 +926,7 @@ class ParseJob:
                 "nav_count": result.nav_count,
                 "image_count": result.image_count,
                 "validation_count": result.validation_count,
-                "cancelled": self.status == "cancelled",
+                "cancelled": result.cancelled,
             }
             if self.storage is not None:
                 self.storage.flush_progress(
@@ -1300,7 +1301,7 @@ def replay_persisted_events(
     if db_path is None:
         return
     try:
-        with closing(connect_database(db_path)) as conn:
+        with closing(connect_readonly_database(db_path)) as conn:
             for row in list_events_after(conn, job_id=job_id, after_id=after_id):
                 yield {"event": row.event, "data": row.data, "id": row.id}
     except (WeaverError, sqlite3.Error) as exc:

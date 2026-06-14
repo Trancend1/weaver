@@ -1426,8 +1426,26 @@ def _element_to_block(
     )
 
 
+_RUBY_SKIP_TAGS: frozenset[str] = frozenset({"rt", "rp"})
+
+
 def _element_text(element: ElementTree.Element) -> str:
-    return collapse_whitespace("".join(element.itertext()))
+    parts: list[str] = []
+    _collect_text_skip_ruby(element, parts)
+    return collapse_whitespace("".join(parts))
+
+
+def _collect_text_skip_ruby(element: ElementTree.Element, parts: list[str]) -> None:
+    if element.text:
+        parts.append(element.text)
+    for child in element:
+        if local_name(child.tag) in _RUBY_SKIP_TAGS:
+            if child.tail:
+                parts.append(child.tail)
+            continue
+        _collect_text_skip_ruby(child, parts)
+        if child.tail:
+            parts.append(child.tail)
 
 
 def _walk_with_xpath(

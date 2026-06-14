@@ -1,4 +1,4 @@
-<!-- Generated: 2026-06-13 | Files scanned: src/weaver/api/templates/, src/weaver/api/routers/ui*.py, src/weaver/api/static/app.css, remote origin/main:docs/{WEB_WORKFLOW,SECURITY_AND_PERFORMANCE,INSTALL_DESKTOP}.md | Token estimate: ~900 -->
+<!-- Generated: 2026-06-14 | Files scanned: src/weaver/api/templates/, src/weaver/api/routers/ui*.py, src/weaver/api/static/app.css, remote origin/main:docs/{WEB_WORKFLOW,SECURITY_AND_PERFORMANCE,INSTALL_DESKTOP}.md | Token estimate: ~900 -->
 # Frontend
 
 ## Stack
@@ -51,6 +51,7 @@ partials/
 
 ## Page Layout Modes (`api/ui_context.py`)
 - `global` (topbar only): `/ui`, `/ui/new`, hubs (including `/ui/providers` for provider/model + secret config).
+- `/ui/providers` is the canonical provider config UI; `/ui/config` is compatibility-only GET redirect to `/ui/providers#config-editor` and has no edit form.
 - `project` (topbar + 264px sidebar): project, glossary, characters, memory, quality.
 - `workspace` (topbar + 56px icon rail): chapter editor.
 
@@ -62,7 +63,8 @@ cross-project hubs: queue/resources/providers/exports (read-only index paths)
 ```
 - Web cockpit drives the same services as CLI; it is not a second backend.
 - Long-running actions use JobRegistry + SSE; job panels surface progress/failure.
-- Provider/AI actions require explicit POST; no background provider calls from render.
+- Provider config edits post to `/ui/providers/config`; provider secret writes/deletes post to `/ui/providers/secrets[...]`.
+- Provider health checks require explicit POST; no background provider calls from render or hub GET.
 
 ## Workspace Rules
 - Save form POSTs return `_segment.html` swapped into `#seg-{id}`.
@@ -76,6 +78,7 @@ cross-project hubs: queue/resources/providers/exports (read-only index paths)
 - Motion <= 140 ms with `prefers-reduced-motion` honored.
 - No toasts/`alert()`, no marketing AI language, no sparkles/chat UI.
 - No secrets in rendered HTML, SSE payloads, logs, or config responses.
+- Secret values may be submitted through the provider hub or JSON secret API, but rendered UI shows only names/presence.
 - Gate B1: hubs/render/list paths must not hash source files, migrate DBs, run QA, call providers, or reset jobs.
 
 ## Desktop Surface

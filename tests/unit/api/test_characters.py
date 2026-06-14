@@ -116,3 +116,39 @@ def test_create_empty_en_name_422(client_with_projects: TestClient) -> None:
 def test_list_unknown_project_404(client: TestClient) -> None:
     resp = client.get("/projects/does-not-exist/characters")
     assert resp.status_code == 404
+
+
+# --- slash-safe key mutation -------------------------------------------------
+
+
+def test_create_update_delete_with_slash_in_jp_name(client_with_projects: TestClient) -> None:
+    """Create a character whose jp_name contains '/', then update and delete
+    it via the query-param-based PATCH/DELETE routes."""
+    name = _name(client_with_projects)
+    jp_name = "A/B"
+
+    resp = client_with_projects.post(
+        f"/projects/{name}/characters",
+        json={"jp_name": jp_name, "en_name": "Test", "role": "character"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["jp_name"] == jp_name
+
+    listed = client_with_projects.get(f"/projects/{name}/characters").json()
+    assert listed["count"] == 1
+
+    update = client_with_projects.patch(
+        f"/projects/{name}/characters",
+        params={"jp_name": jp_name},
+        json={"en_name": "Updated", "role": "hero"},
+    )
+    assert update.status_code == 200
+    assert update.json()["en_name"] == "Updated"
+
+    delete = client_with_projects.delete(
+        f"/projects/{name}/characters", params={"jp_name": jp_name}
+    )
+    assert delete.status_code == 204
+
+    listed = client_with_projects.get(f"/projects/{name}/characters").json()
+    assert listed["count"] == 0

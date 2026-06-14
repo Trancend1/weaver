@@ -9,8 +9,9 @@
       <tr>
         <td>{{ ch.jp_name }}</td>
         <td>
-          <form class="row-form" hx-post="/ui/projects/{{ name }}/characters/{{ ch.jp_name }}/update"
+          <form class="row-form" hx-post="/ui/projects/{{ name }}/character/update"
                 hx-target="#characters" hx-swap="outerHTML">
+            <input type="hidden" name="jp_name" value="{{ ch.jp_name }}">
             <input name="en_name" value="{{ ch.en_name }}" required aria-label="English name">
             <input name="gender" value="{{ ch.gender or '' }}" placeholder="gender" aria-label="Gender">
             <input name="role" value="{{ ch.role or '' }}" placeholder="role" aria-label="Role">
@@ -23,8 +24,9 @@
         <td>{{ ch.notes or "—" }}</td>
         <td>
           <button type="button" class="link-btn"
-                  hx-post="/ui/projects/{{ name }}/characters/{{ ch.jp_name }}/delete"
+                  hx-post="/ui/projects/{{ name }}/character/delete"
                   hx-target="#characters" hx-swap="outerHTML"
+                  hx-vals='{"jp_name": "{{ ch.jp_name }}"}'
                   hx-confirm="Delete character '{{ ch.jp_name }}'? This cannot be undone.">Delete</button>
         </td>
       </tr>

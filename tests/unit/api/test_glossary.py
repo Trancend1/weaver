@@ -111,3 +111,35 @@ def test_create_empty_target_422(client_with_projects: TestClient) -> None:
 def test_list_unknown_project_404(client: TestClient) -> None:
     resp = client.get("/projects/does-not-exist/glossary")
     assert resp.status_code == 404
+
+
+# --- slash-safe key mutation -------------------------------------------------
+
+
+def test_create_update_delete_with_slash_in_source(client_with_projects: TestClient) -> None:
+    """Create a glossary term whose source contains '/', then update and delete
+    it via the query-param-based PATCH/DELETE routes."""
+    name = _name(client_with_projects)
+    source = "A/B"
+
+    resp = client_with_projects.post(
+        f"/projects/{name}/glossary",
+        json={"source": source, "target": "Test", "category": "expression"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["source"] == source
+
+    listed = client_with_projects.get(f"/projects/{name}/glossary").json()
+    assert listed["count"] == 1
+
+    update = client_with_projects.patch(
+        f"/projects/{name}/glossary", params={"source": source}, json={"target": "Updated"}
+    )
+    assert update.status_code == 200
+    assert update.json()["target"] == "Updated"
+
+    delete = client_with_projects.delete(f"/projects/{name}/glossary", params={"source": source})
+    assert delete.status_code == 204
+
+    listed = client_with_projects.get(f"/projects/{name}/glossary").json()
+    assert listed["count"] == 0

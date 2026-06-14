@@ -25,6 +25,43 @@ def test_fresh_database_lands_at_target_version(tmp_path) -> None:
     assert "output_tokens" in columns
 
 
+def test_apply_migrations_refuses_version_zero_partial_schema_without_stamping(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "legacy_zero.db"
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+    connection.executescript(
+        """
+        CREATE TABLE projects (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          source_path TEXT NOT NULL,
+          source_lang TEXT NOT NULL,
+          target_lang TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          schema_version INTEGER NOT NULL
+        );
+        """
+    )
+    connection.commit()
+
+    with pytest.raises(DatabaseError, match="schema version is missing"):
+        apply_migrations(connection, target_version=SCHEMA_VERSION)
+
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    tables = {
+        row["name"]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    connection.close()
+
+    assert version == 0
+    assert "jobs" not in tables
+
+
 def test_apply_migrations_upgrades_v1_to_v2(tmp_path) -> None:
     db_path = tmp_path / "legacy.db"
     connection = sqlite3.connect(db_path)

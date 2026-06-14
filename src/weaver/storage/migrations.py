@@ -14,6 +14,39 @@ from datetime import UTC, datetime
 
 from weaver.errors import DatabaseError
 
+_CURRENT_SCHEMA_TABLES = {
+    "projects",
+    "volumes",
+    "chapters",
+    "segments",
+    "translations",
+    "glossary_candidates",
+    "glossary_terms",
+    "characters",
+    "translation_memory",
+    "job_events",
+    "jobs",
+    "job_progress_snapshots",
+    "epub_snapshots",
+    "epub_snapshot_manifest",
+    "epub_snapshot_spine",
+    "epub_snapshot_navigation",
+    "epub_snapshot_images",
+    "epub_snapshot_validation",
+    "translation_candidates",
+    "character_page_drafts",
+    "export_history",
+}
+
+_CURRENT_SCHEMA_COLUMNS = {
+    "projects": {"id", "name", "source_path", "source_lang", "target_lang", "uuid"},
+    "volumes": {"id", "project_id", "source_format", "volume_order"},
+    "segments": {"id", "chapter_id", "source_hash", "status", "review_status"},
+    "translations": {"segment_id", "attempt", "input_tokens", "output_tokens"},
+    "jobs": {"id", "kind", "project_name", "status", "result_json"},
+    "export_history": {"id", "format", "kind", "status", "artifact_path"},
+}
+
 
 def apply_migrations(connection: sqlite3.Connection, *, target_version: int) -> int:
     """Bring the connected database up to `target_version`.
@@ -41,17 +74,21 @@ def apply_migrations(connection: sqlite3.Connection, *, target_version: int) -> 
             "Next command: upgrade `weaver` to the version that created this project."
         )
     if current == 0:
-        has_schema = (
-            connection.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='projects'"
-            ).fetchone()
-            is not None
-        )
-        if not has_schema:
+        tables = _table_names(connection)
+        if "projects" not in tables:
             raise DatabaseError(
                 "Weaver database is not initialized. "
                 "Likely cause: database file is missing or was never initialized. "
                 "Next command: run `weaver init <input.epub>` to create a project first."
+            )
+        if not _has_current_schema(connection, tables):
+            raise DatabaseError(
+                "Weaver database schema version is missing and the file does not "
+                "match the current schema. "
+                "Likely cause: this is a legacy or partially migrated database "
+                "created before schema version tracking was reliable. "
+                "Next command: restore from a backup or run a dedicated repair "
+                "migration before opening this project with the current Weaver build."
             )
         connection.execute(f"PRAGMA user_version = {target_version}")
         return target_version
@@ -74,6 +111,30 @@ def _user_version(connection: sqlite3.Connection) -> int:
     if row is None:
         return 0
     return int(row[0])
+
+
+def _table_names(connection: sqlite3.Connection) -> set[str]:
+    return {
+        str(row["name"])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+
+
+def _column_names(connection: sqlite3.Connection, table: str) -> set[str]:
+    return {
+        str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+
+
+def _has_current_schema(connection: sqlite3.Connection, tables: set[str]) -> bool:
+    if not tables >= _CURRENT_SCHEMA_TABLES:
+        return False
+    for table, expected_columns in _CURRENT_SCHEMA_COLUMNS.items():
+        if not expected_columns <= _column_names(connection, table):
+            return False
+    return True
 
 
 def _migrate_to_v2(connection: sqlite3.Connection) -> None:

@@ -32,12 +32,12 @@ import logging
 import sqlite3
 from collections.abc import Callable
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from weaver.core.ir import scope_document_to_volume
+from weaver.core.ir import DocumentIR, scope_document_to_volume
 from weaver.errors import ChapterNotFoundError, ExportError, VolumeNotFoundError
 from weaver.readers import read_epub
 from weaver.renderers.docx import render_docx
@@ -503,7 +503,10 @@ def _render_volume(
         if plan.source_format == "epub":
             # Scope the re-read source ids to this volume so block ids match the
             # volume-scoped stored segment ids in `publishable` (Stage 11B-1.5).
-            document = scope_document_to_volume(read_epub(plan.source_path), plan.volume_id)
+            document = _document_for_plan(
+                scope_document_to_volume(read_epub(plan.source_path), plan.volume_id),
+                plan,
+            )
             render_translated_epub(
                 source_epub_path=plan.source_path,
                 output_path=plan.output_path,
@@ -550,6 +553,14 @@ def _render_volume(
         fallback_segments=len(fallback_states),
         fallback_by_status=_fallback_breakdown(fallback_states),
     )
+
+
+def _document_for_plan(document: DocumentIR, plan: ExportVolumePlan) -> DocumentIR:
+    chapter_ids = set(plan.chapter_ids)
+    chapters = [chapter for chapter in document.chapters if chapter.id in chapter_ids]
+    if len(chapters) == len(document.chapters):
+        return document
+    return replace(document, chapters=chapters)
 
 
 def _resolved_chapters(

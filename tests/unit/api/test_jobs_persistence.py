@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from weaver.api.app import create_api_app
+from weaver.api.jobs import replay_persisted_events
 from weaver.services.job_store import (
     get_job,
     list_events_after,
@@ -146,3 +147,70 @@ def test_storage_disabled_when_registry_has_no_base_dir(tmp_path: Path) -> None:
     storage.flush_progress(done_units=0, failed_units=0)
     storage.append_event(event="progress", data={})
     storage.finish(status="done", result=None, error_summary=None)
+
+
+def test_replay_persisted_events_uses_read_only_access(client_with_projects: TestClient) -> None:
+    """SSE replay must open the DB read-only — no migrations, no writes.
+
+    After ``replay_persisted_events`` iterates a finished job's events,
+    ``user_version`` (the migration stamp) and the event count must be
+    identical to what they were before the call.
+    """
+    name = _project(client_with_projects)
+    chapter_id = _chapter(client_with_projects, name)
+    job_id = client_with_projects.post(
+        f"/projects/{name}/chapters/{chapter_id}/translate", json=FAKE_BODY
+    ).json()["job_id"]
+
+    _wait_terminal(client_with_projects, name, job_id)
+
+    base = client_with_projects.app.state.base_dir  # type: ignore[attr-defined]
+    project_toml = base / ".weaver" / name / "project.toml"
+    db_path = resolve_database_path(project_toml, cwd=base)
+
+    # Snapshot user_version and event count before replay.
+    before_version: int
+    before_count: int
+    with closing(connect_database(db_path)) as conn:
+        before_version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+        before_count = int(
+            conn.execute("SELECT COUNT(*) FROM job_events WHERE job_id = ?", (job_id,)).fetchone()[
+                0
+            ]
+        )
+
+    # Replay — this must not mutate schema or state.
+    envelopes = list(replay_persisted_events(db_path, job_id, after_id=0))
+    assert len(envelopes) == before_count
+    assert all("event" in e and "data" in e for e in envelopes)
+
+    # Snapshot after replay — must be unchanged.
+    with closing(connect_database(db_path)) as conn:
+        after_version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+        after_count = int(
+            conn.execute("SELECT COUNT(*) FROM job_events WHERE job_id = ?", (job_id,)).fetchone()[
+                0
+            ]
+        )
+
+    assert after_version == before_version, "replay must not change schema version"
+    assert after_count == before_count, "replay must not insert events"
+
+
+def test_replay_persisted_events_returns_empty_for_unknown_job(
+    client_with_projects: TestClient,
+) -> None:
+    name = _project(client_with_projects)
+    chapter_id = _chapter(client_with_projects, name)
+    client_with_projects.post(f"/projects/{name}/chapters/{chapter_id}/translate", json=FAKE_BODY)
+    base = client_with_projects.app.state.base_dir  # type: ignore[attr-defined]
+    project_toml = base / ".weaver" / name / "project.toml"
+    db_path = resolve_database_path(project_toml, cwd=base)
+
+    envelopes = list(replay_persisted_events(db_path, "no-such-job", after_id=0))
+    assert envelopes == []
+
+
+def test_replay_persisted_events_none_db_path() -> None:
+    envelopes = list(replay_persisted_events(None, "any-job", after_id=0))
+    assert envelopes == []

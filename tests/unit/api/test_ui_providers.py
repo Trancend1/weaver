@@ -158,6 +158,40 @@ def test_no_provider_call_on_hub_get(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert calls["n"] == 0
 
 
+def test_legacy_config_page_redirects_to_providers_editor(
+    providers_client: TestClient,
+) -> None:
+    resp = providers_client.get("/ui/config", follow_redirects=False)
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/ui/providers#config-editor"
+
+
+def test_legacy_config_page_redirect_preserves_project_query(
+    providers_client: TestClient,
+) -> None:
+    resp = providers_client.get("/ui/config", params={"project": "alpha"}, follow_redirects=False)
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/ui/providers?project=alpha#config-editor"
+
+
+def test_legacy_config_redirect_does_not_build_providers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _init(tmp_path, "alpha")
+    client = TestClient(create_api_app(tmp_path))
+    calls = {"n": 0}
+
+    def _spy(*args: object, **kwargs: object) -> object:
+        _ = (args, kwargs)
+        calls["n"] += 1
+        raise AssertionError("legacy config redirect must not build providers")
+
+    monkeypatch.setattr("weaver.api.routers.ui_providers.build_workspace_providers", _spy)
+    resp = client.get("/ui/config", follow_redirects=False)
+    assert resp.status_code == 307
+    assert calls["n"] == 0
+
+
 # ---------------------------------------------------------------------------
 # 6. Empty + degraded
 # ---------------------------------------------------------------------------
@@ -244,13 +278,20 @@ def test_providers_config_save_persists(providers_client: TestClient) -> None:
     assert view["model"] == "fake-9"
 
 
-def test_providers_config_freeform_provider_type(providers_client: TestClient) -> None:
+def test_providers_config_unbuildable_provider_type_errors_without_persisting(
+    providers_client: TestClient,
+) -> None:
     r = providers_client.post(
         "/ui/providers/config",
         data={"scope": "project", "project": "alpha", "provider_type": "not-real"},
     )
     assert r.status_code == 200
-    assert "Saved" in r.text
+    assert "Provider configuration is incomplete" in r.text
+    assert "Saved" not in r.text
+
+    view = providers_client.get("/config?project=alpha").json()
+    assert view["provider_type"] == "custom"
+    assert view["protocol"] == "openai_chat"
 
 
 def test_providers_secret_set_and_delete_without_exposing_value(
@@ -286,10 +327,26 @@ def test_providers_hub_renders_config_editor(providers_client: TestClient) -> No
     assert 'name="provider_type"' in html
     assert 'name="protocol"' in html
     assert '<select name="provider_type"' not in html
-    # the editor posts to the consolidated endpoint, not the removed /ui/config
+    # the editor posts to the canonical endpoint, not the legacy /ui/config route
     assert 'hx-post="/ui/providers/config"' in html
     assert 'hx-post="/ui/providers/secrets"' in html
-    assert "/ui/config" not in html
+    assert 'href="/ui/config' not in html
+    assert 'action="/ui/config' not in html
+    assert 'hx-post="/ui/config' not in html
+
+
+def test_providers_hub_explains_canonical_config_surface(
+    providers_client: TestClient,
+) -> None:
+    html = providers_client.get("/ui/providers").text
+    assert "/ui/providers is the canonical provider config page." in html
+    assert "/ui/config is compatibility-only and redirects here." in html
+    assert "Legacy aliases remain supported: deepseek, gemini, ollama, fake." in html
+    assert "Custom provider types must set an explicit protocol." in html
+    assert "openai_chat requires base_url, api_key_env, and model." in html
+    assert "Health checks run only when you press Check." in html
+    assert "This page does not call providers on load." in html
+    assert "Secret values are stored but never rendered." in html
 
 
 def test_providers_hub_project_param_loads_project_config(providers_client: TestClient) -> None:

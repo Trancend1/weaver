@@ -217,6 +217,52 @@ def glossary_delete(
     return _terms_fragment(request, name, offset=offset, find=find)
 
 
+@router.post("/ui/projects/{name}/glossary/term/update", response_class=HTMLResponse)
+def glossary_update_by_source(
+    name: str,
+    request: Request,
+    source: str = Form(...),
+    target: str = Form(...),
+    category: str | None = Form(None),
+    notes: str | None = Form(None),
+    offset: int = Form(0),
+    find: str | None = Form(None),
+) -> HTMLResponse:
+    """Update one glossary term by source in form body (safe for '/' keys)."""
+    base = _base_dir(request)
+    try:
+        glossary_service.update_term(
+            _project_toml(request, name),
+            source=source,
+            target=target,
+            category=_opt(category),
+            notes=_opt(notes),
+            cwd=base,
+        )
+    except GlossaryTermNotFoundError as exc:
+        return _terms_fragment(request, name, offset=offset, find=find, error=str(exc))
+    except (ValueError, WeaverError) as exc:
+        return _terms_fragment(request, name, offset=offset, find=find, error=str(exc))
+    return _terms_fragment(request, name, offset=offset, find=find)
+
+
+@router.post("/ui/projects/{name}/glossary/term/delete", response_class=HTMLResponse)
+def glossary_delete_by_source(
+    name: str,
+    request: Request,
+    source: str = Form(...),
+    offset: int = Form(0),
+    find: str | None = Form(None),
+) -> HTMLResponse:
+    """Delete one glossary term by source in form body (safe for '/' keys)."""
+    base = _base_dir(request)
+    try:
+        glossary_service.delete_term(_project_toml(request, name), source=source, cwd=base)
+    except GlossaryTermNotFoundError as exc:
+        return _terms_fragment(request, name, offset=offset, find=find, error=str(exc))
+    return _terms_fragment(request, name, offset=offset, find=find)
+
+
 @router.get("/ui/projects/{name}/glossary/candidates", response_class=HTMLResponse)
 def glossary_candidates_fragment(
     name: str, request: Request, offset: int = Query(0, ge=0), find: str | None = None
@@ -419,6 +465,50 @@ def characters_update(
 @router.post("/ui/projects/{name}/characters/{jp_name}/delete", response_class=HTMLResponse)
 def characters_delete(name: str, jp_name: str, request: Request) -> HTMLResponse:
     """Delete one character, then re-render the character table."""
+    base = _base_dir(request)
+    try:
+        characters_service.delete(_project_toml(request, name), jp_name=jp_name, cwd=base)
+    except CharacterNotFoundError as exc:
+        return _characters_fragment(request, name, error=str(exc))
+    return _characters_fragment(request, name)
+
+
+@router.post("/ui/projects/{name}/character/update", response_class=HTMLResponse)
+def characters_update_by_jp_name(
+    name: str,
+    request: Request,
+    jp_name: str = Form(...),
+    en_name: str = Form(...),
+    gender: str | None = Form(None),
+    role: str | None = Form(None),
+    notes: str | None = Form(None),
+) -> HTMLResponse:
+    """Update one character by jp_name in form body (safe for '/' keys)."""
+    base = _base_dir(request)
+    try:
+        characters_service.update_character(
+            _project_toml(request, name),
+            jp_name=jp_name,
+            en_name=en_name,
+            gender=_opt(gender),
+            role=_opt(role),
+            notes=_opt(notes),
+            cwd=base,
+        )
+    except CharacterNotFoundError as exc:
+        return _characters_fragment(request, name, error=str(exc))
+    except (ValueError, WeaverError) as exc:
+        return _characters_fragment(request, name, error=str(exc))
+    return _characters_fragment(request, name)
+
+
+@router.post("/ui/projects/{name}/character/delete", response_class=HTMLResponse)
+def characters_delete_by_jp_name(
+    name: str,
+    request: Request,
+    jp_name: str = Form(...),
+) -> HTMLResponse:
+    """Delete one character by jp_name in form body (safe for '/' keys)."""
     base = _base_dir(request)
     try:
         characters_service.delete(_project_toml(request, name), jp_name=jp_name, cwd=base)

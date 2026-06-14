@@ -36,6 +36,17 @@ def test_read_config_unknown_project_raises(tmp_path: Path) -> None:
         read_config(tmp_path, project="ghost")
 
 
+def _make_project(base: Path, name: str = "alpha") -> str:
+    from weaver.services.project import initialize_project
+
+    fixtures = Path(__file__).parent.parent.parent / "fixtures"
+    epubs = list(fixtures.glob("*.epub"))
+    if not epubs:
+        pytest.skip("no EPUB fixture available")
+    initialize_project(epubs[0], cwd=base, project_name=name)
+    return name
+
+
 def test_write_global_then_read_back(tmp_path: Path) -> None:
     view = write_config(tmp_path, scope="global", provider_type="fake", model="m1")
     assert view.default_provider == "fake"
@@ -71,6 +82,55 @@ def test_write_unknown_scope_raises(tmp_path: Path) -> None:
 def test_write_project_scope_requires_project(tmp_path: Path) -> None:
     with pytest.raises(ConfigError):
         write_config(tmp_path, scope="project", provider_type="fake")
+
+
+def test_write_project_rejects_unbuildable_provider_without_persisting(
+    tmp_path: Path,
+) -> None:
+    project = _make_project(tmp_path)
+
+    with pytest.raises(ConfigError, match="Provider configuration is incomplete"):
+        write_config(tmp_path, scope="project", project=project, provider_type="not-real")
+
+    view = read_config(tmp_path, project=project)
+    assert view.provider_type is None
+    assert view.protocol is None
+
+
+def test_write_project_accepts_custom_supported_protocol(tmp_path: Path) -> None:
+    project = _make_project(tmp_path)
+
+    view = write_config(
+        tmp_path,
+        scope="project",
+        project=project,
+        provider_type="not-real",
+        protocol="openai_chat",
+        model="custom-model",
+        base_url="https://api.example.com/v1",
+        api_key_env="MY_KEY",
+    )
+
+    assert view.provider_type == "not-real"
+    assert view.protocol == "openai_chat"
+    assert view.model == "custom-model"
+    assert view.base_url == "https://api.example.com/v1"
+    assert view.api_key_env == "MY_KEY"
+
+
+@pytest.mark.parametrize("provider_type", ["deepseek", "gemini", "ollama", "fake"])
+def test_write_project_preserves_legacy_aliases(tmp_path: Path, provider_type: str) -> None:
+    project = _make_project(tmp_path, name=f"{provider_type}-project")
+
+    view = write_config(
+        tmp_path,
+        scope="project",
+        project=project,
+        provider_type=provider_type,
+    )
+
+    assert view.provider_type == "custom"
+    assert view.protocol is not None
 
 
 def test_store_and_presence(tmp_path: Path) -> None:

@@ -100,15 +100,18 @@ def test_patch_global_scope_persists(isolated: Path) -> None:
     assert body["default_model"] == "gemini-x"
 
 
-def test_patch_freeform_provider_type_persists(isolated: Path) -> None:
+def test_patch_unbuildable_provider_type_rejects_without_persisting(isolated: Path) -> None:
     name = _make_project(isolated)
     client = _client(isolated)
     r = client.patch(
         "/config",
         json={"scope": "project", "project": name, "provider_type": "not-real"},
     )
-    assert r.status_code == 200
-    assert r.json()["provider_type"] == "not-real"
+    assert r.status_code == 422
+    assert "Provider configuration is incomplete" in r.json()["detail"]
+
+    body = client.get("/config", params={"project": name}).json()
+    assert body["provider_type"] is None
 
 
 def test_patch_project_scope_without_project_422(isolated: Path) -> None:
@@ -177,6 +180,9 @@ def test_api_key_set_reflects_stored_secret(isolated: Path) -> None:
             "scope": "project",
             "project": name,
             "provider_type": "custom",
+            "protocol": "openai_chat",
+            "model": "custom-model",
+            "base_url": "https://api.example.com/v1",
             "api_key_env": "MY_CUSTOM_KEY",
         },
     )

@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from weaver.api.jobs import JobRegistry
+from weaver.api.jobs import JobRegistry, ParseResult
 from weaver.services.workspace_translate import ChapterTranslationResult
 from weaver.storage.segments import SegmentRecord
 
@@ -130,6 +130,33 @@ def test_request_cancel_stops_runner_and_marks_cancelled() -> None:
     assert [e["event"] for e in _drain(job.queue)] == ["cancelled"]
 
 
+def test_late_cancel_does_not_overwrite_done_status() -> None:
+    """A cancel flag raised *after* the runner returns with
+    ``result.cancelled=False`` must not flip the terminal status to
+    ``cancelled``.  Terminal status, terminal event, persisted state, and
+    ``result.cancelled`` must agree — mirroring batch/export semantics."""
+    registry = JobRegistry()
+    runner_done = threading.Event()
+    proceed = threading.Event()
+
+    def runner(should_cancel, on_progress) -> ChapterTranslationResult:
+        result = _result(translated=3, cancelled=False)
+        runner_done.set()
+        proceed.wait(timeout=5)
+        return result
+
+    job = _submit(registry, runner)
+    assert runner_done.wait(timeout=5)
+    job.request_cancel()
+    proceed.set()
+    job.wait(timeout=5)
+
+    assert job.status == "done"
+    assert job.result is not None
+    assert job.result.cancelled is False
+    assert [e["event"] for e in _drain(job.queue)] == ["done"]
+
+
 @pytest.mark.parametrize("mode", ["chapter", "selection"])
 def test_submit_records_mode_and_chapter(mode: str) -> None:
     registry = JobRegistry()
@@ -145,3 +172,68 @@ def test_submit_records_mode_and_chapter(mode: str) -> None:
     assert job.mode == mode
     assert job.chapter_id == "ch-9"
     assert job.project_name == "demo"
+
+
+def test_parse_result_cancelled_determines_terminal_status() -> None:
+    """ParseJob terminal status must derive from result.cancelled, not
+    self.should_cancel(). A late cancel request after the runner returns
+    must not flip ``done`` to ``cancelled``."""
+    registry = JobRegistry()
+    runner_done = threading.Event()
+    proceed = threading.Event()
+
+    def runner(should_cancel) -> ParseResult:
+        result = ParseResult(
+            volume_id=1,
+            source_hash="abc",
+            parser_version=1,
+            manifest_count=0,
+            spine_count=0,
+            nav_count=0,
+            image_count=0,
+            validation_count=0,
+            cancelled=False,
+        )
+        runner_done.set()
+        proceed.wait(timeout=5)
+        return result
+
+    job = registry.submit_parse(project_name="demo", volume_id=1, runner=runner)
+    assert runner_done.wait(timeout=5)
+    job.request_cancel()
+    proceed.set()
+    job.wait(timeout=5)
+
+    assert job.status == "done"
+    assert job.result is not None
+    assert job.result.cancelled is False
+    event_names = [e["event"] for e in _drain(job.queue)]
+    assert event_names == ["done"]
+
+
+def test_parse_result_cancelled_true_marks_cancelled() -> None:
+    """A runner returning ParseResult(cancelled=True) produces
+    terminal status ``cancelled``."""
+    registry = JobRegistry()
+
+    def runner(should_cancel) -> ParseResult:
+        return ParseResult(
+            volume_id=1,
+            source_hash="abc",
+            parser_version=1,
+            manifest_count=0,
+            spine_count=0,
+            nav_count=0,
+            image_count=0,
+            validation_count=0,
+            cancelled=True,
+        )
+
+    job = registry.submit_parse(project_name="demo", volume_id=1, runner=runner)
+    job.wait(timeout=5)
+
+    assert job.status == "cancelled"
+    assert job.result is not None
+    assert job.result.cancelled is True
+    event_names = [e["event"] for e in _drain(job.queue)]
+    assert event_names == ["cancelled"]

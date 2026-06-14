@@ -74,6 +74,13 @@ def import_volume(
     segment_count = sum(len(chapter.blocks) for chapter in document.chapters)
     volume_title = document.metadata.title or source_path.stem
 
+    if source_format == "epub":
+        parsed = parse_epub_structure(source_path)
+        source_hash = compute_source_hash(source_path)
+    else:
+        parsed = None  # type: ignore[assignment]
+        source_hash = ""
+
     with closing(connect_database(db_path)) as connection:
         with transaction(connection):
             project_id = _single_project_id(connection, project_toml)
@@ -100,17 +107,18 @@ def import_volume(
             _set_source_path_if_empty(
                 connection, project_id=project_id, source_path=str(source_path)
             )
+            if source_format == "epub":
+                assert parsed is not None
+                assert source_hash
+                store_snapshot(
+                    db_path,
+                    volume_id=volume_id,
+                    parsed=parsed,
+                    source_hash=source_hash,
+                    parser_version=PARSER_VERSION,
+                    connection=connection,
+                )
         connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-
-    if source_format == "epub":
-        parsed = parse_epub_structure(source_path)
-        store_snapshot(
-            db_path,
-            volume_id=volume_id,
-            parsed=parsed,
-            source_hash=compute_source_hash(source_path),
-            parser_version=PARSER_VERSION,
-        )
 
     log_runtime_event(
         "volume.imported",
