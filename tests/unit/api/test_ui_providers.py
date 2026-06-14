@@ -158,6 +158,42 @@ def test_no_provider_call_on_hub_get(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert calls["n"] == 0
 
 
+def test_legacy_config_page_redirects_to_providers_editor(
+    providers_client: TestClient,
+) -> None:
+    resp = providers_client.get("/ui/config", follow_redirects=False)
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/ui/providers#config-editor"
+
+
+def test_legacy_config_page_redirect_preserves_project_query(
+    providers_client: TestClient,
+) -> None:
+    resp = providers_client.get(
+        "/ui/config", params={"project": "alpha"}, follow_redirects=False
+    )
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/ui/providers?project=alpha#config-editor"
+
+
+def test_legacy_config_redirect_does_not_build_providers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _init(tmp_path, "alpha")
+    client = TestClient(create_api_app(tmp_path))
+    calls = {"n": 0}
+
+    def _spy(*args: object, **kwargs: object) -> object:
+        _ = (args, kwargs)
+        calls["n"] += 1
+        raise AssertionError("legacy config redirect must not build providers")
+
+    monkeypatch.setattr("weaver.api.routers.ui_providers.build_workspace_providers", _spy)
+    resp = client.get("/ui/config", follow_redirects=False)
+    assert resp.status_code == 307
+    assert calls["n"] == 0
+
+
 # ---------------------------------------------------------------------------
 # 6. Empty + degraded
 # ---------------------------------------------------------------------------

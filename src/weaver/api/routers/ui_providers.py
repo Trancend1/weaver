@@ -17,9 +17,10 @@ triggered by a render).
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from weaver.api.templating import templates
 from weaver.api.ui_context import ws_hub_layout
@@ -53,6 +54,16 @@ def _config_ctx(request: Request, project: str | None) -> dict[str, object]:
         "project": _opt(project),
         "projects": [dp.name for dp in discover_projects(base)],
     }
+
+
+@router.get("/ui/config", response_class=RedirectResponse)
+def legacy_config_page(project: str | None = None) -> RedirectResponse:
+    """Compatibility entry point for old bookmarks; editing lives in /ui/providers."""
+    target = "/ui/providers"
+    project_name = _opt(project)
+    if project_name:
+        target = f"{target}?{urlencode({'project': project_name})}"
+    return RedirectResponse(f"{target}#config-editor", status_code=307)
 
 
 @router.get("/ui/providers", response_class=HTMLResponse)
