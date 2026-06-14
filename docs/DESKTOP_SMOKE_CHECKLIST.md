@@ -36,9 +36,11 @@
 > **(historical) pass-with-conditions:** The shell now compiles cleanly and
 > the previously-`UNVERIFIED` Windows crate pins resolve exactly as declared in
 > `Cargo.toml`. The remaining condition is the manual runtime launch in §4,
-> which needs a real desktop (GUI) session and `weaver` on `PATH` — it cannot be
-> driven from a headless/automation context. The signed-off gate report is
-> [`superpowers/handoffs/2026-06-14-q2f-sidecar-readiness-gate.md`](superpowers/handoffs/2026-06-14-q2f-sidecar-readiness-gate.md).
+> which needs a real desktop (GUI) session: it cannot be driven from a
+> headless/automation context. Since Sprint P the packaged app bundles its
+> sidecar, so this no longer requires `weaver` on `PATH`. The desktop gate of
+> record is [`superpowers/handoffs/2026-06-14-sprint-p6-gate-report.md`](superpowers/handoffs/2026-06-14-sprint-p6-gate-report.md);
+> earlier Q2F/N/O readiness handoffs live in git history.
 
 ---
 

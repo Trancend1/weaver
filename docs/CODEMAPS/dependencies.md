@@ -73,7 +73,7 @@ weaver secrets rm MY_KEY
 ## Desktop Toolchain
 - `desktop/` is Tauri 2 Rust host, isolated from Python dependency graph.
 - Windows baseline: WebView2, Rust >= 1.77, MSVC Build Tools; optional NSIS for installer.
-- Sprint O baseline resolves `weaver serve` from PATH; PyInstaller/embedded Python single-file bundling is deferred.
+- Sprint P bundles the sidecar: a PyInstaller onedir `weaver.exe` is staged via Tauri `bundle.externalBin`; the Rust host resolves it (override → bundled → PATH fallback), so packaged launches need no external `weaver` on PATH. onefile/size optimization remains deferred (ADR 016).
 - Host writes logs under `%APPDATA%\Weaver\` and tails `sidecar.console.log` on crash.
 
 ## Locked-Out (ADR required)

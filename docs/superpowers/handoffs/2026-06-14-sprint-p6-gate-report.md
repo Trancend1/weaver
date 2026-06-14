@@ -73,7 +73,7 @@ contract is intact, local-first/offline, no telemetry, Windows-only.
 | P-V10 | ruff + pyright | PASS |
 | P-V11 | Scope fence held | PASS |
 
-Evidence detail: `docs/superpowers/handoffs/2026-06-14-sprint-p4-p5-packaged-standalone-smoke.md`.
+Evidence detail: the per-stage Sprint P handoffs (P1–P5) were consolidated into this gate report during the 2026-06-14 documentation cleanup; their full execution logs remain in git history. Live desktop status is tracked in `CLAUDE.md` / `AGENTS.md` §2.3.
 
 ## Commands run (Sprint P closeout)
 

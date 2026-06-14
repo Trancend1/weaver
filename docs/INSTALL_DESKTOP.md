@@ -15,7 +15,7 @@ A Tauri desktop shell that launches the FastAPI cockpit as a local sidecar:
 - Crash screen on backend-start failure with console tail + log path
 - App-data and logs in `%APPDATA%\Weaver\` (standard Windows location)
 
-**The Python backend is still required.** The desktop shell resolves `weaver serve` via `PATH`. This is the Sprint O baseline; full sidecar bundling (single `.exe` with embedded Python) is evaluated and documented below.
+**The backend ships bundled (Sprint P).** A packaged build includes the FastAPI sidecar as a PyInstaller `weaver.exe` staged via Tauri `bundle.externalBin`, so it runs with no external `weaver` on `PATH`. The resolver order is `WEAVER_DESKTOP_SIDECAR` override → bundled sidecar → bare `weaver` on `PATH` (dev/diagnostics fallback). See the bundling section below and [ADR 016](decisions/016-bundled-python-sidecar.md).
 
 ---
 
@@ -105,17 +105,17 @@ Produces an `.exe` installer (requires NSIS):
 
 ## Smoke test
 
-> **Validated 2026-06-14 (Sprint O4).** The packaged `weaver-desktop.exe` (3.1 MB)
-> was launched with `.venv\Scripts` on `PATH` and passed the full smoke: loading →
-> cockpit `/ui`, `GET /healthz 200` → `GET /ui 200` with no 401 loop, both log
-> files generated, no orphan after close, and the crash screen on a forced bad
-> sidecar path. See `docs/superpowers/handoffs/2026-06-14-sprint-o4-o5-packaged-runtime-and-behavior.md`.
+> **Validated 2026-06-14 (Sprint P, PASS).** The packaged `weaver-desktop.exe`
+> (3.27 MB) with its bundled sidecar `weaver.exe` (17.2 MB) passed the full smoke
+> with **no external `weaver` on `PATH`**: loading → cockpit `/ui`, `GET /healthz
+> 200` → `GET /ui 200` with no 401 loop, all logs generated, no orphan after the
+> owner-confirmed native window close, and the crash screen on a forced bad
+> sidecar path. See `docs/superpowers/handoffs/2026-06-14-sprint-p6-gate-report.md`.
 
 After any build, verify the five critical paths:
 
 ```powershell
-# 1. Launch
-$env:PATH = "D:\DevSpace\Projects\weaver\.venv\Scripts;$env:PATH"
+# 1. Launch (bundled sidecar; no PATH setup needed since Sprint P)
 Start-Process .\target\release\weaver-desktop.exe
 
 # Wait for the loading screen → cockpit transition (host startup budget is 20 s;
@@ -144,23 +144,19 @@ GET /static/htmx.min.js HTTP/1.1" 200 OK
 
 ---
 
-## Sidecar bundling plan
+## Sidecar bundling
 
-**Current (Sprint O): PATH dependency.**
-The desktop shell assumes `weaver serve` is available on `PATH`. This is the same model as `cargo tauri dev` — the user installs Python + weaver once, then runs the desktop app anytime.
+**Shipped (Sprint P, ADR 016).** The FastAPI sidecar is bundled with the app: a
+PyInstaller onedir `weaver.exe` is staged through Tauri `bundle.externalBin`, and
+the Rust host resolves it in order `WEAVER_DESKTOP_SIDECAR` override → bundled
+sidecar → bare `weaver` on `PATH` (dev/diagnostics fallback). A packaged launch
+needs **no external `weaver` on `PATH`**. The decision, options analysis, sizes,
+and rollback live in [ADR 016](decisions/016-bundled-python-sidecar.md); the build
+tooling is `desktop/scripts/build-sidecar.ps1` + `desktop/sidecar/weaver-sidecar.spec`.
 
-**Future options evaluated for a single-file distributable:**
-
-| Approach | Size | Startup | Complexity | Verdict |
-|---|---|---|---|---|
-| **PyInstaller** `.exe` | ~25–40 MB | Slow (unpack to temp) | Low | **Recommended next step** — standard Python→exe tool; bundle as Tauri sidecar |
-| **uv portable venv** | ~60–100 MB | Medium | Medium | Create `uv venv` + `uv pip install` into a folder; Tauri launches `.venv\Scripts\weaver.exe` |
-| **PyOxidizer** | ~15–25 MB | Fast | High | Complex; may fail on compiled extensions (sqlite3, lxml); overkill for a developer tool |
-| **PATH dependency** (current) | 0 | Fast | None | Fine for developer audience; poor for end-user distribution |
-
-**Recommendation:** Land PyInstaller first — it is the industry standard for packaging Python CLI tools into distributable `.exe` files. The resulting `weaver.exe` becomes a Tauri-managed sidecar binary (`tauri.conf.json` `bundle.externalBin`), producing a single installer that contains both the shell and the backend.
-
-**Blocker for PyInstaller:** Requires a separate build step and CI integration; not in Sprint O scope.
+Deferred to the Desktop Installer & Release Hardening sprint: `nsis`/`msi`
+installer, code signing, auto-update, upgrade testing. onefile/size optimization
+is a later backlog item. See CLAUDE.md §2.1 / §2.1.1.
 
 ---
 
@@ -192,10 +188,13 @@ Run `cargo update` from `desktop/` to re-resolve versions after any `Cargo.toml`
 
 ### Sidecar not found on launch
 
-The app resolves `weaver` via `PATH`. Ensure the venv Scripts directory is on PATH before launch:
+A packaged build bundles `weaver.exe` beside the shell, so this should not happen.
+The resolver order is `WEAVER_DESKTOP_SIDECAR` override → bundled sidecar → bare
+`weaver` on `PATH`. If you run an unbundled/dev build, either point the override
+at a `weaver` binary or put one on `PATH`:
 
 ```powershell
-$env:PATH = "D:\DevSpace\Projects\weaver\.venv\Scripts;$env:PATH"
+$env:WEAVER_DESKTOP_SIDECAR = "C:\path\to\weaver.exe"
 .\weaver-desktop.exe
 ```
 

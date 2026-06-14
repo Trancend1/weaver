@@ -83,7 +83,7 @@ cross-project hubs: queue/resources/providers/exports (read-only index paths)
 
 ## Desktop Surface
 - Windows WebView2 shell launches FastAPI sidecar, injects `X-Weaver-Session`, and shows crash screen with console tail/log path if backend start fails.
-- App data/logs live under `%APPDATA%\Weaver\`; Python backend must still be on PATH in Sprint O baseline.
+- App data/logs live under `%APPDATA%\Weaver\`; Sprint P bundles the FastAPI sidecar (PyInstaller onedir via Tauri `externalBin`), so packaged launches no longer require `weaver` on PATH.
 
 ## Test Pins
 - `tests/unit/api/test_ui_shell.py`, `test_ui_layout.py`, `test_ui_qa.py`, `test_ui_delete.py` pin user-facing strings + layout markers.
