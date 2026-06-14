@@ -77,7 +77,8 @@ otherwise `weaver` is resolved from `PATH`.
    `cargo tree -p webview2-com -p windows` and adjust the pins; a mismatch is
    the usual first-compile error in `src/webview_session.rs`.
 4. **Generate icons (only for packaging)** — `cargo tauri icon <logo.png>`.
-   `bundle.active` is `false` until Sprint O, so dev runs don't need them.
+   `bundle.active` is `true` in `tauri.conf.json` (Sprint O packaging is enabled),
+   but `cargo tauri dev` does not build the bundle, so dev runs don't need icons.
 5. **Install the Tauri CLI** — `cargo install tauri-cli --version "^2"`.
 
 ## Run (after toolchain install)

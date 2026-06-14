@@ -32,7 +32,8 @@
 > the previously-`UNVERIFIED` Windows crate pins resolve exactly as declared in
 > `Cargo.toml`. The remaining condition is the manual runtime launch in §4,
 > which needs a real desktop (GUI) session and `weaver` on `PATH` — it cannot be
-> driven from a headless/automation context.
+> driven from a headless/automation context. The signed-off gate report is
+> [`superpowers/handoffs/2026-06-14-q2f-sidecar-readiness-gate.md`](superpowers/handoffs/2026-06-14-q2f-sidecar-readiness-gate.md).
 
 ---
 
