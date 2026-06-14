@@ -24,6 +24,8 @@
     </label>
     <span class="hint meta"><strong>project</strong> saves to this project's <code>project.toml</code>;
       <strong>global</strong> sets the default used by new projects.</span>
+    <span class="hint meta">Legacy aliases remain supported: deepseek, gemini, ollama, fake.</span>
+    <span class="hint meta">Custom provider types must set an explicit protocol. openai_chat requires base_url, api_key_env, and model.</span>
     <label>Provider type / engine
       <input name="provider_type" value="{{ view.provider_type or 'custom' }}" placeholder="custom">
     </label>

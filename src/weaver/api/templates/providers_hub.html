@@ -8,7 +8,7 @@
   {% set page_meta = providers.degraded | length ~ " degraded · " ~ providers.projects | length ~ " projects · " ~ total_in ~ " in / " ~ total_out ~ " out tokens" %}
   {% set page_crumbs = [{"label": "Dashboard", "href": "/ui"}, {"label": "Providers"}] %}
   {% set page_actions %}
-    <span class="hint">Read-only routing view · edit provider/model + secrets below.</span>
+    <span class="hint">/ui/providers is the canonical provider config page. /ui/config is compatibility-only and redirects here.</span>
   {% endset %}
   {% include "partials/_page_header.html" %}
 
@@ -30,6 +30,7 @@
 
   {% if providers.projects %}
   <div class="panel c-panel providers-projects">
+    <p class="meta">Health checks run only when you press Check. This page does not call providers on load.</p>
     <table class="providers-table">
       <thead>
         <tr>
@@ -105,7 +106,7 @@
 
   <section id="config-editor" class="panel c-panel">
     <h2 class="panel__title">Provider / model</h2>
-    <p class="meta">Global defaults and optional per-project provider overrides. No hidden default provider — set provider, model, API-key env name, and base URL here.</p>
+    <p class="meta">Global defaults and optional per-project provider overrides. No hidden default provider; set provider, protocol, model, API-key env name, and base URL here.</p>
     <form class="inline-form form-row" method="get" action="/ui/providers">
       <label>Project
         <select name="project">

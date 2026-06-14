@@ -329,10 +329,26 @@ def test_providers_hub_renders_config_editor(providers_client: TestClient) -> No
     assert 'name="provider_type"' in html
     assert 'name="protocol"' in html
     assert '<select name="provider_type"' not in html
-    # the editor posts to the consolidated endpoint, not the removed /ui/config
+    # the editor posts to the canonical endpoint, not the legacy /ui/config route
     assert 'hx-post="/ui/providers/config"' in html
     assert 'hx-post="/ui/providers/secrets"' in html
-    assert "/ui/config" not in html
+    assert 'href="/ui/config' not in html
+    assert 'action="/ui/config' not in html
+    assert 'hx-post="/ui/config' not in html
+
+
+def test_providers_hub_explains_canonical_config_surface(
+    providers_client: TestClient,
+) -> None:
+    html = providers_client.get("/ui/providers").text
+    assert "/ui/providers is the canonical provider config page." in html
+    assert "/ui/config is compatibility-only and redirects here." in html
+    assert "Legacy aliases remain supported: deepseek, gemini, ollama, fake." in html
+    assert "Custom provider types must set an explicit protocol." in html
+    assert "openai_chat requires base_url, api_key_env, and model." in html
+    assert "Health checks run only when you press Check." in html
+    assert "This page does not call providers on load." in html
+    assert "Secret values are stored but never rendered." in html
 
 
 def test_providers_hub_project_param_loads_project_config(providers_client: TestClient) -> None:
