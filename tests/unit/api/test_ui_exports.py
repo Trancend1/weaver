@@ -177,6 +177,55 @@ def test_route_export_records_ledger_row(tmp_path: Path) -> None:
     assert "succeeded" in history
 
 
+def test_completed_export_job_links_to_history(tmp_path: Path) -> None:
+    initialize_project(_epub(), cwd=tmp_path, project_name="alpha")
+    client = TestClient(create_api_app(tmp_path))
+    resp = client.post("/projects/alpha/export/novel", json={"target": "epub", "kind": "draft"})
+    assert resp.status_code == 202
+    job_id = resp.json()["job_id"]
+    job = client.app.state.jobs.get_export(job_id)  # type: ignore[attr-defined]
+    assert job is not None
+    job.wait(timeout=15)
+
+    panel = client.get(f"/ui/projects/alpha/export/jobs/{job_id}")
+    assert panel.status_code == 200
+    body = panel.text
+    assert "View export history" in body
+    assert 'href="/ui/projects/alpha/exports"' in body
+
+
+@pytest.mark.parametrize("status", ["running", "failed", "cancelled"])
+def test_non_done_export_job_has_no_history_next_action(status: str) -> None:
+    # Only a completed export offers the "view history" next action; running,
+    # failed, and cancelled states must not imply completion.
+    from types import SimpleNamespace
+
+    from weaver.api.templating import templates
+
+    result = SimpleNamespace(
+        volumes_exported=0,
+        volumes_total=1,
+        translated_segments=0,
+        fallback_segments=0,
+        artifacts=[],
+        bundle_path=None,
+        fidelity_reports=[],
+    )
+    job = SimpleNamespace(
+        id="j1",
+        target="epub",
+        status=status,
+        scope="novel",
+        error="boom",
+        result=None if status in ("running", "failed") else result,
+    )
+    progress = SimpleNamespace(volumes_done=0, volumes_total=1, current_volume_title=None)
+    html = templates.get_template("partials/_export_job.html").render(
+        job=job, progress=progress, name="alpha"
+    )
+    assert "View export history" not in html
+
+
 # --- degraded + structural --------------------------------------------------
 
 

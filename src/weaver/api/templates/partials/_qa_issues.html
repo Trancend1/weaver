@@ -26,6 +26,8 @@
       </tbody>
     </table>
   </div>
+  {% elif severity or category %}
+  <div class="empty"><p>No matching issues — filters are hiding any issues in this report.</p></div>
   {% else %}
   <div class="empty"><p>No quality issues found.</p></div>
   {% endif %}

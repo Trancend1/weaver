@@ -13,7 +13,7 @@
   {% set progress_pct = (workflow_done * 100 / ws.segment_count) if ws.segment_count else 0 %}
   {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ ws.project_name, "label": ws.project_name}, {"href": none, "label": ws.volume_title}, {"href": none, "label": ws.chapter_title or "Chapter"}] %}
   {% set page_title = ws.chapter_title or "Chapter" %}
-  {% set page_meta %}{{ ws.segment_count }} segments · {{ workflow_done }} ready · {{ counts.pending }} pending{% endset %}
+  {% set page_meta %}{{ ws.segment_count }} segments · {{ workflow_done }} translated/manual · {{ counts.pending }} pending{% endset %}
   {% set page_actions %}
     <a class="btn btn--secondary" href="/ui/projects/{{ ws.project_name }}/export/preflight">Export / preflight</a>
   {% endset %}
@@ -21,7 +21,8 @@
 
   <div class="workspace-progress" aria-label="Chapter progress">
     <div class="workspace-progress__bar"><span style="width: {{ '%.1f'|format(progress_pct) }}%"></span></div>
-    <p>{{ '%.0f'|format(progress_pct) }}% ready · manual edits are protected unless force retranslate is chosen.</p>
+    <p>{{ '%.0f'|format(progress_pct) }}% translated · manual edits are protected unless force retranslate is chosen.</p>
+    <p class="meta">Counts translated/manual segments only — not review approval or export readiness. Final export readiness also depends on QA/preflight. Review status is tracked separately.</p>
   </div>
 
   <div class="workspace-summary" role="group" aria-label="Filter segments by status">

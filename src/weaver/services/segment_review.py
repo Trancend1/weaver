@@ -15,7 +15,7 @@ from typing import Literal
 
 from weaver.errors import SegmentNotFoundError, WeaverError
 from weaver.services.project_paths import resolve_database_path
-from weaver.storage.db import connect_database, transaction
+from weaver.storage.db import connect_database, connect_readonly_database, transaction
 
 ReviewStatus = Literal[
     "not_reviewed",
@@ -141,7 +141,10 @@ def list_review_queue(
     """
 
     db_path = resolve_database_path(project_toml, cwd=cwd)
-    with closing(connect_database(db_path)) as connection:
+    # Read-only render path: the queue is a pure read, so it must not open a
+    # write-capable connection (no migrations, no WAL writer). Review writes go
+    # through ``set_segment_review_status`` instead.
+    with closing(connect_readonly_database(db_path)) as connection:
         clauses = "c.volume_id = ?"
         params: list[object] = [volume_id]
         if status_filter and status_filter in _REVIEW_STATUSES:

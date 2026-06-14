@@ -76,8 +76,12 @@
       </tbody>
     </table>
   </div>
+  {% elif reviewable_count == 0 %}
+  <div class="empty"><p>Nothing ready for review yet. Translate or save segments first.</p></div>
+  {% elif unhandled_count == 0 %}
+  <div class="empty"><p>All reviewable segments are handled.</p></div>
   {% else %}
-  <div class="empty"><p>No segments match the current filter.</p></div>
+  <div class="empty"><p>No segments match this review filter.</p></div>
   {% endif %}
 </section>
 

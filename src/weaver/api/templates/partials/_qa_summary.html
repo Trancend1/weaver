@@ -22,7 +22,7 @@
     <span class="meta">{{ report.total_issues }} issue{{ "" if report.total_issues == 1 else "s" }} found across {{ report.total_segments }} segment{{ "" if report.total_segments == 1 else "s" }}.</span>
   </p>
   {% if report.badge != "clean" %}
-  <p class="hint">Advisory only — export is never blocked. Segments with issues fall back to their source text.</p>
+  <p class="hint">Advisory only — Draft export is never blocked, and segments with issues fall back to their source text. Final export may be gated by critical QA when "require clean" is enabled.</p>
   {% endif %}
 
   {% if report.summary_by_volume %}
