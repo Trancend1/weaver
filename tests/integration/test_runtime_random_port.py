@@ -205,9 +205,7 @@ def sidecar_desktop_server(
 class TestDesktopStartupContract:
     """Verify the full desktop-mode startup contract (SIDECAR_CONTRACT.md §1-3)."""
 
-    def test_runtime_status_reports_desktop_env(
-        self, sidecar_desktop_server: str
-    ) -> None:
+    def test_runtime_status_reports_desktop_env(self, sidecar_desktop_server: str) -> None:
         """/runtime/status must report env=desktop when WEAVER_ENV=desktop."""
         response = httpx.get(
             f"{sidecar_desktop_server}/runtime/status",
@@ -232,9 +230,7 @@ class TestDesktopStartupContract:
         assert body["host"] == "127.0.0.1"
         assert body["port"] == port
 
-    def test_runtime_status_reports_isolated_paths(
-        self, sidecar_desktop_server: str
-    ) -> None:
+    def test_runtime_status_reports_isolated_paths(self, sidecar_desktop_server: str) -> None:
         """/runtime/status must report isolated app_data_dir, logs_dir, books_dir."""
         response = httpx.get(
             f"{sidecar_desktop_server}/runtime/status",
@@ -247,9 +243,7 @@ class TestDesktopStartupContract:
         assert body["logs_dir"].endswith("logs")
         assert body["books_dir"]
 
-    def test_docs_disabled_in_desktop_mode(
-        self, sidecar_desktop_server: str
-    ) -> None:
+    def test_docs_disabled_in_desktop_mode(self, sidecar_desktop_server: str) -> None:
         """/docs, /redoc, /openapi.json must not be served in desktop mode.
 
         Without a token the middleware returns 401 (docs are not in
@@ -258,9 +252,7 @@ class TestDesktopStartupContract:
         Both prove docs are off — the key assertion is none returns 200.
         """
         for path in ("/docs", "/redoc", "/openapi.json"):
-            no_token = httpx.get(
-                f"{sidecar_desktop_server}{path}", timeout=2.0
-            )
+            no_token = httpx.get(f"{sidecar_desktop_server}{path}", timeout=2.0)
             assert no_token.status_code in (401, 404), (
                 f"{path} returned {no_token.status_code} without token"
             )
@@ -273,23 +265,15 @@ class TestDesktopStartupContract:
                 f"{path} returned {with_token.status_code} with token"
             )
 
-    def test_protected_routes_reject_missing_token(
-        self, sidecar_desktop_server: str
-    ) -> None:
+    def test_protected_routes_reject_missing_token(self, sidecar_desktop_server: str) -> None:
         """/ui and /runtime/status must 401 without X-Weaver-Session."""
-        ui_resp = httpx.get(
-            f"{sidecar_desktop_server}/ui", timeout=2.0, follow_redirects=False
-        )
+        ui_resp = httpx.get(f"{sidecar_desktop_server}/ui", timeout=2.0, follow_redirects=False)
         assert ui_resp.status_code == 401
 
-        status_resp = httpx.get(
-            f"{sidecar_desktop_server}/runtime/status", timeout=2.0
-        )
+        status_resp = httpx.get(f"{sidecar_desktop_server}/runtime/status", timeout=2.0)
         assert status_resp.status_code == 401
 
-    def test_protected_routes_work_with_correct_token(
-        self, sidecar_desktop_server: str
-    ) -> None:
+    def test_protected_routes_work_with_correct_token(self, sidecar_desktop_server: str) -> None:
         """/ui and /runtime/status must 200 with correct X-Weaver-Session."""
         ui_resp = httpx.get(
             f"{sidecar_desktop_server}/ui",
@@ -305,14 +289,10 @@ class TestDesktopStartupContract:
         )
         assert status_resp.status_code == 200
 
-    def test_public_routes_do_not_require_token(
-        self, sidecar_desktop_server: str
-    ) -> None:
+    def test_public_routes_do_not_require_token(self, sidecar_desktop_server: str) -> None:
         """/healthz, /health, /version must work without token in desktop mode."""
         for path in ("/healthz", "/health", "/version"):
-            response = httpx.get(
-                f"{sidecar_desktop_server}{path}", timeout=2.0
-            )
+            response = httpx.get(f"{sidecar_desktop_server}{path}", timeout=2.0)
             assert response.status_code == 200, (
                 f"{path} should be public but returned {response.status_code}"
             )
@@ -438,21 +418,15 @@ class TestTokenProtectedEndpoints:
 class TestRenderedUiNoHardcodedPort:
     """Verify rendered /ui HTML contains no hardcoded default port (8765)."""
 
-    def test_rendered_ui_does_not_contain_default_port(
-        self, sidecar_server: str
-    ) -> None:
+    def test_rendered_ui_does_not_contain_default_port(self, sidecar_server: str) -> None:
         """The /ui page rendered on a random port must not mention :8765."""
         response = httpx.get(f"{sidecar_server}/ui", timeout=2.0)
         assert response.status_code == 200
         text = response.text
         # The default port (8765) appearing in rendered HTML would mean a
         # template or service string-baked it — a sidecar contract violation.
-        assert ":8765" not in text, (
-            "rendered /ui contains hardcoded default port"
-        )
-        assert "127.0.0.1:8765" not in text, (
-            "rendered /ui contains hardcoded 127.0.0.1:8765"
-        )
+        assert ":8765" not in text, "rendered /ui contains hardcoded default port"
+        assert "127.0.0.1:8765" not in text, "rendered /ui contains hardcoded 127.0.0.1:8765"
 
 
 def test_no_template_uses_hardcoded_loopback_url() -> None:
@@ -467,9 +441,7 @@ def test_no_template_uses_hardcoded_loopback_url() -> None:
         for line_no, line in enumerate(text.splitlines(), start=1):
             if "127.0.0.1" in line:
                 offenders.append(f"{template.name}:{line_no}: {line.strip()}")
-    assert offenders == [], (
-        "hardcoded 127.0.0.1 in template(s):\n" + "\n".join(offenders)
-    )
+    assert offenders == [], "hardcoded 127.0.0.1 in template(s):\n" + "\n".join(offenders)
 
 
 def test_no_template_uses_absolute_http_url_in_hx_attrs() -> None:

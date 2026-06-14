@@ -133,9 +133,7 @@ def test_serve_exits_65_when_port_in_use(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setitem(sys.modules, "uvicorn", _make_fake_uvicorn(_fail_with_addrinuse))
 
-    result = runner.invoke(
-        cli_app, ["serve", "--no-browser", "--port", "9998"]
-    )
+    result = runner.invoke(cli_app, ["serve", "--no-browser", "--port", "9998"])
     assert result.exit_code == 65, result.output
     output = result.output + (result.stderr or "")
     assert "already in use" in output.lower()
@@ -156,9 +154,7 @@ def test_serve_stdout_summary_line_contains_host_and_port(
     """
     monkeypatch.setitem(sys.modules, "uvicorn", _make_fake_uvicorn())
 
-    result = runner.invoke(
-        cli_app, ["serve", "--no-browser", "--port", "8765"]
-    )
+    result = runner.invoke(cli_app, ["serve", "--no-browser", "--port", "8765"])
     assert result.exit_code == 0, result.output
     # Required contract elements in the summary (§4, SIDECAR_CONTRACT.md).
     assert "Weaver cockpit (FastAPI UI) on http://127.0.0.1:8765" in result.output
