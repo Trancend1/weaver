@@ -33,6 +33,8 @@ from weaver.storage.db import connect_readonly_database
 
 router = APIRouter(tags=["ui"], include_in_schema=False)
 
+_UNHANDLED_REVIEW = frozenset({"not_reviewed", "needs_review", "needs_revision"})
+
 
 # --- reading preview (Sprint P2 — WV-002) ------------------------------------
 
@@ -217,6 +219,20 @@ def ui_review_queue(
         )
     except WeaverError as exc:
         return _import_error(request, str(exc))
+    # Reviewable = segments that actually carry a translation or were entered
+    # manually. These counts drive an informative empty state (translation-aware),
+    # without changing the filtered queue the user sees.
+    full_queue = (
+        queue
+        if not status_filter
+        else list_review_queue(dp.project_toml, volume_id, status_filter=None, cwd=base)
+    )
+    reviewable = [
+        item
+        for item in full_queue
+        if item.translation is not None or item.translation_status == "manual"
+    ]
+    unhandled_count = sum(1 for item in reviewable if item.review_status in _UNHANDLED_REVIEW)
     return templates.TemplateResponse(
         request,
         "review_queue.html",
@@ -226,5 +242,7 @@ def ui_review_queue(
             "volume_id": volume_id,
             "status_filter": status_filter,
             "queue": queue,
+            "reviewable_count": len(reviewable),
+            "unhandled_count": unhandled_count,
         },
     )
