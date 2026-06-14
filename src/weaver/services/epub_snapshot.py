@@ -77,6 +77,79 @@ def compute_source_hash(path: Path) -> str:
     return hasher.hexdigest()
 
 
+def _write_snapshot(
+    connection: sqlite3.Connection,
+    volume_id: int,
+    parsed: ParsedEpub,
+    source_hash: str,
+    parser_version: int,
+    package_path: str,
+    metadata_json: str,
+    preservation_json: str,
+    now: str,
+) -> None:
+    existing = connection.execute(
+        "SELECT created_at FROM epub_snapshots WHERE volume_id = ?",
+        (volume_id,),
+    ).fetchone()
+    created_at = str(existing["created_at"]) if existing else now
+    _delete_snapshot_rows(connection, volume_id)
+    connection.execute(
+        """
+            INSERT INTO epub_snapshots (
+                volume_id, source_hash, parser_version, package_path,
+                opf_path, spine_toc, page_progression_direction,
+                metadata_json, preservation_context_json,
+                created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+        (
+            volume_id,
+            source_hash,
+            parser_version,
+            package_path,
+            parsed.opf_path,
+            parsed.spine_toc,
+            parsed.page_progression_direction,
+            metadata_json,
+            preservation_json,
+            created_at,
+            now,
+        ),
+    )
+    _bulk_insert(
+        connection,
+        "epub_snapshot_manifest",
+        volume_id,
+        [asdict(item) for item in parsed.manifest],
+    )
+    _bulk_insert(
+        connection,
+        "epub_snapshot_spine",
+        volume_id,
+        [asdict(item) for item in parsed.spine],
+    )
+    _bulk_insert(
+        connection,
+        "epub_snapshot_navigation",
+        volume_id,
+        [_nav_to_dict(node) for node in parsed.navigation],
+    )
+    _bulk_insert(
+        connection,
+        "epub_snapshot_images",
+        volume_id,
+        [asdict(item) for item in parsed.images],
+    )
+    _bulk_insert(
+        connection,
+        "epub_snapshot_validation",
+        volume_id,
+        [asdict(issue) for issue in parsed.validation_issues],
+    )
+
+
 def store_snapshot(
     db_path: Path,
     *,
@@ -84,79 +157,33 @@ def store_snapshot(
     parsed: ParsedEpub,
     source_hash: str,
     parser_version: int = PARSER_VERSION,
+    connection: sqlite3.Connection | None = None,
 ) -> None:
     """Persist a fresh ParsedEpub against ``volume_id``.
 
     Existing rows for the same volume are replaced atomically inside one
     transaction so a partial write can never leave the snapshot tables in a
     mixed-version state.
+
+    When *connection* is provided the caller manages the connection and
+    transaction lifecycle (used by ``import_source`` so snapshot writes
+    share the same transaction as volume/chapter/segment creation).
+    Otherwise a new connection is opened and the snapshot write runs in
+    its own transaction (reparse path).
     """
     now = datetime.now(UTC).isoformat()
     metadata_json = json.dumps(asdict(parsed.metadata), ensure_ascii=False)
     preservation_json = json.dumps(asdict(parsed.preservation_context), ensure_ascii=False)
     package_path = str(parsed.package_path)
 
-    with closing(connect_database(db_path)) as connection, transaction(connection):
-        existing = connection.execute(
-            "SELECT created_at FROM epub_snapshots WHERE volume_id = ?",
-            (volume_id,),
-        ).fetchone()
-        created_at = str(existing["created_at"]) if existing else now
-        _delete_snapshot_rows(connection, volume_id)
-        connection.execute(
-            """
-                INSERT INTO epub_snapshots (
-                    volume_id, source_hash, parser_version, package_path,
-                    opf_path, spine_toc, page_progression_direction,
-                    metadata_json, preservation_context_json,
-                    created_at, updated_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-            (
-                volume_id,
-                source_hash,
-                parser_version,
-                package_path,
-                parsed.opf_path,
-                parsed.spine_toc,
-                parsed.page_progression_direction,
-                metadata_json,
-                preservation_json,
-                created_at,
-                now,
-            ),
-        )
-        _bulk_insert(
-            connection,
-            "epub_snapshot_manifest",
-            volume_id,
-            [asdict(item) for item in parsed.manifest],
-        )
-        _bulk_insert(
-            connection,
-            "epub_snapshot_spine",
-            volume_id,
-            [asdict(item) for item in parsed.spine],
-        )
-        _bulk_insert(
-            connection,
-            "epub_snapshot_navigation",
-            volume_id,
-            [_nav_to_dict(node) for node in parsed.navigation],
-        )
-        _bulk_insert(
-            connection,
-            "epub_snapshot_images",
-            volume_id,
-            [asdict(item) for item in parsed.images],
-        )
-        _bulk_insert(
-            connection,
-            "epub_snapshot_validation",
-            volume_id,
-            [asdict(issue) for issue in parsed.validation_issues],
-        )
+    if connection is not None:
+        _write_snapshot(connection, volume_id, parsed, source_hash, parser_version,
+                        package_path, metadata_json, preservation_json, now)
+        return
+
+    with closing(connect_database(db_path)) as conn, transaction(conn):
+        _write_snapshot(conn, volume_id, parsed, source_hash, parser_version,
+                        package_path, metadata_json, preservation_json, now)
 
 
 def read_snapshot(db_path: Path, volume_id: int) -> ParsedEpub | None:
