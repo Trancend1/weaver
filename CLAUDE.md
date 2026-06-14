@@ -14,7 +14,7 @@ Offline-capable, glossary-aware **JP→EN light-novel translation workbench** wi
 
 > **Current Objective:** Sprint P closed the external PATH-sidecar dependency. Next is release-grade hardening (signing + installer), tracked as a separate sprint.
 >
-> **Current Sprint:** Sprint P — Bundled Sidecar / Standalone Desktop Alpha (PASS). Next step: open **Sprint R — Desktop Release Hardening** (Windows `nsis`/`msi` installer + signing); see §2.1 / §2.1.1.
+> **Current Sprint:** Sprint P — Bundled Sidecar / Standalone Desktop Alpha (PASS). Next step: open the **Desktop Installer & Release Hardening** sprint (Windows `nsis`/`msi` installer + code signing + auto-update + upgrade testing); see §2.1 / §2.1.1.
 
 
 ---
@@ -54,9 +54,9 @@ Current status: **active phase defined in §2.3**.
 | **Sprint N — Desktop Runtime Validation** | ✅ Done | `cargo tauri dev` smoke green — N1–N6 (window, transition, no-401, no-orphan, logs, crash screen) |
 | **Sprint O — Desktop Packaging / Installer Alpha** | 🟡 PASS-WITH-CONDITIONS | Packaged `weaver-desktop.exe` (3.1 MB) builds + runs (O-V1–O-V7); condition: external PATH sidecar; signing/auto-update/installer-final deferred |
 | **Sprint P — Bundled Sidecar / Standalone Desktop Alpha** | ✅ PASS | P1–P6 done; packaged app launches PATH-free, `/healthz`+`/ui` 200 (no 401), logs, crash screen, no orphan (WM_CLOSE + owner-confirmed native X-close 2026-06-14); `HEALTH_BUDGET` 5→20 s for PyInstaller cold start; signing/auto-update/installer/cross-platform deferred (not blockers) |
-| **Sprint R — Desktop Release Hardening (Windows)** | 🔜 Next | Add Tauri `nsis`/`msi` installer target, code signing, and exit-66 data-dir handling; produce a public, installable Windows build. Requires a fresh plan + ADR (packaging-shape change). See §2.1.1. |
-| **Sprint S — Cross-Platform Desktop (macOS/Linux)** | 📋 Planned | Implement WKWebView (macOS) + WebKitGTK (Linux) session-header injection and POSIX graceful shutdown (SIGTERM), plus per-OS bundled sidecar. See §2.1.1. |
-| **Sprint T — Desktop Size / Startup Optimization** | 📋 Backlog | Evaluate onedir→onefile or payload trim and cold-start budget tuning, only after Sprint R ships and with evidence. See §2.1.1. |
+| **Desktop Installer & Release Hardening** | 🔜 Next | Tauri `nsis`/`msi` installer, code signing, auto-update, and upgrade testing (plus exit-66 data-dir handling); produces a public, installable, signed Windows build. Requires a fresh plan + ADR (packaging-shape change). See §2.1.1. |
+| **Cross-Platform Desktop (macOS/Linux)** | 📋 Planned | WKWebView (macOS) + WebKitGTK (Linux) session-header injection and POSIX graceful shutdown (SIGTERM), plus per-OS bundled sidecar. See §2.1.1. |
+| **Desktop Optimization** | 📋 Backlog | onedir→onefile or payload trim and cold-start budget tuning, only after the installer ships and with evidence. See §2.1.1. |
 
 Legend: ✅ complete · 🟡 pass-with-conditions · 🔜 next · 📋 planned/backlog · ⏭️ blocked · 🚫 deferred
 
@@ -74,15 +74,35 @@ When starting a new sprint or phase:
 
 Evidence-linked carry-forward. These are proposals, not active scope: each needs its own plan (and an ADR where it changes packaging shape, the stack, or a contract) before implementation. Do not scaffold ahead of a plan.
 
+> Naming: forward sprints use **descriptive names, not alphabet letters**. Completed sprints keep their historical labels (Sprint N/O/P, Q2x) only because handoff filenames, ADRs, and git history already reference them.
+
+**Desktop track pipeline:**
+
+```text
+Packaging Alpha                ✅ done   (was Sprint O)
+   ↓
+Bundled Sidecar                ✅ done   (was Sprint P)
+   ↓
+Installer & Release Hardening  🔜 next
+   • Windows installer (nsis/msi)
+   • Code signing
+   • Auto-update
+   • Upgrade testing
+   ↓
+Cross-Platform Desktop         📋 planned   (macOS / Linux)
+   ↓
+Desktop Optimization           📋 backlog
+```
+
 **Desktop (carried out of Sprint N/O/P):**
 
 | Item | Source of truth | Proposed sprint |
 |---|---|---|
-| Windows installer (`nsis`/`msi`), code signing, optional auto-update | ADR 016 (deferred); `desktop/tauri.conf.json` `targets:["app"]` only | **Sprint R** |
-| Exit code `66` data-dir error implementation | `docs/SIDECAR_CONTRACT.md` §5 (reserved) → `services/app_paths.ensure_runtime_dirs` | Sprint R (small hardening) |
-| macOS WKWebView + Linux WebKitGTK session-header injection | `desktop/src/webview_session.rs` (`#[cfg(not(windows))]` no-op) | **Sprint S** |
-| POSIX graceful shutdown (SIGTERM before SIGKILL) | `desktop/src/sidecar.rs` (`kill()` SIGKILL-only on non-Windows) | Sprint S |
-| onedir→onefile / payload-size + cold-start tuning | ADR 016 ("onefile remains a future optimization") | Sprint T |
+| Windows installer (`nsis`/`msi`), code signing, auto-update, upgrade testing | ADR 016 (deferred); `desktop/tauri.conf.json` `targets:["app"]` only | **Installer & Release Hardening** |
+| Exit code `66` data-dir error implementation | `docs/SIDECAR_CONTRACT.md` §5 (reserved) → `services/app_paths.ensure_runtime_dirs` | Installer & Release Hardening (minor) |
+| macOS WKWebView + Linux WebKitGTK session-header injection | `desktop/src/webview_session.rs` (`#[cfg(not(windows))]` no-op) | **Cross-Platform Desktop** |
+| POSIX graceful shutdown (SIGTERM before SIGKILL) | `desktop/src/sidecar.rs` (`kill()` SIGKILL-only on non-Windows) | Cross-Platform Desktop |
+| onedir→onefile / payload-size + cold-start tuning | ADR 016 ("onefile remains a future optimization") | Desktop Optimization |
 
 **Product / feature backlog (deferred by their ADRs, no owner schedule yet):**
 
@@ -95,7 +115,7 @@ Evidence-linked carry-forward. These are proposals, not active scope: each needs
 
 **Permanently out of scope unless an ADR reopens (CLAUDE.md §3.4/§3.5):** new provider families, route rewrites, SPA migration, Node build pipeline, external queue/worker daemon, cloud sync, telemetry/phone-home, multi-user SaaS architecture.
 
-> Sequencing rule: ship **Sprint R** (public Windows installer) before Sprint S/T. Cross-platform and size optimization are lower priority than a signed, installable Windows build, which is the nearest user-facing gap after Sprint P.
+> Sequencing rule: ship **Installer & Release Hardening** (public, signed Windows installer) before Cross-Platform Desktop and Desktop Optimization. Those two are lower priority than a signed, installable Windows build, which is the nearest user-facing gap after the bundled sidecar.
 
 ### 2.2 Reusable Phase Gate
 
@@ -113,7 +133,7 @@ Before starting any new sprint, phase, or stage:
 
 ### 2.3 Active Phase — Sprint P complete (✅ PASS)
 
-**Track(s) active:** None active — Sprint P P1–P6 closed under ADR 016, **PASS** (owner human-close confirmed 2026-06-14). Q2F + Sprint N + Sprint O also closed. Next is **Sprint R — Desktop Release Hardening** (Windows `nsis`/`msi` installer + signing); open it with a fresh plan + ADR before further packaging work. Full backlog in §2.1.1.
+**Track(s) active:** None active — Sprint P P1–P6 closed under ADR 016, **PASS** (owner human-close confirmed 2026-06-14). Q2F + Sprint N + Sprint O also closed. Next is the **Desktop Installer & Release Hardening** sprint (Windows `nsis`/`msi` installer + code signing + auto-update + upgrade testing); open it with a fresh plan + ADR before further packaging work. Full backlog in §2.1.1.
 
 **Status: ✅ Sprint P PASS** — the packaged Windows alpha is self-contained. Bundled PyInstaller onedir sidecar staged via Tauri `bundle.externalBin`; resolver order per ADR 016: `WEAVER_DESKTOP_SIDECAR` override → bundled sidecar → PATH `weaver` fallback. Packaged PATH-free launch returns `/healthz` 200 then `/ui` 200 (no 401 loop), generates logs in `%APPDATA%\Weaver\logs`, shows the crash screen on forced failure, and leaves no orphan after WM_CLOSE and the owner-confirmed native X-button close.
 
