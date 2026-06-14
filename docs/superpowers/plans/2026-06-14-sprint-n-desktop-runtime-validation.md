@@ -16,7 +16,7 @@ one open condition is the **interactive runtime smoke**: `cargo tauri dev` has
 never spawned the real sidecar, opened the native WebView, and exercised the
 no-orphan shutdown. Sprint N executes
 [`DESKTOP_SMOKE_CHECKLIST.md` §4](../../DESKTOP_SMOKE_CHECKLIST.md#4-runtime-launch-smoke--cargo-tauri-dev)
-on a real Windows desktop, captures evidence for N1–N5, and — if green — promotes
+on a real Windows desktop, captures evidence for N1–N6, and — if green — promotes
 Q2F from **PASS-WITH-CONDITIONS** to **PASS**.
 
 **Scope fence (non-goals):** no installer / NSIS, no code signing, no auto-update,
@@ -24,23 +24,25 @@ no bundled-Python sidecar, no cross-platform (macOS/Linux) work, no provider /
 translation / QA / export / schema / cockpit-UI change. This sprint only *observes
 and records* runtime behavior; it does not add features.
 
-**Execution constraint:** N1, N2 (transition), and N5 require a human watching the
-native window. N2 (HTTP codes), N3 (orphan check), and N4 (log files) can be
-verified programmatically from logs/processes. The split is called out per item.
+**Execution constraint:** N1 (window/loading), N2 (transition), and N6 (crash
+screen) require a human watching the native window. N3 (HTTP codes), N4 (orphan
+check), and N5 (log files) can be verified programmatically from logs/processes.
+The split is called out per item.
 
 ---
 
-## 2. Smoke test checklist N1–N5
+## 2. Smoke test checklist N1–N6
 
 | ID | Criterion | Contract | How verified | Observer |
 |---|---|---|---|---|
-| **N1** | Native window opens; loading screen transitions to cockpit `/ui` | §1 lifecycle | watch the window: `loading.html` paints, then cockpit renders | 👁 human |
-| **N2** | `/healthz 200` then `/ui 200`, **no 401 loop** | §1, §3 | tail `sidecar.console.log`: `GET /healthz 200` → `GET /ui 200`, zero `401` | 🤖 log / 👁 |
-| **N3** | Closing the window kills the sidecar — **no orphan** | §7 (graceful→force) | after close: `Get-Process` shows no `weaver`/`python`/`uvicorn` | 🤖 process |
-| **N4** | Both `runtime.log` **and** `sidecar.console.log` generated in `logs_dir` | §4 | `Get-ChildItem "$env:APPDATA\Weaver\logs\"` shows both | 🤖 file |
-| **N5** | Forced failure shows crash screen with **mapped exit code** | §4, §5 | remove `weaver` from PATH → relaunch → crash window shows exit code + ≤50 stderr lines | 👁 human |
+| **N1** | Native window opens and the loading screen appears | §1 lifecycle | watch the window: `loading.html` paints | 👁 human |
+| **N2** | Loading screen transitions to the cockpit `/ui` | §1 lifecycle | watch the window: cockpit renders after loading | 👁 human |
+| **N3** | No 401 loop; protected routes work via `X-Weaver-Session` | §1, §3 | tail `sidecar.console.log`: `GET /healthz 200` → `GET /ui 200`, zero `401` | 🤖 log |
+| **N4** | Closing the window kills the sidecar — **no orphan** | §7 (graceful→force) | after close: `Get-Process` shows no `weaver`/`python`/`uvicorn` | 🤖 process |
+| **N5** | Both `runtime.log` **and** `sidecar.console.log` generated in `logs_dir` | §4 | `Get-ChildItem "$env:APPDATA\Weaver\logs\"` shows both | 🤖 file |
+| **N6** | Forced startup failure shows crash screen with **mapped exit code** | §4, §5 | bad `WEAVER_DESKTOP_SIDECAR` → relaunch → crash window shows exit code + ≤50 stderr lines | 👁 human |
 
-Pass = all five green with captured evidence. Any red → §5 failure matrix → §6 fix policy.
+Pass = all six green with captured evidence. Any red → §5 failure matrix → §6 fix policy.
 
 ---
 
@@ -55,28 +57,28 @@ weaver --version            # expect: weaver 0.7.0
 cd D:\DevSpace\Projects\weaver\desktop
 ```
 
-**N1–N4 — happy path:**
+**N1–N5 — happy path:**
 
 ```powershell
 cargo tauri dev
-# WATCH: loading window → cockpit /ui transition (N1)
+# WATCH: native window + loading screen (N1) → cockpit /ui transition (N2)
 # …interact briefly, then CLOSE the window…
 ```
 
 After close, in a second shell:
 
 ```powershell
-# N2 — health then UI, no 401
+# N3 — health then UI, no 401
 Get-Content "$env:APPDATA\Weaver\logs\sidecar.console.log" -Tail 20
 
-# N3 — no orphan
+# N4 — no orphan
 Get-Process | Where-Object { $_.ProcessName -match "weaver|python|uvicorn" }   # → nothing
 
-# N4 — both logs present
+# N5 — both logs present
 Get-ChildItem "$env:APPDATA\Weaver\logs\" | Select-Object Name,Length
 ```
 
-**N5 — forced failure (crash screen):**
+**N6 — forced failure (crash screen):**
 
 ```powershell
 # In a shell WITHOUT weaver on PATH (or temporarily rename the venv weaver.exe):
@@ -94,12 +96,13 @@ Remove-Item Env:\WEAVER_DESKTOP_SIDECAR
 Record each in the Sprint N closure note (append to the Q2F gate report or a new
 handoff):
 
-- **N1:** screenshot or one-line confirmation "loading → cockpit transition seen".
-- **N2:** the `sidecar.console.log` tail showing `GET /healthz 200` → `GET /ui 200`
+- **N1:** screenshot or one-line confirmation "native window + loading screen seen".
+- **N2:** confirmation "loading → cockpit `/ui` transition seen".
+- **N3:** the `sidecar.console.log` tail showing `GET /healthz 200` → `GET /ui 200`
   with **no `401`** lines.
-- **N3:** the (empty) output of the `Get-Process` orphan check.
-- **N4:** the `Get-ChildItem` listing showing `runtime.log` + `sidecar.console.log`.
-- **N5:** screenshot/transcript of the crash window with the exit code + console tail.
+- **N4:** the (empty) output of the `Get-Process` orphan check.
+- **N5:** the `Get-ChildItem` listing showing `runtime.log` + `sidecar.console.log`.
+- **N6:** screenshot/transcript of the crash window with the exit code + console tail.
 - The exact `cargo tauri dev` first-build duration (informs N1 launch-time budget).
 
 ---
@@ -138,7 +141,7 @@ handoff):
 
 Sprint N is **Done** when:
 
-- [ ] N1–N5 all green with the §4 evidence captured.
+- [ ] N1–N6 all green with the §4 evidence captured.
 - [ ] First-build duration recorded; N1 launch feels acceptable (no hard budget,
       but note it).
 - [ ] No orphan processes in the happy-path **and** forced-failure runs.

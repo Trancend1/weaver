@@ -26,9 +26,14 @@
 | **A. Toolchain present** | rustc / cargo / tauri-cli / node installed | ✅ verified | §1 commands below |
 | **B. Compiles (`cargo check`)** | Rust host type-checks incl. Windows COM code | ✅ verified 2026-06-14 | `0 errors, 3 warnings` |
 | **C. Version pins resolve** | `webview2-com` / `windows` match what Tauri pulls | ✅ verified 2026-06-14 | `webview2-com 0.38.2`, `windows 0.61.3`, `tauri 2.11.2` |
-| **D. Runtime launch (`cargo tauri dev`)** | Real sidecar spawn → WebView → shutdown | ⬜ **pending** | requires an interactive desktop session (§4) |
+| **D. Runtime launch (`cargo tauri dev`)** | Real sidecar spawn → WebView → shutdown | ✅ owner-confirmed 2026-06-14 | N1–N6 passed (§4) |
 
-> **Gate reading:** **pass-with-conditions.** The shell now compiles cleanly and
+> **Gate reading (2026-06-14):** ✅ **PASS.** Stage D closed — the owner ran
+> `cargo tauri dev` and confirmed all six smoke checks (N1–N6) in §4. Q2F is
+> promoted from pass-with-conditions to **PASS**; Sprint O packaging is unblocked.
+> The pre-promotion note below is retained for history.
+>
+> **(historical) pass-with-conditions:** The shell now compiles cleanly and
 > the previously-`UNVERIFIED` Windows crate pins resolve exactly as declared in
 > `Cargo.toml`. The remaining condition is the manual runtime launch in §4,
 > which needs a real desktop (GUI) session and `weaver` on `PATH` — it cannot be

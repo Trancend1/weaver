@@ -5,7 +5,14 @@
 **Scope:** Validate that the Weaver desktop shell (Tauri host in `desktop/`) and the
 FastAPI cockpit honor the [Sidecar Contract](../../SIDECAR_CONTRACT.md) well enough
 to move from "scaffold" to "smoke-verified".
-**Verdict:** 🟡 **PASS-WITH-CONDITIONS** — see [§7](#7-gate-verdict).
+**Verdict:** ✅ **PASS** — Sprint N runtime smoke (N1–N6) owner-confirmed 2026-06-14; see [§7](#7-gate-verdict).
+
+> **Update 2026-06-14 — promoted to PASS.** The runtime condition in §5 was closed:
+> the owner ran `cargo tauri dev` and confirmed N1–N6 (native window + loading
+> screen, loading→`/ui` transition, no 401 loop, no-orphan shutdown, both log
+> files generated, crash screen with mapped exit code). Sprint O — Desktop
+> Packaging / Installer Alpha is now unblocked. The §5 text below is retained as
+> the historical pre-promotion record.
 
 ---
 
