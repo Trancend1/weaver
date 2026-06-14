@@ -61,4 +61,8 @@
   </details>
   {% endif %}
   {% endif %}
+
+  {% if job.status == "done" %}
+  <p class="meta export-next-action"><a href="/ui/projects/{{ name }}/exports">View export history</a></p>
+  {% endif %}
 </div>
