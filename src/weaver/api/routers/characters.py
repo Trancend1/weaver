@@ -123,7 +123,10 @@ def remove_character(name: str, jp_name: str, request: Request) -> Response:
 
 @router.patch("/{name}/characters", response_model=CharacterResponse)
 def update_character_by_jp_name(
-    name: str, body: CharacterUpdateRequest, jp_name: str = Query(...), request: Request = None  # type: ignore[assignment]
+    name: str,
+    body: CharacterUpdateRequest,
+    jp_name: str = Query(...),
+    request: Request = None,  # type: ignore[assignment]
 ) -> CharacterResponse:
     """Update an existing character by jp_name (query-param safe for '/' keys)."""
     project_toml = _project_toml(request, name)
@@ -148,7 +151,9 @@ def update_character_by_jp_name(
 
 @router.delete("/{name}/characters", status_code=204)
 def remove_character_by_jp_name(
-    name: str, jp_name: str = Query(...), request: Request = None  # type: ignore[assignment]
+    name: str,
+    jp_name: str = Query(...),
+    request: Request = None,  # type: ignore[assignment]
 ) -> Response:
     """Delete one character by jp_name (query-param safe for '/' keys)."""
     project_toml = _project_toml(request, name)

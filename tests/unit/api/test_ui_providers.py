@@ -169,9 +169,7 @@ def test_legacy_config_page_redirects_to_providers_editor(
 def test_legacy_config_page_redirect_preserves_project_query(
     providers_client: TestClient,
 ) -> None:
-    resp = providers_client.get(
-        "/ui/config", params={"project": "alpha"}, follow_redirects=False
-    )
+    resp = providers_client.get("/ui/config", params={"project": "alpha"}, follow_redirects=False)
     assert resp.status_code == 307
     assert resp.headers["location"] == "/ui/providers?project=alpha#config-editor"
 

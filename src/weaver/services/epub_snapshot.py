@@ -177,13 +177,31 @@ def store_snapshot(
     package_path = str(parsed.package_path)
 
     if connection is not None:
-        _write_snapshot(connection, volume_id, parsed, source_hash, parser_version,
-                        package_path, metadata_json, preservation_json, now)
+        _write_snapshot(
+            connection,
+            volume_id,
+            parsed,
+            source_hash,
+            parser_version,
+            package_path,
+            metadata_json,
+            preservation_json,
+            now,
+        )
         return
 
     with closing(connect_database(db_path)) as conn, transaction(conn):
-        _write_snapshot(conn, volume_id, parsed, source_hash, parser_version,
-                        package_path, metadata_json, preservation_json, now)
+        _write_snapshot(
+            conn,
+            volume_id,
+            parsed,
+            source_hash,
+            parser_version,
+            package_path,
+            metadata_json,
+            preservation_json,
+            now,
+        )
 
 
 def read_snapshot(db_path: Path, volume_id: int) -> ParsedEpub | None:

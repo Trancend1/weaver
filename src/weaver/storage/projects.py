@@ -133,6 +133,3 @@ def get_first_project_id(connection: sqlite3.Connection) -> int | None:
     if row is None:
         return None
     return int(row["id"])
-
-
-

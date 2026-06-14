@@ -198,9 +198,7 @@ def test_parse_result_cancelled_determines_terminal_status() -> None:
         proceed.wait(timeout=5)
         return result
 
-    job = registry.submit_parse(
-        project_name="demo", volume_id=1, runner=runner
-    )
+    job = registry.submit_parse(project_name="demo", volume_id=1, runner=runner)
     assert runner_done.wait(timeout=5)
     job.request_cancel()
     proceed.set()
@@ -231,9 +229,7 @@ def test_parse_result_cancelled_true_marks_cancelled() -> None:
             cancelled=True,
         )
 
-    job = registry.submit_parse(
-        project_name="demo", volume_id=1, runner=runner
-    )
+    job = registry.submit_parse(project_name="demo", volume_id=1, runner=runner)
     job.wait(timeout=5)
 
     assert job.status == "cancelled"

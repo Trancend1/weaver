@@ -253,9 +253,6 @@ def list_candidates_for_project(
     return [_candidate_from_row(row) for row in rows]
 
 
-
-
-
 def update_candidate_status(
     connection: sqlite3.Connection,
     *,

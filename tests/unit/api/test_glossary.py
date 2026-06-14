@@ -138,9 +138,7 @@ def test_create_update_delete_with_slash_in_source(client_with_projects: TestCli
     assert update.status_code == 200
     assert update.json()["target"] == "Updated"
 
-    delete = client_with_projects.delete(
-        f"/projects/{name}/glossary", params={"source": source}
-    )
+    delete = client_with_projects.delete(f"/projects/{name}/glossary", params={"source": source})
     assert delete.status_code == 204
 
     listed = client_with_projects.get(f"/projects/{name}/glossary").json()

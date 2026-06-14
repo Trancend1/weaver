@@ -125,7 +125,10 @@ def remove_glossary_term(name: str, source: str, request: Request) -> Response:
 
 @router.patch("/{name}/glossary", response_model=GlossaryTermResponse)
 def update_glossary_term_by_source(
-    name: str, body: GlossaryTermUpdateRequest, source: str = Query(...), request: Request = None  # type: ignore[assignment]
+    name: str,
+    body: GlossaryTermUpdateRequest,
+    source: str = Query(...),
+    request: Request = None,  # type: ignore[assignment]
 ) -> GlossaryTermResponse:
     # FastAPI injects request; None default is for pyright compatibility
     """Update an existing glossary term by source (query-param safe for '/' keys)."""
@@ -151,7 +154,9 @@ def update_glossary_term_by_source(
 
 @router.delete("/{name}/glossary", status_code=204)
 def remove_glossary_term_by_source(
-    name: str, source: str = Query(...), request: Request = None  # type: ignore[assignment]
+    name: str,
+    source: str = Query(...),
+    request: Request = None,  # type: ignore[assignment]
 ) -> Response:
     """Delete one glossary term by source (query-param safe for '/' keys)."""
     project_toml = _project_toml(request, name)

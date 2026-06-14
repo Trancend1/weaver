@@ -174,9 +174,9 @@ def test_replay_persisted_events_uses_read_only_access(client_with_projects: Tes
     with closing(connect_database(db_path)) as conn:
         before_version = int(conn.execute("PRAGMA user_version").fetchone()[0])
         before_count = int(
-            conn.execute(
-                "SELECT COUNT(*) FROM job_events WHERE job_id = ?", (job_id,)
-            ).fetchone()[0]
+            conn.execute("SELECT COUNT(*) FROM job_events WHERE job_id = ?", (job_id,)).fetchone()[
+                0
+            ]
         )
 
     # Replay — this must not mutate schema or state.
@@ -188,9 +188,9 @@ def test_replay_persisted_events_uses_read_only_access(client_with_projects: Tes
     with closing(connect_database(db_path)) as conn:
         after_version = int(conn.execute("PRAGMA user_version").fetchone()[0])
         after_count = int(
-            conn.execute(
-                "SELECT COUNT(*) FROM job_events WHERE job_id = ?", (job_id,)
-            ).fetchone()[0]
+            conn.execute("SELECT COUNT(*) FROM job_events WHERE job_id = ?", (job_id,)).fetchone()[
+                0
+            ]
         )
 
     assert after_version == before_version, "replay must not change schema version"
@@ -202,9 +202,7 @@ def test_replay_persisted_events_returns_empty_for_unknown_job(
 ) -> None:
     name = _project(client_with_projects)
     chapter_id = _chapter(client_with_projects, name)
-    client_with_projects.post(
-        f"/projects/{name}/chapters/{chapter_id}/translate", json=FAKE_BODY
-    )
+    client_with_projects.post(f"/projects/{name}/chapters/{chapter_id}/translate", json=FAKE_BODY)
     base = client_with_projects.app.state.base_dir  # type: ignore[attr-defined]
     project_toml = base / ".weaver" / name / "project.toml"
     db_path = resolve_database_path(project_toml, cwd=base)

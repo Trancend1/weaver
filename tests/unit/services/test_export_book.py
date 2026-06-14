@@ -181,14 +181,10 @@ def _write_two_chapter_epub(path: Path) -> None:
     book.set_language("ja")
 
     chapter_one = epub.EpubHtml(title="Chapter One", file_name="chapter1.xhtml", lang="ja")
-    chapter_one.content = (
-        "<html><body><h1>Chapter One</h1>"
-        "<p>FIRST-ONLY-SOURCE</p></body></html>"
-    )
+    chapter_one.content = "<html><body><h1>Chapter One</h1><p>FIRST-ONLY-SOURCE</p></body></html>"
     chapter_two = epub.EpubHtml(title="Chapter Two", file_name="chapter2.xhtml", lang="ja")
     chapter_two.content = (
-        "<html><body><h1>Chapter Two</h1>"
-        "<p>SECOND-UNRELATED-SOURCE</p></body></html>"
+        "<html><body><h1>Chapter Two</h1><p>SECOND-UNRELATED-SOURCE</p></body></html>"
     )
 
     book.add_item(chapter_one)
