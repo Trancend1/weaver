@@ -22,6 +22,7 @@ from weaver.qa.report import QAReport
 from weaver.services.epub_snapshot import compute_source_hash, snapshot_status
 from weaver.services.project_discovery import find_project
 from weaver.services.project_paths import resolve_database_path
+from weaver.services.segment_review import ReviewCounts, review_counts_for_volume
 from weaver.services.translation_qa import analyze_chapter, analyze_novel, analyze_volume
 from weaver.storage.db import connect_readonly_database
 from weaver.storage.projects import get_first_project_id
@@ -199,6 +200,7 @@ def export_preflight(
     report: QAReport | None = None
     qa_error: str | None = None
     snapshot_advisories: list[dict[str, object]] = []
+    review_counts: ReviewCounts | None = None
     dp = find_project(base, name)
     if dp is None:
         qa_error = f"No project named {name!r}."
@@ -211,6 +213,7 @@ def export_preflight(
             qa_error = str(exc)
         if target == "epub":
             snapshot_advisories = _snapshot_export_advisories(dp.project_toml, base)
+        review_counts = _project_review_counts(dp.project_toml, base)
     return templates.TemplateResponse(
         request,
         "partials/_export_preflight.html",
@@ -224,8 +227,42 @@ def export_preflight(
             "badge_class": _BADGE_CLASS[report.badge] if report is not None else "",
             "badge_label": _BADGE_LABEL[report.badge] if report is not None else "",
             "snapshot_advisories": snapshot_advisories,
+            "review_counts": review_counts,
+            "review_attention": (
+                review_counts.not_reviewed + review_counts.needs_revision
+                if review_counts is not None
+                else 0
+            ),
         },
     )
+
+
+def _project_review_counts(project_toml: Path, base: Path) -> ReviewCounts | None:
+    """Aggregate human-review tallies across every volume (read-only, advisory).
+
+    Review readiness is informational context on the explicit preflight panel; it
+    never gates Draft or Final export. Failures are non-fatal — the panel still
+    renders without review context.
+    """
+    try:
+        db_path = resolve_database_path(project_toml, cwd=base)
+        with closing(connect_readonly_database(db_path)) as connection:
+            project_id = get_first_project_id(connection)
+            if project_id is None:
+                return None
+            totals = ReviewCounts()
+            for vol in list_volumes(connection, project_id):
+                rc = review_counts_for_volume(connection, volume_id=vol.id)
+                totals = ReviewCounts(
+                    not_reviewed=totals.not_reviewed + rc.not_reviewed,
+                    needs_review=totals.needs_review + rc.needs_review,
+                    needs_revision=totals.needs_revision + rc.needs_revision,
+                    approved=totals.approved + rc.approved,
+                    rejected=totals.rejected + rc.rejected,
+                )
+            return totals
+    except Exception:  # noqa: BLE001 - non-fatal advisory
+        return None
 
 
 def _snapshot_export_advisories(project_toml: Path, base: Path) -> list[dict[str, object]]:
