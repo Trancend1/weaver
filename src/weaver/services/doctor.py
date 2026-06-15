@@ -18,16 +18,17 @@ from pathlib import Path
 from weaver.core.config import load_project_config
 from weaver.errors import ConfigError, WeaverError
 from weaver.providers import build_provider
-from weaver.providers.gemini import ENV_API_KEY as GEMINI_ENV_KEY
 from weaver.storage.db import connect_readonly_database
 
 MIN_PYTHON = (3, 11)
 
-# Legacy brand `type` → key env-var map (ADR 018 D6 migration shim). New configs
-# use protocol + connection; these survive only so existing project.toml works.
+# Legacy brand `type` → key env-var map (ADR 018 D6 migration shim). New
+# configs use protocol + connection; these survive only so existing
+# project.toml keeps `weaver doctor` happy. Gemini still needs a key when
+# routed through the OpenAI-compatible endpoint.
 PROVIDER_ENV_VARS: dict[str, str] = {
     "deepseek": "DEEPSEEK_API_KEY",
-    "gemini": GEMINI_ENV_KEY,
+    "gemini": "GEMINI_API_KEY",
 }
 
 

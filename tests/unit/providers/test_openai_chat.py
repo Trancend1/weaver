@@ -208,11 +208,11 @@ def test_deepseek_healthcheck_reports_unhealthy_on_auth_failure() -> None:
     assert status.message is not None
 
 
-def test_deepseek_constructor_without_client_or_env_raises(monkeypatch) -> None:
+def test_deepseek_constructor_without_client_or_missing_env_raises(monkeypatch) -> None:
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 
     with pytest.raises(ProviderUnavailable):
-        OpenAIChatProvider(config=OpenAIChatConfig())
+        OpenAIChatProvider(config=OpenAIChatConfig(api_key_env="DEEPSEEK_API_KEY"))
 
 
 def test_deepseek_maps_model_not_found_to_clear_error() -> None:

@@ -189,10 +189,14 @@ def _providers_for_project(
 
 
 def _resolve_key_env(provider_cfg: dict[str, Any]) -> str | None:
-    """Return the env-var NAME the provider expects, or None for keyless protocols."""
+    """Return the env-var NAME the provider expects, or None for keyless providers.
+
+    ``openai_chat`` is keyless when ``api_key_env`` is empty (e.g. local Ollama
+    on :11434/v1). The legacy ``fake`` engine does not need a key.
+    """
 
     protocol = str(provider_cfg.get("protocol", "")).strip()
-    if protocol in {"ollama_generate", "fake"}:
+    if protocol == "fake":
         return None
     env = str(provider_cfg.get("api_key_env", "")).strip()
     return env or None

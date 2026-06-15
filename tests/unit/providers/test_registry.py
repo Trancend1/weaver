@@ -53,14 +53,9 @@ def test_build_deepseek_rejects_nonpositive_timeout() -> None:
         build_provider({"type": "deepseek", "timeout_seconds": 0})
 
 
-def test_build_ollama_rejects_top_p_out_of_range() -> None:
-    with pytest.raises(ConfigError, match="out of range"):
-        build_provider({"type": "ollama", "top_p": 2.0})
-
-
 def test_build_provider_accepts_valid_numbers() -> None:
     # Ollama needs no API key, so a valid numeric config builds end to end.
     provider = build_provider(
-        {"type": "ollama", "temperature": 0.7, "top_p": 0.9, "timeout_seconds": 30}
+        {"type": "ollama", "temperature": 0.7, "timeout_seconds": 30}
     )
-    assert provider.name == "ollama"
+    assert provider.name == "custom"

@@ -38,7 +38,7 @@ from weaver.providers.registry import (
 )
 
 _PROTOCOL_REQUIRED_FIELDS = {
-    PROTOCOL_OPENAI_CHAT: ("base_url", "api_key_env", "model"),
+    PROTOCOL_OPENAI_CHAT: ("base_url", "model"),
 }
 
 
@@ -229,9 +229,9 @@ def _validate_provider_shape(config: Mapping[str, Any]) -> None:
         "Provider configuration is incomplete. "
         "Likely cause: no supported protocol with the required endpoint/model/key "
         "fields was set. "
-        "Next command: set an explicit protocol (openai_chat / gemini_generate / "
-        "ollama_generate / fake) plus the fields it requires (openai_chat needs "
-        "base_url, api_key_env, and model)."
+        "Next command: set an explicit protocol (openai_chat or fake) plus the "
+        "fields it requires (openai_chat needs base_url and model; api_key_env is "
+        "optional for keyless endpoints)."
     )
 
 

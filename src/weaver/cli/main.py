@@ -463,7 +463,7 @@ def dashboard_command(
     epilog=(
         "Examples:\n"
         "  weaver translate .weaver/novel/project.toml\n"
-        "  weaver translate .weaver/novel/project.toml --provider gemini --dry-run"
+        "  weaver translate .weaver/novel/project.toml --provider custom --dry-run"
     ),
 )
 def translate_project_command(

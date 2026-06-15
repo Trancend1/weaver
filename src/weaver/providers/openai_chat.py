@@ -26,6 +26,10 @@ from weaver.providers.types import Completion, TranslationRequest, TranslationRe
 DEFAULT_TEMPERATURE = 0.3
 DEFAULT_TIMEOUT_SECONDS = 180.0
 
+# Dummy key used when a keyless endpoint (e.g. local Ollama) is configured.
+# The OpenAI client requires a non-empty string; the upstream ignores it.
+_KEYLESS_DUMMY_KEY = "not-needed"
+
 
 @dataclass(frozen=True)
 class OpenAIChatConfig:
@@ -59,10 +63,16 @@ class OpenAIChatProvider(LLMProvider):
         self._config = config or OpenAIChatConfig()
         self.name = self._config.name
         api_key_env = self._config.api_key_env
-        resolved_key = api_key if api_key is not None else os.environ.get(api_key_env or "")
-        if client is None and not resolved_key:
+        # Empty ``api_key_env`` signals a keyless endpoint (local Ollama, etc.) —
+        # the OpenAI client still requires a non-empty api_key string, so we
+        # pass a dummy value the upstream is expected to ignore.
+        if not api_key_env:
+            resolved_key = api_key if api_key is not None else _KEYLESS_DUMMY_KEY
+        else:
+            resolved_key = api_key if api_key is not None else os.environ.get(api_key_env, "")
+        if client is None and api_key_env and not resolved_key:
             raise ProviderUnavailable(
-                f"{api_key_env or 'API key env var'} is not set. "
+                f"{api_key_env} is not set. "
                 "Likely cause: API key missing from the environment / secret store. "
                 f"Next command: set ${api_key_env} or run `weaver secrets set {api_key_env}`."
             )

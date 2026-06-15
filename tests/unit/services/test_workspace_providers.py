@@ -145,14 +145,11 @@ def test_resolve_key_env_per_protocol() -> None:
         _resolve_key_env({"protocol": "openai_chat", "api_key_env": "DEEPSEEK_API_KEY"})
         == "DEEPSEEK_API_KEY"
     )
-    assert (
-        _resolve_key_env({"protocol": "gemini_generate", "api_key_env": "GEMINI_API_KEY"})
-        == "GEMINI_API_KEY"
-    )
-    assert _resolve_key_env({"protocol": "ollama_generate"}) is None
-    assert _resolve_key_env({"protocol": "fake"}) is None
     assert _resolve_key_env({"protocol": "openai_chat", "api_key_env": "MY_KEY"}) == "MY_KEY"
+    # openai_chat with no api_key_env is keyless (e.g. local Ollama on /v1)
     assert _resolve_key_env({"protocol": "openai_chat"}) is None
+    assert _resolve_key_env({"protocol": "openai_chat", "api_key_env": ""}) is None
+    assert _resolve_key_env({"protocol": "fake"}) is None
 
 
 # ---------- Error isolation ----------
