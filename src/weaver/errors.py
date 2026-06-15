@@ -9,6 +9,10 @@ class ConfigError(WeaverError):
     """Invalid or unparseable project configuration."""
 
 
+class DataDirError(WeaverError):
+    """Runtime data directory cannot be created or written (sidecar exit 66)."""
+
+
 class SourceTooLargeError(WeaverError):
     """Uploaded/import source exceeds the maximum allowed byte size."""
 
