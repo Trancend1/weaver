@@ -14,19 +14,6 @@ from typing import Any
 from weaver.errors import ConfigError
 from weaver.providers.base import LLMProvider
 from weaver.providers.config_values import read_float, read_int
-from weaver.providers.deepseek import (
-    DEFAULT_BASE_URL as DEEPSEEK_BASE_URL,
-)
-from weaver.providers.deepseek import (
-    DEFAULT_MODEL as DEEPSEEK_MODEL,
-)
-from weaver.providers.deepseek import (
-    ENV_API_KEY as DEEPSEEK_ENV,
-)
-from weaver.providers.deepseek import (
-    DeepSeekConfig,
-    DeepSeekProvider,
-)
 from weaver.providers.fake import FakeProvider
 from weaver.providers.gemini import (
     DEFAULT_MODEL as GEMINI_MODEL,
@@ -48,6 +35,10 @@ from weaver.providers.ollama import (
     OllamaConfig,
     OllamaProvider,
 )
+from weaver.providers.openai_chat import (
+    OpenAIChatConfig,
+    OpenAIChatProvider,
+)
 
 ProviderFactory = Callable[[Mapping[str, Any]], LLMProvider]
 
@@ -60,12 +51,15 @@ _REGISTRY: dict[str, ProviderFactory] = {}
 
 
 _LEGACY_DEFAULTS: dict[str, dict[str, str]] = {
+    # ADR 018 D6: legacy brand `type` aliases survive only as this migration shim,
+    # mapping pre-0.7.2 project.toml onto the protocol-first config. No new project
+    # uses these; the public surface speaks in protocol + connection.
     "deepseek": {
         "type": "custom",
         "protocol": PROTOCOL_OPENAI_CHAT,
-        "model": DEEPSEEK_MODEL,
-        "base_url": DEEPSEEK_BASE_URL,
-        "api_key_env": DEEPSEEK_ENV,
+        "model": "deepseek-chat",
+        "base_url": "https://api.deepseek.com",
+        "api_key_env": "DEEPSEEK_API_KEY",
     },
     "gemini": {
         "type": "custom",
@@ -179,13 +173,15 @@ def _build_openai_chat(config: Mapping[str, Any]) -> LLMProvider:
     base_url = _required(config, "base_url", protocol=PROTOCOL_OPENAI_CHAT)
     api_key_env = _required(config, "api_key_env", protocol=PROTOCOL_OPENAI_CHAT)
     model = _required(config, "model", protocol=PROTOCOL_OPENAI_CHAT)
-    return DeepSeekProvider(
-        config=DeepSeekConfig(
+    return OpenAIChatProvider(
+        config=OpenAIChatConfig(
             model=model,
             base_url=base_url,
-            temperature=read_float(config, "temperature", DeepSeekConfig.temperature, minimum=0.0),
+            temperature=read_float(
+                config, "temperature", OpenAIChatConfig.temperature, minimum=0.0
+            ),
             timeout_seconds=read_float(
-                config, "timeout_seconds", DeepSeekConfig.timeout_seconds, exclusive_minimum=0.0
+                config, "timeout_seconds", OpenAIChatConfig.timeout_seconds, exclusive_minimum=0.0
             ),
             api_key_env=api_key_env,
             name=_clean(config.get("type")) or "custom",

@@ -480,7 +480,7 @@ def translate_project_command(
     provider: str | None = typer.Option(
         None,
         "--provider",
-        help="Override [provider] type for this run (deepseek|gemini|ollama|fake).",
+        help="Override the provider type for this run (e.g. custom + protocol, or fake).",
     ),
     model: str | None = typer.Option(
         None,

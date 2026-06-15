@@ -183,10 +183,11 @@ def _validate_provider_shape(config: Mapping[str, Any]) -> None:
         return
     raise ConfigError(
         "Provider configuration is incomplete. "
-        "Likely cause: provider type has no registered adapter and no supported "
-        "protocol with required endpoint/model/key fields. "
-        "Next command: use a legacy alias (deepseek, gemini, ollama, fake), or "
-        "set protocol plus the fields required by that protocol."
+        "Likely cause: no supported protocol with the required endpoint/model/key "
+        "fields was set. "
+        "Next command: set an explicit protocol (openai_chat / gemini_generate / "
+        "ollama_generate / fake) plus the fields it requires (openai_chat needs "
+        "base_url, api_key_env, and model)."
     )
 
 

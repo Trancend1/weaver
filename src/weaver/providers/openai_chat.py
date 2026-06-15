@@ -1,4 +1,10 @@
-"""DeepSeek chat-completions provider (OpenAI-compatible API)."""
+"""OpenAI-compatible chat-completions provider (the `openai_chat` protocol).
+
+A single, brand-free transport for any OpenAI-compatible `/chat/completions`
+endpoint — DeepSeek, OpenRouter, Groq, Together, a local Ollama `/v1`, or any
+other compatible server. The endpoint, key env-var name, and model are all
+configured per connection (ADR 018); nothing here is tied to a vendor.
+"""
 
 from __future__ import annotations
 
@@ -17,49 +23,46 @@ from weaver.providers.parser import parse_response
 from weaver.providers.prompts import load_repair_prompt, load_system_prompt, render_user_message
 from weaver.providers.types import Completion, TranslationRequest, TranslationResponse
 
-DEFAULT_BASE_URL = "https://api.deepseek.com"
-DEFAULT_MODEL = "deepseek-chat"
 DEFAULT_TEMPERATURE = 0.3
-ENV_API_KEY = "DEEPSEEK_API_KEY"
+DEFAULT_TIMEOUT_SECONDS = 180.0
 
 
 @dataclass(frozen=True)
-class DeepSeekConfig:
-    """Configuration for `DeepSeekProvider`.
+class OpenAIChatConfig:
+    """Configuration for `OpenAIChatProvider`.
 
-    The same provider class serves both the built-in ``deepseek`` endpoint and a
-    generic ``custom`` OpenAI-compatible endpoint (ADR `0020`): ``base_url``,
-    ``api_key_env`` (which env var holds the key), and ``name`` (for logs /
-    status) are all configurable.
+    `base_url`, `api_key_env` (which env var holds the key), `model`, and `name`
+    (for logs / status) are all required per connection — there is no vendor
+    default. The same engine serves every OpenAI-compatible endpoint.
     """
 
-    model: str = DEFAULT_MODEL
-    base_url: str = DEFAULT_BASE_URL
+    model: str = ""
+    base_url: str = ""
     temperature: float = DEFAULT_TEMPERATURE
-    timeout_seconds: float = 180.0
-    api_key_env: str = ENV_API_KEY
-    name: str = "deepseek"
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
+    api_key_env: str = ""
+    name: str = "openai_chat"
 
 
-class DeepSeekProvider(LLMProvider):
-    """OpenAI-compatible chat-completions client (DeepSeek or custom endpoint)."""
+class OpenAIChatProvider(LLMProvider):
+    """OpenAI-compatible chat-completions client for any configured endpoint."""
 
-    name = "deepseek"
+    name = "openai_chat"
 
     def __init__(
         self,
         *,
-        config: DeepSeekConfig | None = None,
+        config: OpenAIChatConfig | None = None,
         api_key: str | None = None,
         client: Any | None = None,
     ) -> None:
-        self._config = config or DeepSeekConfig()
+        self._config = config or OpenAIChatConfig()
         self.name = self._config.name
         api_key_env = self._config.api_key_env
-        resolved_key = api_key if api_key is not None else os.environ.get(api_key_env)
+        resolved_key = api_key if api_key is not None else os.environ.get(api_key_env or "")
         if client is None and not resolved_key:
             raise ProviderUnavailable(
-                f"{api_key_env} environment variable is not set. "
+                f"{api_key_env or 'API key env var'} is not set. "
                 "Likely cause: API key missing from the environment / secret store. "
                 f"Next command: set ${api_key_env} or run `weaver secrets set {api_key_env}`."
             )
@@ -197,13 +200,13 @@ def _extract_content(completion: Any) -> str:
         content = message.content
     except (AttributeError, IndexError) as exc:
         raise ProviderResponseError(
-            "DeepSeek response is missing `choices[0].message.content`. "
+            "OpenAI-compatible response is missing `choices[0].message.content`. "
             "Likely cause: upstream returned an unexpected payload shape. "
-            "Next command: rerun translation; if it persists, check DeepSeek status."
+            "Next command: rerun translation; if it persists, check the endpoint's status."
         ) from exc
     if not isinstance(content, str):
         raise ProviderResponseError(
-            "DeepSeek response content is not a string. "
+            "OpenAI-compatible response content is not a string. "
             "Likely cause: upstream returned tool calls or null content. "
             "Next command: rerun translation."
         )
@@ -224,9 +227,13 @@ def _usage(completion: Any, key: str) -> int | None:
 
 
 def _translate_openai_error(
-    exc: BaseException, *, provider_name: str = "DeepSeek", api_key_env: str = ENV_API_KEY
+    exc: BaseException,
+    *,
+    provider_name: str = "openai_chat",
+    api_key_env: str = "",
 ) -> Exception:
-    display_name = provider_name or "OpenAI-compatible provider"
+    display_name = provider_name or "OpenAI-compatible endpoint"
+    env_hint = api_key_env or "the configured API key env var"
     name = type(exc).__name__
     message = str(exc) or name
     if name in {"APITimeoutError", "Timeout"}:
@@ -238,14 +245,15 @@ def _translate_openai_error(
     if name in {"AuthenticationError", "PermissionDeniedError"}:
         return ProviderUnavailable(
             f"{display_name} auth failed: {message}. "
-            f"Likely cause: invalid or revoked ${api_key_env}. "
-            f"Next command: regenerate the provider API key and update ${api_key_env}."
+            f"Likely cause: invalid or revoked ${env_hint}. "
+            f"Next command: regenerate the endpoint API key and update ${env_hint}."
         )
     if name in {"NotFoundError", "NotFound"}:
         return ProviderResponseError(
             f"{display_name} model not found: {message}. "
-            "Likely cause: `[provider] model` is misspelled or unavailable to this key/endpoint. "
-            "Next command: check `[provider] model` in project.toml against the provider's models."
+            "Likely cause: the configured `model` is misspelled or unavailable to this "
+            "key/endpoint. "
+            "Next command: check the connection's model against the endpoint's models."
         )
     if name in {"APIConnectionError", "ConnectionError"}:
         return ProviderUnavailable(
@@ -262,5 +270,5 @@ def _translate_openai_error(
     return ProviderResponseError(
         f"{display_name} call failed ({name}): {message}. "
         "Likely cause: upstream returned an unexpected error. "
-        "Next command: rerun translation; check provider status if it persists."
+        "Next command: rerun translation; check endpoint status if it persists."
     )

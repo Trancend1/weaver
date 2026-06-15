@@ -341,9 +341,9 @@ def test_providers_hub_explains_canonical_config_surface(
     html = providers_client.get("/ui/providers").text
     assert "/ui/providers is the canonical provider config page." in html
     assert "/ui/config is compatibility-only and redirects here." in html
-    assert "Legacy aliases remain supported: deepseek, gemini, ollama, fake." in html
-    assert "Custom provider types must set an explicit protocol." in html
-    assert "openai_chat requires base_url, api_key_env, and model." in html
+    assert "Legacy aliases remain supported" not in html
+    assert "Set an explicit protocol." in html
+    assert "openai_chat requires base_url, api_key_env, and model" in html
     assert "Health checks run only when you press Check." in html
     assert "This page does not call providers on load." in html
     assert "Secret values are stored but never rendered." in html
