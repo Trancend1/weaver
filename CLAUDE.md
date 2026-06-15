@@ -55,6 +55,7 @@ Current status: **active phase defined in §2.3**.
 | **Sprint O — Desktop Packaging / Installer Alpha** | ✅ PASS | Packaged `weaver-desktop.exe` builds + runs (O-V1–O-V7). Both conditions now closed: external PATH-sidecar → resolved by **Sprint P** (bundled sidecar); signing/auto-update/installer-final → resolved by **Desktop Installer & Release Hardening** (NSIS installer + signing-ready + opt-in update + tagged release). Superseded by P + ADR 017. |
 | **Sprint P — Bundled Sidecar / Standalone Desktop Alpha** | ✅ PASS | P1–P6 done; packaged app launches PATH-free, `/healthz`+`/ui` 200 (no 401), logs, crash screen, no orphan (WM_CLOSE + owner-confirmed native X-close 2026-06-14); `HEALTH_BUDGET` 5→20 s for PyInstaller cold start; signing/auto-update/installer/cross-platform deferred (not blockers) |
 | **Desktop Installer & Release Hardening** | ✅ PASS | ADR 017 (2026-06-15). Shipped + owner-validated: exit-66 (`DataDirError`→66), single version source + drift guard, NSIS per-user installer (install/launch/uninstall smoke PASS, data preserved), signing-ready `bundle.windows`, opt-in notification-only update check (default OFF), tag-triggered `release.yml` — **v0.7.1 released end-to-end via CI** (installer + `latest.json` published; manifest URL serves `{"version":"0.7.1"}`), upgrade-compat test PASS (0.7.1 over 0.7.0 keeps data, single entry). Deferred non-blocker: code-signing cert. See gate report. |
+| **Connection-First Routing (v0.7.2)** | 🔜 Planning | ADR 018 (Proposed). Collapse providers to one real `openai_chat` protocol (+`fake`); remove `gemini.py`/`ollama.py` + `google-generativeai` dep; de-brand engine/cockpit; `model` = open string; workspace connection registry + check + per-segment routing/fallback. Reference: OpenRouter. Active phase §2.3. |
 | **Cross-Platform Desktop (macOS/Linux)** | 📋 Planned | WKWebView (macOS) + WebKitGTK (Linux) session-header injection and POSIX graceful shutdown (SIGTERM), plus per-OS bundled sidecar. See §2.1.1. |
 | **Desktop Optimization** | 📋 Backlog | onedir→onefile or payload trim and cold-start budget tuning, only after the installer ships and with evidence. See §2.1.1. |
 
@@ -131,13 +132,25 @@ Before starting any new sprint, phase, or stage:
 > Required reminder: **Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection.**
 
 
-### 2.3 Active Phase — none active (Desktop Installer & Release Hardening ✅ PASS)
+### 2.3 Active Phase — Connection-First Routing (v0.7.2) 🔜 PLANNING (ADR 018 Proposed)
 
-**Track(s) active:** None — the Desktop Installer & Release Hardening sprint closed **PASS** (2026-06-15). ADR 017 shipped: NSIS per-user installer, signing-ready pipeline (unsigned until cert), opt-in notification-only update check (default OFF), single version source + drift guard, exit-66, and a tag-triggered release workflow that published **v0.7.1** end-to-end (installer + `latest.json`). Owner-machine smoke (install/launch/uninstall + upgrade) PASS; data preserved across both. Code signing is the only deferred non-blocker.
+**Sprint focus:** Reframe the cockpit to be **connection-first + model-centric** (owner insight: `.proposal/weaver-user-behavior-reality.md`, `weaver-LLM-connection-reality.md`). A connection is just **Name + Endpoint + Key** → **Test** → "✓ Connected · N models"; `protocol`/`type`/`engine` are hidden (one real transport = `openai_chat`). Users pick a **model** ("Choose AI" / "Switch AI"), not a provider. Model discovery is **core** (on-demand POST, never on render). `model` stays a free-form string (any id). **Backing stays lean (owner, 2026-06-15):** health = last-probe result, fallback = try-next, switch = `project.toml`+mtime — **deferred:** circuit breaker, health-score formula, presets, cost dashboard, rotation window, `routing_decisions` ledger (ADR 018 D9).
 
-**Next:** open **Cross-Platform Desktop (macOS/Linux)** with a fresh plan + ADR (§2.1.1) before any code. Do not continue this sprint's scaffolding.
+**Track(s) active:** T0 (ADR 018 drafted ✓) · **Bagian A done** (engine de-brand: `deepseek.py`→`openai_chat.py` / `OpenAIChatProvider`, brand strings removed, cockpit "legacy aliases" hint removed, all behind the D6 shim — ruff/pyright/pytest green: 1491 passed). **Next:** validate Gemini/Ollama over OpenAI-compatible endpoints → delete `gemini.py`/`ollama.py` + drop `google-generativeai` → Bagian B (connection registry + routing). Gated by T6/T7/T8.
 
-**Decisions locked (owner, 2026-06-15, for the record):** auto-update = opt-in notification only (default OFF); signing = signing-ready (unsigned until a cert secret exists); installer = NSIS only; release = GitHub Actions on tag push. Full rationale in ADR 017.
+**Owner decisions locked (2026-06-15, for the record):**
+- **Protocol collapse = total** → `openai_chat` + `fake` only. Remove `providers/gemini.py` + `providers/ollama.py`; Gemini/Ollama become `openai_chat` connections; drop `google-generativeai` dep (ADR 018 D1).
+- **`model` = open string forever.** Discovery (`GET /v1/models`) is suggestion-only, on-demand, never a constraint (D3).
+- **Fallback = simple per-segment** (try next on 5xx/timeout/429, short cold-mark). **No** circuit breaker / health-score formula / observability dashboard / rotation window / native families — all deferred (D4).
+- **Back-compat = automatic shim**; no existing project breaks (D6).
+
+**Next:** accept ADR 018, then land Bagian A (engine rename + de-brand behind the D6 shim) before Bagian B (registry + routing). Native files (`gemini.py`/`ollama.py`) deleted only after Gemini/Ollama validated over their OpenAI-compatible endpoints. Do not continue Desktop sprint scaffolding.
+
+---
+
+**Historical — Desktop Installer & Release Hardening (✅ PASS)**
+
+The Desktop Installer & Release Hardening sprint closed **PASS** (2026-06-15). ADR 017 shipped: NSIS per-user installer, signing-ready pipeline (unsigned until cert), opt-in notification-only update check (default OFF), single version source + drift guard, exit-66, and a tag-triggered release workflow that published **v0.7.1** end-to-end (installer + `latest.json`). Owner-machine smoke (install/launch/uninstall + upgrade) PASS; data preserved across both. Code signing is the only deferred non-blocker. Decisions locked: auto-update = opt-in notification only (default OFF); signing = signing-ready; installer = NSIS only; release = GitHub Actions on tag push. Full rationale in ADR 017. Cross-Platform Desktop (macOS/Linux) remains planned (§2.1.1).
 
 ---
 
@@ -187,6 +200,25 @@ Done (Sprint N — runtime smoke, owner-confirmed via `cargo tauri dev`):
 - N6 forced startup failure → crash screen with mapped exit code ✅
 
 ### 2.4 Exit Criteria
+
+#### Connection-First Routing (v0.7.2) exit — 🔜 IN PROGRESS (ADR 018)
+
+_Bagian A — engine de-brand (DONE 2026-06-15):_
+* [x] `providers/deepseek.py` renamed to `openai_chat.py` (`OpenAIChatProvider`/`OpenAIChatConfig`); brand strings gone from engine/errors (`grep -i deepseek src/weaver` = shim-only). Ruff/pyright/pytest green (1491 passed).
+* [x] Cockpit "Legacy aliases…" hint removed; `_config_form.html` + `test_ui_providers.py` updated.
+* [ ] `providers/gemini.py` + `providers/ollama.py` removed; `google-generativeai` dropped from `pyproject.toml`; Gemini/Ollama validated over their OpenAI-compatible endpoints (`requires_cloud`/`requires_ollama`).
+
+_Bagian B — connection-first UX + registry + routing (lean backing, D9):_
+* [ ] **Connection form = Name + Endpoint + Key + [Test]** only; **no** protocol/type/engine field shown. Test success renders `✓ Connected · N models · NNN ms` before Save.
+* [ ] "Providers" surface relabelled **Connections**; route kept/aliased (ADR 015 bookmarks alive).
+* [ ] `core/connection_registry.py` + `~/.weaver/connections.toml` (under `WEAVER_DATA_DIR`, owner-only, comment-preserving round-trip); register a connection < 30s from CLI + cockpit.
+* [ ] **Model discovery is core**: on-demand `GET /v1/models` POST (Test/Refresh) fills count + picker; **never on render, no background thread**. Stale snapshot used on probe failure.
+* [ ] **Model-centric project AI**: "Choose AI"/"Switch AI" lists discovered models grouped by connection; project header shows **Active AI** (`model via connection`); one-click switch writes `[routing.<task>]` and takes effect next segment.
+* [ ] `model` accepts any free-form id end-to-end; discovery only *suggests* (test: arbitrary unknown id routes via `FakeProvider`).
+* [ ] `services/routing.py` precedence (`[routing.<task>]` → `connection_ref` → `[provider]` → `[defaults]`) unit-tested; **simple** per-segment fallback rescues a forced `fail_rate=1.0` primary via a `fail_rate=0.0` fallback.
+* [ ] Legacy `[provider]`-only projects resolve bit-for-bit to 0.7.1 behavior (shim D6).
+* [ ] `uv run ruff check .`, `ruff format --check .`, `pyright`, `pytest` all green.
+* [ ] **Lean-backing fence (D9):** no circuit breaker, health-score formula, presets, `routing_decisions` table, cost/observability dashboard, rotation window, or native non-OpenAI families. Health badge = last-probe result only.
 
 #### Desktop Installer & Release Hardening exit — ✅ MET (ADR 017, PASS)
 * [x] NSIS installer builds; installs per-user with a Start-menu entry + uninstaller (owner smoke 2026-06-15).
