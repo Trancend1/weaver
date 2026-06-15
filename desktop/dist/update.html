@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Weaver — update available</title>
+    <style>
+      body { font: 14px/1.5 system-ui, sans-serif; margin: 0; padding: 24px; background: #14110e; color: #e9e2d5; }
+      h1 { font-size: 16px; margin: 0 0 8px; }
+      a { color: #d9b35c; }
+      button { margin-top: 16px; padding: 8px 14px; border: 0; border-radius: 6px; background: #3a6b4a; color: #fff; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>A newer version of Weaver is available</h1>
+    <p>You can download the latest installer from the releases page.</p>
+    <p><a id="link" href="#" target="_blank" rel="noopener">Open releases page</a></p>
+    <button onclick="window.close()">Dismiss</button>
+    <script>
+      const url = window.__WEAVER_UPDATE_URL__ || "https://github.com/Trancend1/weaver/releases/latest";
+      document.getElementById("link").href = url;
+    </script>
+  </body>
+</html>
