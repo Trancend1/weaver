@@ -106,18 +106,19 @@ mod tests {
         assert!(!is_newer("0.7.0", ""));
     }
 
+    // The opt-in flag reads a process-global env var, so the default-off and
+    // env-override cases are exercised in ONE test to avoid an inter-test race
+    // on `WEAVER_DESKTOP_UPDATE_CHECK` under the parallel runner (no serial dep).
     #[test]
-    fn disabled_by_default_without_settings() {
-        let dir = std::env::temp_dir().join("weaver-update-test-empty");
+    fn opt_in_flag_default_off_and_env_override() {
+        let dir = std::env::temp_dir().join("weaver-update-test-flag");
         let _ = std::fs::create_dir_all(&dir);
+
+        // Default OFF when no settings file and no env var.
         std::env::remove_var("WEAVER_DESKTOP_UPDATE_CHECK");
         assert!(!update_check_enabled(&dir));
-    }
 
-    #[test]
-    fn env_override_enables_and_disables() {
-        let dir = std::env::temp_dir().join("weaver-update-test-env");
-        let _ = std::fs::create_dir_all(&dir);
+        // Env override enables, then disables, then clears back to default off.
         std::env::set_var("WEAVER_DESKTOP_UPDATE_CHECK", "1");
         assert!(update_check_enabled(&dir));
         std::env::set_var("WEAVER_DESKTOP_UPDATE_CHECK", "0");
