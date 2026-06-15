@@ -19,7 +19,12 @@ jobs:
           enable-cache: true
 
       - name: Set up Python 3.11
-        run: uv python install 3.11
+        # setup-python puts `python` on PATH so build-sidecar.ps1's interpreter
+        # discovery (Get-Command python) resolves on the runner; uv (above) is
+        # still used for `uv run` inside the script.
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Version guard (tag == pyproject == tauri)
         shell: pwsh
