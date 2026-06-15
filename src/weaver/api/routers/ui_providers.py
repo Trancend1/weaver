@@ -237,6 +237,7 @@ def connection_add(
     api_key_env: str | None = Form(None),
     use_shell_env: str | None = Form(None),
     keyless: str | None = Form(None),
+    default_model: str | None = Form(None),
 ) -> HTMLResponse:
     """Register a connection (key value stored in secrets.toml, never echoed back)."""
     try:
@@ -246,6 +247,7 @@ def connection_add(
             api_key=_opt(api_key),
             api_key_env=_opt(api_key_env),
             use_shell_env=bool(use_shell_env),
+            default_model=_opt(default_model) or "",
             requires_key=not bool(keyless),
         )
     except WeaverError as exc:

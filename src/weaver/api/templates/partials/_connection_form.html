@@ -9,6 +9,10 @@
   <label>API Key
     <input name="api_key" type="password" placeholder="key value (stored, never shown)" aria-label="API key value (stored, never shown)">
   </label>
+  <label>Default Model
+    <input name="default_model" list="connection-model-options" placeholder="optional — e.g. deepseek/deepseek-chat (press Test to load this endpoint's models)" aria-label="Default model id">
+    <datalist id="connection-model-options"></datalist>
+  </label>
   <details class="connection-advanced">
     <summary>Advanced</summary>
     <p class="hint meta">Leave blank to auto-name the key (<code>WEAVER_CONN_&lt;NAME&gt;</code>). Override only if you manage env vars yourself.</p>

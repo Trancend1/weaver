@@ -373,6 +373,29 @@ def test_connection_add_registers_and_never_echoes_key(
     assert conn.api_key_env == "WEAVER_CONN_OPENROUTER"
 
 
+def test_connection_add_records_default_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _isolate_connection_files(tmp_path, monkeypatch)
+    from weaver.core.connection_registry import get_connection
+
+    client = TestClient(create_api_app(tmp_path))
+    resp = client.post(
+        "/ui/providers/connections",
+        data={
+            "name": "openrouter",
+            "base_url": "https://o/v1",
+            "api_key": "sk-x",
+            "default_model": "deepseek/deepseek-chat",
+        },
+    )
+    assert resp.status_code == 200
+    conn = get_connection("openrouter")
+    assert conn is not None
+    assert conn.default_model == "deepseek/deepseek-chat"
+    assert "deepseek/deepseek-chat" in resp.text  # shown on the card
+
+
 def test_connection_add_without_key_shows_inline_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
