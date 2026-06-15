@@ -30,12 +30,37 @@ environment.
 
 `e3f15b5` plan+ADR · `ef5bdb4`/`b0301e1`/`5f1a920`/`64830d3` exit-66 · `27bfa17`/`58130ba` version source · `a4b48d4`/`4761eeb` NSIS+signing · `b3857ca`/`69345cb`/`0969e0d` release workflow · `52603a4`/`66f694e`/`6fffdf4`/`990fa0f` update notification. (S7/S8 docs commit follows.)
 
-## Owner-pending conditions (promote to PASS when done)
+## Owner conditions
 
-1. **NSIS build + install smoke** — `build-sidecar.ps1` → `cargo tauri build` → install the `*-setup.exe`: no UAC, Start-menu entry, uninstaller; uninstall preserves `%APPDATA%\Weaver`.
-2. **First `v*` tagged release** — confirm `release.yml` builds + publishes the Release with installer + `latest.json`. Watch the `build-sidecar.ps1` Python-resolution + NSIS artifact-glob naming on first run.
-3. **Upgrade-compat test** — execute `docs/superpowers/handoffs/2026-06-15-upgrade-test.md` (vN→vN+1 preserves data + replaces binary).
-4. **Code-signing cert** — procure + store `WINDOWS_CERTIFICATE_THUMBPRINT` secret; re-run a release to produce a signed installer.
+1. **NSIS build + install smoke — ✅ PASS (2026-06-15, owner machine).**
+   `cargo tauri build` → `Weaver_0.7.0_x64-setup.exe` (37.8 MB, bundles 16.4 MB
+   `weaver.exe` + 784-file `_internal`). Silent `/S` install → per-user, no UAC;
+   `%LOCALAPPDATA%\Weaver` has `weaver-desktop.exe` + bundled `weaver.exe` +
+   `_internal` + `uninstall.exe`; Start-menu `Weaver.lnk` + HKCU entry "Weaver
+   0.7.0". Launch → cockpit `/ui` (+ `/ui/providers`, `/ui/queue`, static) all 200,
+   no 401 loop. Uninstall `/S` → program + shortcut + registry removed,
+   **`%APPDATA%\Weaver` preserved**. No-orphan guarantee = the app's window-close
+   handler (graceful `taskkill /T` → forced `/F /T` after 5 s), owner-confirmed
+   Sprint P P-V8; an external bare `/T` is not representative.
+
+2. **First `v*` tagged release — IN PROGRESS (v0.7.1).** First run (`27528850430`)
+   **failed at the sidecar step** — a real bug found + fixed: `build-sidecar.ps1`
+   indexed `$PythonCandidates[0]` which, when only one candidate survives the
+   filter (the CI case), is a scalar string → returned `'C'` (first char of
+   `C:\...\python.exe`), which `uv --python` rejected. Fixed with `@(...)` array
+   coercion (commit `fix(desktop): force array context in sidecar python
+   discovery`); `v0.7.1` re-tagged, re-run pending confirmation. Also added
+   `actions/setup-python` so `python` is on PATH.
+
+3. **Upgrade-compat test — ✅ PASS (2026-06-15, owner machine).** Installed 0.7.0,
+   seeded `%APPDATA%\Weaver\projects\sentinel.txt`, then ran the 0.7.1 installer
+   **over** it (no prior uninstall): Apps shows **1** entry at **0.7.1** (no
+   duplicate), binary replaced, **sentinel preserved with original content**.
+   Final uninstall → program removed, data preserved. Test artifacts cleaned up.
+
+4. **Code-signing cert — deferred (standing condition).** No cert; unsigned build
+   works. Procure OV/EV (or Azure Trusted Signing), store
+   `WINDOWS_CERTIFICATE_THUMBPRINT` secret → pipeline auto-signs (no code change).
 
 ## Known gaps / risks (documented, non-blocking)
 
