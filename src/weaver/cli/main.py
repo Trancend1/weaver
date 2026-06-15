@@ -70,6 +70,11 @@ app.add_typer(glossary_app, name="glossary")
 app.add_typer(glossary_app, name="gl", hidden=True)
 secrets_app = typer.Typer(help="Manage API keys in the local secret store.")
 app.add_typer(secrets_app, name="secrets")
+connections_app = typer.Typer(help="Manage workspace LLM connections (ADR 018).")
+app.add_typer(connections_app, name="connections")
+app.add_typer(connections_app, name="conn", hidden=True)
+routing_app = typer.Typer(help="Show or set a project's per-task AI routing.")
+app.add_typer(routing_app, name="routing")
 console = Console()
 
 _DEBUG_MODE = False
@@ -1504,6 +1509,139 @@ def secrets_rm_command(
         typer.echo(f"Removed {env_var} from the local secret store.")
     else:
         typer.echo(f"No stored secret named {env_var}.")
+
+
+@connections_app.command("list", epilog="Examples:\n  weaver connections list")
+def connections_list_command() -> None:
+    """List registered workspace connections (key values never shown)."""
+
+    from weaver.services.connections import list_connection_views
+
+    views = list_connection_views()
+    if not views:
+        typer.echo("No connections. Add one with `weaver connections add <name> --endpoint <url>`.")
+        return
+    for view in views:
+        if not view.requires_key:
+            key = "keyless"
+        elif view.secret_present:
+            key = f"{view.api_key_env} set"
+        else:
+            key = f"{view.api_key_env} missing"
+        model = f"  model={view.default_model}" if view.default_model else ""
+        typer.echo(f"{view.name}  {view.base_url}  [{key}]{model}")
+
+
+@connections_app.command(
+    "add",
+    epilog=(
+        "Examples:\n"
+        "  weaver connections add openrouter --endpoint https://openrouter.ai/api/v1\n"
+        "  weaver connections add ollama --endpoint http://localhost:11434/v1 --keyless"
+    ),
+)
+def connections_add_command(
+    name: str = typer.Argument(..., help="Connection name (lowercase slug, e.g. openrouter)."),
+    endpoint: str = typer.Option(..., "--endpoint", help="OpenAI-compatible base URL."),
+    key: str | None = typer.Option(None, "--key", help="API key value (stored, never printed)."),
+    env: str | None = typer.Option(None, "--env", help="Override the key env-var name."),
+    shell: bool = typer.Option(False, "--shell", help="Use an existing shell env var (no store)."),
+    keyless: bool = typer.Option(False, "--keyless", help="Endpoint needs no key (local)."),
+    model: str = typer.Option("", "--model", help="Default model id (optional)."),
+) -> None:
+    """Register a workspace connection. Prompts for the key unless keyless/shell/--key."""
+
+    from weaver.services.connections import add_connection
+
+    key_value = key
+    if key is None and not keyless and not shell:
+        key_value = typer.prompt(f"API key for {name}", hide_input=True)
+    try:
+        view = add_connection(
+            name=name,
+            base_url=endpoint,
+            api_key=key_value,
+            api_key_env=env,
+            use_shell_env=shell,
+            default_model=model,
+            requires_key=not keyless,
+        )
+    except WeaverError as exc:
+        _exit_with_error(exc)
+    typer.echo(f"Saved connection {view.name} -> {view.base_url}")
+
+
+@connections_app.command("test", epilog="Examples:\n  weaver connections test openrouter")
+def connections_test_command(
+    name: str = typer.Argument(..., help="Connection name to probe."),
+) -> None:
+    """Probe a connection's /v1/models and refresh its cached model list."""
+
+    from weaver.services.connections import refresh_models
+
+    try:
+        result = refresh_models(name)
+    except WeaverError as exc:
+        _exit_with_error(exc)
+    typer.echo(f"Connected: {result.count} models, {result.latency_ms} ms")
+
+
+@connections_app.command("rm", epilog="Examples:\n  weaver connections rm openrouter")
+def connections_rm_command(
+    name: str = typer.Argument(..., help="Connection name to remove."),
+) -> None:
+    """Remove a workspace connection (its stored secret is left in place)."""
+
+    from weaver.services.connections import remove_connection
+
+    if remove_connection(name):
+        typer.echo(f"Removed connection {name}.")
+    else:
+        typer.echo(f"No connection named {name}.")
+
+
+@routing_app.command("show", epilog="Examples:\n  weaver routing show project.toml")
+def routing_show_command(
+    project_toml: Path = typer.Argument(..., help="Path to the project's project.toml."),
+) -> None:
+    """Show the resolved Active AI + fallback chain for the translate task."""
+
+    from weaver.core.task_types import TaskType
+    from weaver.services.routing import resolve_active_ai, resolve_chain
+
+    ai = resolve_active_ai(project_toml, TaskType.translate)
+    via = f" via {ai.connection_name}" if ai.connection_name else f" ({ai.source})"
+    typer.echo(f"translate: {ai.model}{via}")
+    try:
+        chain = resolve_chain(project_toml, TaskType.translate)
+    except WeaverError as exc:
+        typer.echo(f"  routing error: {exc}")
+        return
+    for candidate in chain[1:]:
+        model = candidate.model or "(connection default)"
+        typer.echo(f"  fallback: {model} via {candidate.connection_name}")
+
+
+@routing_app.command(
+    "set",
+    epilog="Examples:\n  weaver routing set project.toml --connection openrouter --model gpt-5",
+)
+def routing_set_command(
+    project_toml: Path = typer.Argument(..., help="Path to the project's project.toml."),
+    connection: str = typer.Option(..., "--connection", help="Registered connection name."),
+    model: str | None = typer.Option(None, "--model", help="Model id (optional)."),
+    task: str = typer.Option("translate", "--task", help="Task to route (default translate)."),
+) -> None:
+    """Set the project's AI for a task (writes [routing.<task>])."""
+
+    from weaver.services.config_writer import set_routing
+
+    try:
+        set_routing(project_toml, task=task, connection=connection, model=model)
+    except WeaverError as exc:
+        _exit_with_error(exc)
+    suffix = f" ({model})" if model else ""
+    typer.echo(f"Set {task} -> {connection}{suffix} in {project_toml}")
 
 
 app.command("tx", hidden=True)(translate_project_command)
