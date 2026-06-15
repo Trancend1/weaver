@@ -14,6 +14,7 @@
 
 mod launch_config;
 mod sidecar;
+mod update_check;
 mod webview_session;
 
 use std::sync::Mutex;
