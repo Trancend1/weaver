@@ -15,7 +15,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
+    "targets": ["app", "nsis"],
     "externalBin": ["sidecar/weaver"],
     "resources": {
       "sidecar/_internal": "_internal"
@@ -24,6 +24,14 @@
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.digicert.com",
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English"]
+      }
+    }
   }
 }

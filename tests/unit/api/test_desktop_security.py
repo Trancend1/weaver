@@ -143,6 +143,29 @@ def test_serve_exits_65_when_port_in_use(monkeypatch: pytest.MonkeyPatch) -> Non
     assert "9998" in output  # port number is informative, not a secret
 
 
+def test_serve_exits_66_when_data_dir_unwritable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``ensure_runtime_dirs`` failure maps to sidecar exit code 66 (SIDECAR_CONTRACT.md §5)."""
+    from weaver.errors import DataDirError
+
+    monkeypatch.setitem(sys.modules, "uvicorn", _make_fake_uvicorn())
+
+    def _boom(self: object) -> None:
+        raise DataDirError("data dir read-only")
+
+    monkeypatch.setattr(
+        "weaver.services.app_paths.AppPaths.ensure_runtime_dirs",
+        _boom,
+    )
+
+    result = runner.invoke(cli_app, ["serve", "--no-browser", "--port", "9971"])
+    assert result.exit_code == 66, result.output
+    output = result.output + (result.stderr or "")
+    assert "data" in output.lower()
+    # Error message must not leak secrets, tokens, or API keys.
+    assert "WEAVER_SESSION_TOKEN" not in output
+    assert "API_KEY" not in output
+
+
 def test_serve_stdout_summary_line_contains_host_and_port(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

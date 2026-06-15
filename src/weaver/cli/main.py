@@ -22,6 +22,7 @@ from rich.table import Table
 from weaver import __version__
 from weaver.errors import (
     ConfigError,
+    DataDirError,
     EpubReadError,
     EpubWriteError,
     GlossaryConflictError,
@@ -1312,7 +1313,7 @@ def _run_fastapi_cockpit(
         )
         raise AssertionError("unreachable") from exc  # _exit_with_error never returns
 
-    from weaver.services.app_paths import BOOKS_DIR_ENV
+    from weaver.services.app_paths import BOOKS_DIR_ENV, resolve_app_paths
     from weaver.services.runtime_env import current_env
 
     env_mode = current_env()
@@ -1324,6 +1325,12 @@ def _run_fastapi_cockpit(
             err=True,
         )
         raise typer.Exit(code=64)
+
+    try:
+        resolve_app_paths().ensure_runtime_dirs()
+    except DataDirError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=66) from exc
 
     if books_dir is not None:
         os.environ[BOOKS_DIR_ENV] = str(books_dir.resolve())

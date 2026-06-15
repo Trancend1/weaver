@@ -20,7 +20,6 @@ use crate::launch_config::LaunchConfig;
 
 const CONSOLE_LOG: &str = "sidecar.console.log";
 const RING_CAP: usize = 50;
-const POLL_INTERVAL: Duration = Duration::from_millis(50);
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
 const HEALTH_TIMEOUT: Duration = Duration::from_millis(200);
 
@@ -36,7 +35,6 @@ pub struct Sidecar {
     child: Child,
     pid: u32,
     console: Arc<Mutex<VecDeque<String>>>,
-    log_path: PathBuf,
     shut_down: bool,
 }
 
@@ -94,7 +92,6 @@ impl Sidecar {
             child,
             pid,
             console,
-            log_path,
             shut_down: false,
         })
     }
@@ -117,10 +114,6 @@ impl Sidecar {
             .lock()
             .map(|ring| ring.iter().cloned().collect())
             .unwrap_or_default()
-    }
-
-    pub fn log_path(&self) -> &PathBuf {
-        &self.log_path
     }
 
     fn already_exited(&mut self) -> bool {

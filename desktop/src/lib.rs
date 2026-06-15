@@ -14,6 +14,7 @@
 
 mod launch_config;
 mod sidecar;
+mod update_check;
 mod webview_session;
 
 use std::sync::Mutex;
@@ -275,6 +276,15 @@ fn open_cockpit(handle: AppHandle, cfg: LaunchConfig) {
                 if let Some(loading) = handle.get_webview_window("loading") {
                     let _ = loading.close();
                 }
+                // Opt-in update check runs on a background thread so a slow or
+                // failed check never delays first paint (ADR 017 D3).
+                let data_dir = cfg.data_dir.clone();
+                let notify_handle = handle.clone();
+                std::thread::spawn(move || {
+                    if let Some(url) = update_check::check_for_update(&data_dir) {
+                        show_update_notice(&notify_handle, &url);
+                    }
+                });
             }
             Err(err) => {
                 show_crash(
@@ -314,6 +324,25 @@ fn show_crash(handle: &AppHandle, payload: serde_json::Value) {
                 let _ = loading.close();
             }
         }
+    });
+}
+
+/// Non-blocking "update available" window (ADR 017 D3). Notification only — it
+/// links to the releases page and never downloads or installs.
+fn show_update_notice(handle: &AppHandle, url: &str) {
+    let handle = handle.clone();
+    let url = url.to_string();
+    let _ = handle.clone().run_on_main_thread(move || {
+        if handle.get_webview_window("update").is_some() {
+            return;
+        }
+        let script = format!("window.__WEAVER_UPDATE_URL__ = {};", serde_json::json!(url));
+        let _ = WebviewWindowBuilder::new(&handle, "update", WebviewUrl::App("update.html".into()))
+            .title("Weaver — update available")
+            .inner_size(460.0, 240.0)
+            .center()
+            .initialization_script(&script)
+            .build();
     });
 }
 

@@ -113,7 +113,7 @@ The host should:
 | `0` | Clean shutdown (signal received, Uvicorn finished). | Uvicorn default. |
 | `64` | Configuration error: refused to bind, missing extra, invalid CLI flags. | `cli/main.py` desktop bind guard; `ConfigError` translated by `_exit_with_error`. |
 | `65` | Port already in use. | `cli/main.py:_run_fastapi_cockpit` `OSError` translation. |
-| `66` | Data-directory error: cannot write to `WEAVER_DATA_DIR`. | Reserved; future implementation in `services/app_paths.ensure_runtime_dirs`. |
+| `66` | Data-directory error: cannot create/write the runtime data dir. | `services/app_paths.ensure_runtime_dirs` raises `DataDirError`; `cli/main.py:_run_fastapi_cockpit` maps it to exit 66. |
 
 Codes outside this table are **not** part of the contract — the host should treat them as `unknown failure`. CLI exit codes for non-`serve` commands (`1`, `3`–`7`) are a separate contract used by tooling and tests; the sidecar codes overlap intentionally only at `0`.
 
@@ -196,6 +196,7 @@ Sprint G ships these tests as the executable form of the contract:
 | `tests/unit/api/test_runtime.py::test_healthz_*` | `/healthz` shape, public access, < 50 ms cold. |
 | `tests/unit/api/test_desktop_security.py` | Desktop docs-off, CORS, session-token enforcement, public paths bypass token. |
 | `tests/unit/api/test_desktop_security.py::test_serve_refuses_non_loopback_in_desktop` | Exit code `64` on bind violation. |
+| `tests/unit/api/test_desktop_security.py::test_serve_exits_66_when_data_dir_unwritable` | Exit code `66` on data-dir failure. |
 | `tests/integration/test_runtime_random_port.py` | UI works on `--port 0`, no template hardcodes a host. |
 | `tests/unit/services/test_logging_setup.py::test_provider_log_contains_no_api_keys_regression` | Provider log is key-free. |
 

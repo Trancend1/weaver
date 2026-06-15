@@ -1,7 +1,8 @@
 # Installing Weaver Desktop
 
-> **Sprint O — Production Desktop Packaging.**
-> Windows portable app + NSIS installer path. macOS deferred until Windows is stable.
+> **Desktop Installer & Release Hardening (ADR 017).**
+> Windows NSIS installer (per-user) + portable app, signing-ready release pipeline,
+> and an opt-in notification-only update check. macOS/Linux deferred (CLAUDE.md §2.1.1).
 
 ---
 
@@ -92,14 +93,23 @@ cargo tauri build
 
 Output: `desktop\target\release\weaver-desktop.exe`
 
-### Installer release — `cargo tauri build --target nsis`
+### Installer release — NSIS (default target since ADR 017)
 
-Produces an `.exe` installer (requires NSIS):
+`bundle.targets` is `["app", "nsis"]`, so a normal build now also produces the
+NSIS installer (requires NSIS installed). Sync the version first so the installer
+metadata matches `pyproject.toml` (the single source of truth):
 
-1. In `tauri.conf.json`, change `"targets": ["app"]` → `"targets": ["nsis"]`
-2. Ensure `bundle.windows.nsis` block exists (see `desktop/tauri.conf.json`)
-3. Run: `cargo tauri build`
-4. Output: `desktop\target\release\bundle\nsis\Weaver_0.7.0_x64-setup.exe`
+```powershell
+cd D:\DevSpace\Projects\weaver
+./desktop/scripts/sync-version.ps1        # pyproject -> tauri.conf.json
+./desktop/scripts/build-sidecar.ps1       # PyInstaller onedir sidecar
+cd desktop
+cargo tauri build
+```
+
+Output: `desktop\target\release\bundle\nsis\Weaver_<version>_x64-setup.exe`
+(per-user install: no admin prompt, Start-menu entry + uninstaller).
+The portable `weaver-desktop.exe` is still produced by the `app` target.
 
 ---
 
@@ -154,9 +164,45 @@ needs **no external `weaver` on `PATH`**. The decision, options analysis, sizes,
 and rollback live in [ADR 016](decisions/016-bundled-python-sidecar.md); the build
 tooling is `desktop/scripts/build-sidecar.ps1` + `desktop/sidecar/weaver-sidecar.spec`.
 
-Deferred to the Desktop Installer & Release Hardening sprint: `nsis`/`msi`
-installer, code signing, auto-update, upgrade testing. onefile/size optimization
-is a later backlog item. See CLAUDE.md §2.1 / §2.1.1.
+---
+
+## Updates (opt-in, notification only)
+
+Weaver does **not** check for updates by default — the offline-first stance holds
+out of the box (ADR 017 D3). If you opt in, the app does **one** version check on
+launch and, if a newer release exists, shows a non-blocking "update available"
+window that links to the releases page. It **never** downloads or installs
+anything — you update by downloading the new installer yourself. A failed check
+(offline, etc.) is silent.
+
+Enable it either way:
+
+```powershell
+# Per-launch, for testing:
+$env:WEAVER_DESKTOP_UPDATE_CHECK = "1"; .\weaver-desktop.exe
+
+# Persistent: %APPDATA%\Weaver\desktop\settings.json
+#   { "update_check": true }
+```
+
+The env var wins over the settings file. Manifest checked:
+`https://github.com/Trancend1/weaver/releases/latest/download/latest.json`.
+
+## Upgrading
+
+Run a newer `Weaver_<version>_x64-setup.exe` over your existing install — no need
+to uninstall first. Your data in `%APPDATA%\Weaver` (projects, DB, logs) is
+preserved across both upgrade and uninstall. See the upgrade-compatibility test
+in `docs/superpowers/handoffs/2026-06-15-upgrade-test.md`.
+
+## Releasing (maintainer)
+
+Releases are automated by `.github/workflows/release.yml` on a `v*` tag push
+(windows runner): version guard → sidecar build → NSIS installer → sign **iff**
+the `WINDOWS_CERTIFICATE_THUMBPRINT` secret exists (else unsigned, no failure) →
+`latest.json` → GitHub Release with both attached. Bump `pyproject.toml`, run
+`sync-version.ps1`, commit, then tag `vX.Y.Z` (must equal the version or the
+guard fails). See `docs/MAINTENANCE.md`.
 
 ---
 
@@ -216,14 +262,22 @@ The session-header interceptor (`install_session_header`) must register before n
 
 ---
 
-## Known limitations (Sprint O)
+## Known limitations
 
-1. **No bundled Python.** The user must install Python + weaver separately. Single-file distribution requires PyInstaller (see Sidecar bundling plan).
-2. **No code signing.** Windows SmartScreen may warn on first run. Signing requires a certificate (out of scope).
-3. **No auto-updater.** Updates are manual download + reinstall.
-4. **No macOS package.** Windows-only in Sprint O; macOS requires `darwin` target + `.app` bundle tweaks.
-5. **NSIS not installed by default.** The portable `app` target works without NSIS; the `.exe` installer requires it.
-6. **Headless environment orphans.** In CI/headless environments (no display), the WebView cannot open and the app exits before the graceful-shutdown path runs, leaving sidecar processes. This does **not** affect real desktop use — window-close triggers `taskkill /T`.
+1. **Unsigned installer (until a cert is procured).** The pipeline is
+   signing-ready (ADR 017 D2) — it signs automatically once the
+   `WINDOWS_CERTIFICATE_THUMBPRINT` CI secret exists. Until then builds are
+   unsigned and Windows SmartScreen may warn on first run.
+2. **Update check is notification-only and opt-in.** No background download/
+   install; default OFF (see Updates above).
+3. **No macOS/Linux package.** Windows-only; macOS/Linux are a separate planned
+   sprint (CLAUDE.md §2.1.1).
+4. **NSIS required for the installer.** The portable `app` target works without
+   NSIS; the `.exe` installer requires `winget install NSIS.NSIS`.
+5. **Headless environment orphans.** In CI/headless environments (no display),
+   the WebView cannot open and the app exits before the graceful-shutdown path
+   runs, leaving sidecar processes. This does **not** affect real desktop use —
+   window-close triggers `taskkill /T`.
 
 ---
 

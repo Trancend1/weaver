@@ -8,13 +8,13 @@ Offline-capable, glossary-aware **JP→EN light-novel translation workbench** wi
 >
 > **Current Orchestrator:** Repository Owner (Trancend1) + Claude acting as Lead Technical Orchestrator.
 >
-> **Current Phase:** Sprint P **✅ PASS** — bundled sidecar shipped; packaged Windows alpha launches PATH-free, serves `/healthz`+`/ui`, logs, crashes, and shuts down cleanly (human X-close owner-confirmed 2026-06-14).
+> **Current Phase:** **Desktop Installer & Release Hardening** 🟡 PASS-WITH-CONDITIONS — ADR 017 implemented (2026-06-15); all code/config/docs landed and verified where the toolchain allows. Sprint P (bundled sidecar) is **✅ PASS** and remains the rollback baseline.
 >
-> **Status:** Sprint P P1–P6 complete and **PASS**. The packaged `weaver-desktop.exe` (3.27 MB) + bundled `weaver.exe` (17.2 MB PyInstaller onedir) launches with **no external `weaver` on `PATH`**, returns `/healthz` 200 then `/ui` 200 (no 401 loop), generates logs in `%APPDATA%\Weaver\logs`, shows the crash screen on failure, and leaves no orphan after both WM_CLOSE and owner-confirmed native X-button close. Deferred (not blockers): signing / auto-update / final installer / cross-platform.
+> **Status:** Implementation complete. Verified here: exit-66 (`DataDirError`→66; pytest + pyright green), version single-source + drift guard, NSIS per-user installer config (validated against the compiled `tauri-utils 2.9.2` schema), signing-ready `bundle.windows` (unsigned until a cert secret exists), opt-in **notification-only** update check (default OFF; `cargo check` clean, 4 Rust tests green), tag-triggered `release.yml`. **Owner-pending conditions** (need NSIS/`cargo tauri build`/a real tag, none runnable in this env): NSIS build + install smoke, first tagged release run, upgrade-compat test (`docs/superpowers/handoffs/2026-06-15-upgrade-test.md`), and a code-signing certificate.
 
-> **Current Objective:** Sprint P closed the external PATH-sidecar dependency. Next is release-grade hardening (signing + installer), tracked as a separate sprint.
+> **Current Objective:** Ship a public, installable Windows build (NSIS) with a reproducible tag-triggered release pipeline, leaving signing one secret away and macOS/Linux out of scope.
 >
-> **Current Sprint:** Sprint P — Bundled Sidecar / Standalone Desktop Alpha (PASS). Next step: open the **Desktop Installer & Release Hardening** sprint (Windows `nsis`/`msi` installer + code signing + auto-update + upgrade testing); see §2.1 / §2.1.1.
+> **Current Sprint:** Desktop Installer & Release Hardening (PASS-WITH-CONDITIONS). Next step: owner runs the toolchain-gated verifications (NSIS build + install smoke, first `v*` tagged release, upgrade-compat test) and procures a signing cert; then promote to PASS. Cross-Platform Desktop (macOS/Linux) follows (§2.1.1).
 
 
 ---
@@ -54,7 +54,7 @@ Current status: **active phase defined in §2.3**.
 | **Sprint N — Desktop Runtime Validation** | ✅ Done | `cargo tauri dev` smoke green — N1–N6 (window, transition, no-401, no-orphan, logs, crash screen) |
 | **Sprint O — Desktop Packaging / Installer Alpha** | 🟡 PASS-WITH-CONDITIONS | Packaged `weaver-desktop.exe` (3.1 MB) builds + runs (O-V1–O-V7); condition: external PATH sidecar; signing/auto-update/installer-final deferred |
 | **Sprint P — Bundled Sidecar / Standalone Desktop Alpha** | ✅ PASS | P1–P6 done; packaged app launches PATH-free, `/healthz`+`/ui` 200 (no 401), logs, crash screen, no orphan (WM_CLOSE + owner-confirmed native X-close 2026-06-14); `HEALTH_BUDGET` 5→20 s for PyInstaller cold start; signing/auto-update/installer/cross-platform deferred (not blockers) |
-| **Desktop Installer & Release Hardening** | 🔜 Next | Tauri `nsis`/`msi` installer, code signing, auto-update, and upgrade testing (plus exit-66 data-dir handling); produces a public, installable, signed Windows build. Requires a fresh plan + ADR (packaging-shape change). See §2.1.1. |
+| **Desktop Installer & Release Hardening** | 🟡 PASS-WITH-CONDITIONS | ADR 017 + plan (2026-06-15). Implemented + verified-here: exit-66 (`DataDirError`→66, tests green), single version source + drift guard, NSIS per-user installer config (schema-validated vs `tauri-utils 2.9.2`), signing-ready `bundle.windows` (unsigned until cert), `ureq`-TLS opt-in notification-only update check (default OFF, 4 Rust tests green, `cargo check` clean), tag-triggered `release.yml`. **Conditions (owner manual, toolchain/CI-gated):** `cargo tauri build` NSIS build + install smoke, first `v*` tagged release run, upgrade-compat test, and code-signing cert. See §2.3 / gate report. |
 | **Cross-Platform Desktop (macOS/Linux)** | 📋 Planned | WKWebView (macOS) + WebKitGTK (Linux) session-header injection and POSIX graceful shutdown (SIGTERM), plus per-OS bundled sidecar. See §2.1.1. |
 | **Desktop Optimization** | 📋 Backlog | onedir→onefile or payload trim and cold-start budget tuning, only after the installer ships and with evidence. See §2.1.1. |
 
@@ -131,9 +131,19 @@ Before starting any new sprint, phase, or stage:
 > Required reminder: **Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection.**
 
 
-### 2.3 Active Phase — Sprint P complete (✅ PASS)
+### 2.3 Active Phase — Desktop Installer & Release Hardening (🟡 Active)
 
-**Track(s) active:** None active — Sprint P P1–P6 closed under ADR 016, **PASS** (owner human-close confirmed 2026-06-14). Q2F + Sprint N + Sprint O also closed. Next is the **Desktop Installer & Release Hardening** sprint (Windows `nsis`/`msi` installer + code signing + auto-update + upgrade testing); open it with a fresh plan + ADR before further packaging work. Full backlog in §2.1.1.
+**Track(s) active:** Planning landed (ADR 017 + execution plan, 2026-06-15); implementation pending. Owner-facing build tracks for this sprint: T3/T4/T6 (exit-66, S1), desktop packaging (S2–S5), T9 release automation (S6), T6 upgrade QA (S7), T0 docs/gate (S8). Non-goals (scope fence): MSI/WiX, auto-download/install, `tauri-plugin-updater`, macOS/Linux packaging, onedir→onefile, any provider/translation/schema/QA/cockpit-UI change, bundling logic inside `src/weaver/`.
+
+**Decisions locked (owner, 2026-06-15):** auto-update = **opt-in notification only** (default OFF); signing = **signing-ready pipeline** (unsigned until a cert secret exists); installer = **NSIS only**; release = **GitHub Actions on tag push**. Full rationale in ADR 017.
+
+**Sequencing:** execute the plan S1 → S8, one PR per stage; S1 (Python exit-66) and S5/S6 (desktop update + release) are independent and parallelizable. Rollback baseline is Sprint P (portable exe, ADR 016).
+
+---
+
+**Historical — Sprint P complete (✅ PASS)**
+
+**Sprint P closed** under ADR 016, **PASS** (owner human-close confirmed 2026-06-14). Q2F + Sprint N + Sprint O also closed. Full backlog in §2.1.1.
 
 **Status: ✅ Sprint P PASS** — the packaged Windows alpha is self-contained. Bundled PyInstaller onedir sidecar staged via Tauri `bundle.externalBin`; resolver order per ADR 016: `WEAVER_DESKTOP_SIDECAR` override → bundled sidecar → PATH `weaver` fallback. Packaged PATH-free launch returns `/healthz` 200 then `/ui` 200 (no 401 loop), generates logs in `%APPDATA%\Weaver\logs`, shows the crash screen on forced failure, and leaves no orphan after WM_CLOSE and the owner-confirmed native X-button close.
 
@@ -177,6 +187,20 @@ Done (Sprint N — runtime smoke, owner-confirmed via `cargo tauri dev`):
 - N6 forced startup failure → crash screen with mapped exit code ✅
 
 ### 2.4 Exit Criteria
+
+#### Desktop Installer & Release Hardening exit — 🟡 in progress (ADR 017)
+* [ ] NSIS installer builds; installs per-user with a Start-menu entry + uninstaller (S2).
+* [ ] Uninstall preserves `%APPDATA%\Weaver` (projects/DB/logs) (S2/S7).
+* [ ] Signing pipeline signs when a cert secret is present and builds unsigned (without failing) when absent (S3/S6).
+* [ ] Update check is OFF by default; opted-in it notifies (no download/install) and is a silent no-op on failure (S5).
+* [ ] `pyproject` is the single version source; the drift guard fails on mismatch (S4).
+* [ ] Tag-triggered release workflow publishes a GitHub Release with the installer + `latest.json` (S6).
+* [ ] Exit 66 raised + tested; `SIDECAR_CONTRACT.md` §5 updated (S1).
+* [ ] Upgrade test: installing vN+1 over vN preserves data and replaces the binary (S7).
+* [ ] `uv run ruff check .`, `ruff format --check .`, `pyright`, `pytest` all green (every stage).
+* [ ] Final gate report records sizes, signed/unsigned status, and upgrade evidence (S8).
+
+> **Standing condition (not a blocker):** released installers stay **unsigned** until a code-signing certificate is procured (ADR 017 D2). macOS/Linux remain deferred (§2.1.1).
 
 #### Q2F exit (already met)
 * [x] Sidecar contract documented and mapped.
@@ -226,6 +250,8 @@ Deep detail lives in git history, ADRs, sprint plans, and handoff notes. This se
 | CLI startup diagnostics    | `tests/unit/api/test_desktop_security.py`           | Mock `uvicorn.run` for exit-code tests (64/65). Use `_make_fake_uvicorn` helper. Assert no secret/token leakage in error output.                     |
 | Sprint N readiness         | `docs/SIDECAR_CONTRACT.md` · `desktop/README.md`    | Desktop shell must be compile-verified (`cargo check`) before runtime smoke (`cargo tauri dev`). Do not skip compile gate.                           |
 | Desktop packaging (Q2F/N/O/P) | `docs/INSTALL_DESKTOP.md` · Sprint P gate report (`docs/superpowers/handoffs/2026-06-14-sprint-p6-gate-report.md`) · ADR 016 (per-stage Q2F/N/O/P handoffs consolidated into the gate report; full logs in git history) | Sprint P (PASS) shipped the self-contained Windows alpha: PyInstaller onedir + Tauri `bundle.externalBin` + runtime resolver. Resolver order is mandatory: `WEAVER_DESKTOP_SIDECAR` override → bundled sidecar → PATH `weaver` fallback; `externalBin` config alone is insufficient and the PATH fallback must stay. Desktop startup `HEALTH_BUDGET` is **20 s** (bounded, P3b) because PyInstaller cold start exceeds the old 5 s — independent of the §7 5 s shutdown grace. Do not switch onedir→onefile, drop the PATH fallback/override, or add `tauri-plugin-shell` without evidence + an ADR. Bundling logic stays in `desktop/`/CI, never in `src/weaver/`. Sprint P = PASS (human X-close owner-confirmed 2026-06-14); signing/installer deferred to release-hardening. |
+
+| Installer & release (ADR 017) | `docs/decisions/017-*.md` · `docs/superpowers/handoffs/2026-06-15-installer-release-gate-report.md` · `.github/workflows/release.yml` | `pyproject` is the **single version source**; never hand-edit `tauri.conf.json` version — run `desktop/scripts/sync-version.ps1`, and a `v*` tag must equal it (`check-version.ps1 -Tag`). Releases are tag-triggered (`release.yml`, windows runner); signing is **off until** the `WINDOWS_CERTIFICATE_THUMBPRINT` secret exists (no code change to enable). Update check is **opt-in, notification-only, default OFF** (`WEAVER_DESKTOP_UPDATE_CHECK` env or `%APPDATA%\Weaver\desktop\settings.json`) — never add download/install or `tauri-plugin-updater`/`-shell` without a new ADR. Installer config validated against the compiled `tauri-utils` schema (`deny_unknown_fields`) — verify field casing there, not just docs. Exit-66 is now a real tested code (`DataDirError`). Desktop/packaging logic stays in `desktop/`+CI, never `src/weaver/`. |
 
 > Historical test counts are evidence only at the time they were recorded. Re-run relevant verification for the current phase; do not assume old counts still apply.
 

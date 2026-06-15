@@ -1,0 +1,71 @@
+name: Release (Windows desktop)
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.11
+        # setup-python puts `python` on PATH so build-sidecar.ps1's interpreter
+        # discovery (Get-Command python) resolves on the runner; uv (above) is
+        # still used for `uv run` inside the script.
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Version guard (tag == pyproject == tauri)
+        shell: pwsh
+        run: ./desktop/scripts/check-version.ps1 -Tag "${{ github.ref_name }}"
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+
+      - name: Build sidecar (PyInstaller onedir)
+        shell: pwsh
+        run: ./desktop/scripts/build-sidecar.ps1
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Build NSIS installer
+        shell: pwsh
+        working-directory: desktop
+        env:
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+        run: |
+          if ($env:WINDOWS_CERTIFICATE_THUMBPRINT) {
+            cargo tauri build --config "{`"bundle`":{`"windows`":{`"certificateThumbprint`":`"$env:WINDOWS_CERTIFICATE_THUMBPRINT`"}}}"
+          } else {
+            Write-Host "No signing secret present - building UNSIGNED."
+            cargo tauri build
+          }
+
+      - name: Generate latest.json
+        shell: pwsh
+        run: ./desktop/scripts/make-latest-json.ps1 -Version "${{ github.ref_name }}" -OutFile latest.json
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/target/release/bundle/nsis/*-setup.exe
+            latest.json
+          generate_release_notes: true

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from weaver.errors import DataDirError
 from weaver.services.app_paths import (
     APP_DIR_POSIX,
     APP_NAME,
@@ -88,6 +89,21 @@ def test_ensure_runtime_dirs_is_idempotent_and_localized(tmp_path: Path) -> None
     # No leakage outside root.
     leaked = [child for child in tmp_path.iterdir() if child != paths.root]
     assert leaked == []
+
+
+def test_ensure_runtime_dirs_raises_datadir_error_when_unwritable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    paths = AppPaths(root=tmp_path / "weaver-data")
+
+    def _boom(self, *args, **kwargs):
+        raise PermissionError("read-only volume")
+
+    monkeypatch.setattr(Path, "mkdir", _boom)
+
+    with pytest.raises(DataDirError) as exc:
+        paths.ensure_runtime_dirs()
+    assert "data" in str(exc.value).lower()
 
 
 def test_appname_constants_are_stable() -> None:
