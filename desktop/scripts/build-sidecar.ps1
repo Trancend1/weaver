@@ -30,7 +30,10 @@ try {
     if (-not $PythonCandidates) {
         throw "No Python interpreter found for sidecar packaging."
     }
-    $PythonExe = $PythonCandidates[0]
+    # Force array context: when only one candidate survives the filter PowerShell
+    # collapses it to a scalar string, and indexing a string returns its first
+    # CHAR (e.g. "C" of "C:\...") — which uv then rejects as an interpreter name.
+    $PythonExe = @($PythonCandidates)[0]
     uv run --python $PythonExe --no-managed-python --no-python-downloads --all-extras --with "pyinstaller>=6,<7" pyinstaller `
         --noconfirm `
         --clean `
