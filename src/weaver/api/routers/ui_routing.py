@@ -51,13 +51,35 @@ def _task(value: str) -> TaskType:
         return TaskType.translate
 
 
+def _cached_for(connection_name: str | None) -> tuple[list[str], bool]:
+    """Return (cached models, stale?) for a connection — cache read only, no probe."""
+    if not connection_name:
+        return [], False
+    cached = connections_service.cached_models(connection_name)
+    if cached is None:
+        return [], False
+    return list(cached.models), cached.is_stale()
+
+
+def _models_fragment(
+    request: Request, models: list[str], *, error: str | None, stale: bool
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/_routing_models.html",
+        {"models": models, "models_error": error, "models_stale": stale},
+    )
+
+
 def _panel(request: Request, name: str, toml: Path, **extra: object) -> HTMLResponse:
     active = resolve_active_ai(toml, TaskType.translate)
+    models, stale = _cached_for(active.connection_name)
     ctx: dict[str, object] = {
         "project_name": name,
         "active_ai": active,
         "connections": connections_service.list_connection_views(),
-        "models": [],
+        "models": models,
+        "models_stale": stale,
     }
     ctx.update(extra)
     return templates.TemplateResponse(request, "partials/_active_ai.html", ctx)
@@ -93,22 +115,22 @@ def routing_switch(
 
 @router.post("/ui/projects/{name}/routing/models", response_class=HTMLResponse)
 def routing_models(name: str, request: Request, connection: str = Form(...)) -> HTMLResponse:
-    """Probe one connection's models on demand (explicit POST) for the picker."""
-    conn = get_connection(connection)
-    models: list[str] = []
-    error: str | None = None
-    if conn is not None:
-        try:
-            result = connections_service.probe_connection(
-                base_url=conn.base_url, api_key_env=conn.api_key_env or None, name=conn.name
-            )
-            models = list(result.models)
-        except WeaverError as exc:
-            error = str(exc)
-            if conn.default_model:
-                models = [conn.default_model]
-    return templates.TemplateResponse(
-        request,
-        "partials/_routing_models.html",
-        {"models": models, "models_error": error},
-    )
+    """Live-probe one connection's models (explicit POST) and refresh its cache."""
+    if get_connection(connection) is None:
+        return _models_fragment(
+            request, [], error=f"No connection named {connection!r}.", stale=False
+        )
+    try:
+        result = connections_service.refresh_models(connection)
+    except WeaverError as exc:
+        # Don't strand the user: fall back to the last cached snapshot if any.
+        cached, _ = _cached_for(connection)
+        return _models_fragment(request, cached, error=str(exc), stale=bool(cached))
+    return _models_fragment(request, list(result.models), error=None, stale=False)
+
+
+@router.get("/ui/projects/{name}/routing/cached-models", response_class=HTMLResponse)
+def routing_cached_models(name: str, request: Request, connection: str) -> HTMLResponse:
+    """Render a connection's cached models (cache read only — no probe, Gate B1)."""
+    models, stale = _cached_for(connection)
+    return _models_fragment(request, models, error=None, stale=stale)

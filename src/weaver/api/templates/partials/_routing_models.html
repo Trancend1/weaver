@@ -4,7 +4,9 @@
   </datalist>
   {% if models_error %}
   <span class="hint meta" role="status">{{ models_error }}</span>
+  {% elif models and models_stale %}
+  <span class="hint meta">{{ models | length }} cached model{{ "" if models | length == 1 else "s" }} (stale) — press Load models to refresh.</span>
   {% elif models %}
-  <span class="hint meta">{{ models | length }} model{{ "" if models | length == 1 else "s" }} found — pick one or type your own.</span>
+  <span class="hint meta">{{ models | length }} model{{ "" if models | length == 1 else "s" }} — pick one or type your own.</span>
   {% endif %}
 </span>

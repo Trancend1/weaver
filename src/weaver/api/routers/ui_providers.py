@@ -24,7 +24,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from weaver.api.templating import templates
 from weaver.api.ui_context import ws_hub_layout
-from weaver.core.connection_registry import get_connection
 from weaver.errors import SecretNotFoundError, WeaverError
 from weaver.services import connections as connections_service
 from weaver.services import provider_config as config_service
@@ -263,16 +262,9 @@ def connection_delete(name: str, request: Request) -> HTMLResponse:
 
 @router.post("/ui/providers/connections/{name}/test", response_class=HTMLResponse)
 def connection_saved_test(name: str, request: Request) -> HTMLResponse:
-    """Probe an already-saved connection using its stored/shell key."""
-    conn = get_connection(name)
-    if conn is None:
-        return _probe_result(request, None, f"No connection named {name!r}.")
+    """Probe an already-saved connection (stored/shell key) and refresh its cache."""
     try:
-        result = connections_service.probe_connection(
-            base_url=conn.base_url,
-            api_key_env=conn.api_key_env or None,
-            name=conn.name,
-        )
+        result = connections_service.refresh_models(name)
     except WeaverError as exc:
         return _probe_result(request, None, str(exc))
     return _probe_result(request, result, None)

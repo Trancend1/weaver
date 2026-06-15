@@ -25,6 +25,7 @@ def _init(tmp_path: Path, name: str, provider: str | None = "deepseek") -> None:
 def isolate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("WEAVER_CONNECTIONS_PATH", str(tmp_path / "connections.toml"))
     monkeypatch.setenv("WEAVER_SECRETS_PATH", str(tmp_path / "secrets.toml"))
+    monkeypatch.setenv("WEAVER_CONNECTION_MODELS_PATH", str(tmp_path / "models.json"))
 
 
 def _register_openrouter() -> None:
@@ -104,4 +105,51 @@ def test_routing_models_probe_renders_datalist(
     resp = client.post("/ui/projects/alpha/routing/models", data={"connection": "openrouter"})
     assert resp.status_code == 200
     assert "m1" in resp.text and "m2" in resp.text
-    assert "2 models found" in resp.text
+
+    # The live probe cached the snapshot: cached-models renders it without probing.
+    from weaver.core.connection_models import get_cached
+
+    assert get_cached("openrouter") is not None
+    cached_resp = client.get(
+        "/ui/projects/alpha/routing/cached-models", params={"connection": "openrouter"}
+    )
+    assert cached_resp.status_code == 200
+    assert "m1" in cached_resp.text and "m2" in cached_resp.text
+
+
+def test_routing_cached_models_reads_cache_without_probe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _init(tmp_path, "alpha")
+    _register_openrouter()
+    from weaver.core.connection_models import save_cached
+
+    save_cached("openrouter", ["cached-1", "cached-2"])
+    # If the route probed, this would raise (no network) — it must read cache only.
+    monkeypatch.setattr(
+        "weaver.services.connections.list_models",
+        lambda **_: (_ for _ in ()).throw(AssertionError("must not probe on cached-models")),
+    )
+    client = TestClient(create_api_app(tmp_path))
+    resp = client.get(
+        "/ui/projects/alpha/routing/cached-models", params={"connection": "openrouter"}
+    )
+    assert resp.status_code == 200
+    assert "cached-1" in resp.text and "cached-2" in resp.text
+
+
+def test_routing_panel_shows_cached_models_for_active_connection(tmp_path: Path) -> None:
+    _init(tmp_path, "alpha")
+    _register_openrouter()
+    from weaver.core.connection_models import save_cached
+
+    save_cached("openrouter", ["panel-model"])
+    client = TestClient(create_api_app(tmp_path))
+    # point the project at the connection so it is the active connection
+    client.post(
+        "/ui/projects/alpha/routing/switch",
+        data={"connection": "openrouter", "model": "panel-model", "task": "translate"},
+    )
+    resp = client.get("/ui/projects/alpha/routing")
+    assert resp.status_code == 200
+    assert "panel-model" in resp.text

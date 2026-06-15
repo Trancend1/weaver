@@ -21,7 +21,12 @@
     <form class="stack" id="switch-ai-form">
       <input type="hidden" name="task" value="translate">
       <label>Connection
-        <select name="connection">
+        <select name="connection"
+                hx-get="/ui/projects/{{ project_name }}/routing/cached-models"
+                hx-trigger="change"
+                hx-include="this"
+                hx-target="#switch-ai-models-box"
+                hx-swap="outerHTML">
           {% for c in connections %}
           <option value="{{ c.name }}"{% if c.name == active_ai.connection_name %} selected{% endif %}>{{ c.name }}</option>
           {% endfor %}

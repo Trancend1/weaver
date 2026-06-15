@@ -18,6 +18,7 @@ import os
 import re
 from dataclasses import dataclass
 
+from weaver.core.connection_models import CachedModels, get_cached, save_cached
 from weaver.core.connection_registry import (
     Connection,
     delete_connection,
@@ -148,6 +149,37 @@ def probe_connection(
         timeout_seconds=timeout_seconds,
         client=client,
     )
+
+
+def refresh_models(name: str, *, client: object | None = None) -> DiscoveryResult:
+    """Probe a saved connection's ``/v1/models`` and cache the snapshot.
+
+    Explicit-POST only (Test / Refresh / Load models) — never on render. Raises
+    a typed ``ProviderError`` on probe failure (the cache is left untouched).
+    """
+
+    conn = get_connection(name)
+    if conn is None:
+        raise ConfigError(
+            f"No connection named {name!r}. "
+            "Likely cause: it was renamed or deleted. "
+            "Next command: open Connections and pick an existing one."
+        )
+    result = probe_connection(
+        base_url=conn.base_url,
+        api_key_env=conn.api_key_env or None,
+        name=conn.name,
+        timeout_seconds=conn.timeout_seconds,
+        client=client,
+    )
+    save_cached(name, result.models)
+    return result
+
+
+def cached_models(name: str) -> CachedModels | None:
+    """Return the last cached model snapshot for a connection (no probe)."""
+
+    return get_cached(name)
 
 
 def list_connection_views() -> list[ConnectionView]:
