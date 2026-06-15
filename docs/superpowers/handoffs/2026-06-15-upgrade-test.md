@@ -1,9 +1,12 @@
 # Upgrade Compatibility Test — Desktop Installer (ADR 017, Stage S7)
 
-> **Status: PENDING owner execution.** This procedure needs the NSIS toolchain +
-> `cargo tauri build` to produce two installers, then a real install/upgrade on a
-> Windows machine. It cannot run in the planning/CI-less environment. Fill in the
-> Result column when executed, then link this file from the gate report.
+> **Status: ✅ PASS (2026-06-15, owner machine).** Executed: installed 0.7.0,
+> seeded `%APPDATA%\Weaver\projects\sentinel.txt`, ran the 0.7.1 installer over it
+> (no prior uninstall) → **1** Apps entry at **0.7.1** (no duplicate), binary
+> replaced, sentinel preserved with original content; final uninstall preserved
+> the data dir. Evidence summarized in the gate report
+> (`2026-06-15-installer-release-gate-report.md`). The step table below is the
+> reusable procedure for future upgrades.
 
 ## Purpose
 

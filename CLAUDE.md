@@ -8,13 +8,13 @@ Offline-capable, glossary-aware **JP→EN light-novel translation workbench** wi
 >
 > **Current Orchestrator:** Repository Owner (Trancend1) + Claude acting as Lead Technical Orchestrator.
 >
-> **Current Phase:** **Desktop Installer & Release Hardening** 🟡 PASS-WITH-CONDITIONS — ADR 017 implemented (2026-06-15); all code/config/docs landed and verified where the toolchain allows. Sprint P (bundled sidecar) is **✅ PASS** and remains the rollback baseline.
+> **Current Phase:** **Desktop Installer & Release Hardening** ✅ PASS — ADR 017 shipped + owner-validated (2026-06-15). Sprint P (bundled sidecar) remains the rollback baseline.
 >
-> **Status:** Implementation complete. Verified here: exit-66 (`DataDirError`→66; pytest + pyright green), version single-source + drift guard, NSIS per-user installer config (validated against the compiled `tauri-utils 2.9.2` schema), signing-ready `bundle.windows` (unsigned until a cert secret exists), opt-in **notification-only** update check (default OFF; `cargo check` clean, 4 Rust tests green), tag-triggered `release.yml`. **Owner-pending conditions** (need NSIS/`cargo tauri build`/a real tag, none runnable in this env): NSIS build + install smoke, first tagged release run, upgrade-compat test (`docs/superpowers/handoffs/2026-06-15-upgrade-test.md`), and a code-signing certificate.
+> **Status:** Done. Released **v0.7.1** end-to-end through the new `release.yml` (tag push → CI build → GitHub Release with `Weaver_0.7.1_x64-setup.exe` + `latest.json`). Owner-machine validation: NSIS install/launch/uninstall smoke PASS (data preserved, cockpit `/ui` 200), upgrade-compat PASS (0.7.1 over 0.7.0 keeps data, single Apps entry). Exit-66, version single-source + drift guard, signing-ready config, and opt-in notification-only update check (default OFF) all in place and verified (incl. the live `latest.json` manifest). **Sole deferred non-blocker:** code-signing certificate (store `WINDOWS_CERTIFICATE_THUMBPRINT` secret → pipeline auto-signs, no code change).
 
 > **Current Objective:** Ship a public, installable Windows build (NSIS) with a reproducible tag-triggered release pipeline, leaving signing one secret away and macOS/Linux out of scope.
 >
-> **Current Sprint:** Desktop Installer & Release Hardening (PASS-WITH-CONDITIONS). Next step: owner runs the toolchain-gated verifications (NSIS build + install smoke, first `v*` tagged release, upgrade-compat test) and procures a signing cert; then promote to PASS. Cross-Platform Desktop (macOS/Linux) follows (§2.1.1).
+> **Current Sprint:** Desktop Installer & Release Hardening (✅ PASS, v0.7.1 released). Next step: open **Cross-Platform Desktop (macOS/Linux)** with a fresh plan + ADR (§2.1.1); procure a code-signing cert when available to flip on signing. No sprint active until the next is opened.
 
 
 ---
@@ -54,7 +54,7 @@ Current status: **active phase defined in §2.3**.
 | **Sprint N — Desktop Runtime Validation** | ✅ Done | `cargo tauri dev` smoke green — N1–N6 (window, transition, no-401, no-orphan, logs, crash screen) |
 | **Sprint O — Desktop Packaging / Installer Alpha** | 🟡 PASS-WITH-CONDITIONS | Packaged `weaver-desktop.exe` (3.1 MB) builds + runs (O-V1–O-V7); condition: external PATH sidecar; signing/auto-update/installer-final deferred |
 | **Sprint P — Bundled Sidecar / Standalone Desktop Alpha** | ✅ PASS | P1–P6 done; packaged app launches PATH-free, `/healthz`+`/ui` 200 (no 401), logs, crash screen, no orphan (WM_CLOSE + owner-confirmed native X-close 2026-06-14); `HEALTH_BUDGET` 5→20 s for PyInstaller cold start; signing/auto-update/installer/cross-platform deferred (not blockers) |
-| **Desktop Installer & Release Hardening** | 🟡 PASS-WITH-CONDITIONS | ADR 017 + plan (2026-06-15). Implemented + verified-here: exit-66 (`DataDirError`→66, tests green), single version source + drift guard, NSIS per-user installer config (schema-validated vs `tauri-utils 2.9.2`), signing-ready `bundle.windows` (unsigned until cert), `ureq`-TLS opt-in notification-only update check (default OFF, 4 Rust tests green, `cargo check` clean), tag-triggered `release.yml`. **Conditions (owner manual, toolchain/CI-gated):** `cargo tauri build` NSIS build + install smoke, first `v*` tagged release run, upgrade-compat test, and code-signing cert. See §2.3 / gate report. |
+| **Desktop Installer & Release Hardening** | ✅ PASS | ADR 017 (2026-06-15). Shipped + owner-validated: exit-66 (`DataDirError`→66), single version source + drift guard, NSIS per-user installer (install/launch/uninstall smoke PASS, data preserved), signing-ready `bundle.windows`, opt-in notification-only update check (default OFF), tag-triggered `release.yml` — **v0.7.1 released end-to-end via CI** (installer + `latest.json` published; manifest URL serves `{"version":"0.7.1"}`), upgrade-compat test PASS (0.7.1 over 0.7.0 keeps data, single entry). Deferred non-blocker: code-signing cert. See gate report. |
 | **Cross-Platform Desktop (macOS/Linux)** | 📋 Planned | WKWebView (macOS) + WebKitGTK (Linux) session-header injection and POSIX graceful shutdown (SIGTERM), plus per-OS bundled sidecar. See §2.1.1. |
 | **Desktop Optimization** | 📋 Backlog | onedir→onefile or payload trim and cold-start budget tuning, only after the installer ships and with evidence. See §2.1.1. |
 
@@ -83,13 +83,13 @@ Packaging Alpha                ✅ done   (was Sprint O)
    ↓
 Bundled Sidecar                ✅ done   (was Sprint P)
    ↓
-Installer & Release Hardening  🔜 next
-   • Windows installer (nsis/msi)
-   • Code signing
-   • Auto-update
-   • Upgrade testing
+Installer & Release Hardening  ✅ done   (ADR 017; v0.7.1 released)
+   • Windows NSIS installer        ✅
+   • Signing-ready pipeline        ✅ (signs on cert; deferred)
+   • Opt-in update notification    ✅ (default OFF)
+   • Upgrade testing               ✅
    ↓
-Cross-Platform Desktop         📋 planned   (macOS / Linux)
+Cross-Platform Desktop         🔜 next      (macOS / Linux)
    ↓
 Desktop Optimization           📋 backlog
 ```
@@ -131,13 +131,13 @@ Before starting any new sprint, phase, or stage:
 > Required reminder: **Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection.**
 
 
-### 2.3 Active Phase — Desktop Installer & Release Hardening (🟡 Active)
+### 2.3 Active Phase — none active (Desktop Installer & Release Hardening ✅ PASS)
 
-**Track(s) active:** Planning landed (ADR 017 + execution plan, 2026-06-15); implementation pending. Owner-facing build tracks for this sprint: T3/T4/T6 (exit-66, S1), desktop packaging (S2–S5), T9 release automation (S6), T6 upgrade QA (S7), T0 docs/gate (S8). Non-goals (scope fence): MSI/WiX, auto-download/install, `tauri-plugin-updater`, macOS/Linux packaging, onedir→onefile, any provider/translation/schema/QA/cockpit-UI change, bundling logic inside `src/weaver/`.
+**Track(s) active:** None — the Desktop Installer & Release Hardening sprint closed **PASS** (2026-06-15). ADR 017 shipped: NSIS per-user installer, signing-ready pipeline (unsigned until cert), opt-in notification-only update check (default OFF), single version source + drift guard, exit-66, and a tag-triggered release workflow that published **v0.7.1** end-to-end (installer + `latest.json`). Owner-machine smoke (install/launch/uninstall + upgrade) PASS; data preserved across both. Code signing is the only deferred non-blocker.
 
-**Decisions locked (owner, 2026-06-15):** auto-update = **opt-in notification only** (default OFF); signing = **signing-ready pipeline** (unsigned until a cert secret exists); installer = **NSIS only**; release = **GitHub Actions on tag push**. Full rationale in ADR 017.
+**Next:** open **Cross-Platform Desktop (macOS/Linux)** with a fresh plan + ADR (§2.1.1) before any code. Do not continue this sprint's scaffolding.
 
-**Sequencing:** execute the plan S1 → S8, one PR per stage; S1 (Python exit-66) and S5/S6 (desktop update + release) are independent and parallelizable. Rollback baseline is Sprint P (portable exe, ADR 016).
+**Decisions locked (owner, 2026-06-15, for the record):** auto-update = opt-in notification only (default OFF); signing = signing-ready (unsigned until a cert secret exists); installer = NSIS only; release = GitHub Actions on tag push. Full rationale in ADR 017.
 
 ---
 
@@ -188,19 +188,19 @@ Done (Sprint N — runtime smoke, owner-confirmed via `cargo tauri dev`):
 
 ### 2.4 Exit Criteria
 
-#### Desktop Installer & Release Hardening exit — 🟡 in progress (ADR 017)
-* [ ] NSIS installer builds; installs per-user with a Start-menu entry + uninstaller (S2).
-* [ ] Uninstall preserves `%APPDATA%\Weaver` (projects/DB/logs) (S2/S7).
-* [ ] Signing pipeline signs when a cert secret is present and builds unsigned (without failing) when absent (S3/S6).
-* [ ] Update check is OFF by default; opted-in it notifies (no download/install) and is a silent no-op on failure (S5).
-* [ ] `pyproject` is the single version source; the drift guard fails on mismatch (S4).
-* [ ] Tag-triggered release workflow publishes a GitHub Release with the installer + `latest.json` (S6).
-* [ ] Exit 66 raised + tested; `SIDECAR_CONTRACT.md` §5 updated (S1).
-* [ ] Upgrade test: installing vN+1 over vN preserves data and replaces the binary (S7).
-* [ ] `uv run ruff check .`, `ruff format --check .`, `pyright`, `pytest` all green (every stage).
-* [ ] Final gate report records sizes, signed/unsigned status, and upgrade evidence (S8).
+#### Desktop Installer & Release Hardening exit — ✅ MET (ADR 017, PASS)
+* [x] NSIS installer builds; installs per-user with a Start-menu entry + uninstaller (owner smoke 2026-06-15).
+* [x] Uninstall preserves `%APPDATA%\Weaver` (projects/DB/logs) (install smoke + upgrade test).
+* [x] Signing pipeline signs when a cert secret is present and builds unsigned (without failing) when absent — unsigned path proven via the v0.7.1 CI release; signed path enables on cert (deferred).
+* [x] Update check is OFF by default; opted-in it notifies (no download/install) and is a silent no-op on failure (4 Rust tests; live `latest.json` manifest verified).
+* [x] `pyproject` is the single version source; the drift guard fails on mismatch.
+* [x] Tag-triggered release workflow publishes a GitHub Release with the installer + `latest.json` (v0.7.1, run 27529052365).
+* [x] Exit 66 raised + tested; `SIDECAR_CONTRACT.md` §5 updated.
+* [x] Upgrade test: installing vN+1 over vN preserves data and replaces the binary (0.7.1 over 0.7.0, owner machine).
+* [x] `uv run ruff check .`, `ruff format --check .`, `pyright`, `pytest` all green.
+* [x] Final gate report records sizes, signed/unsigned status, and upgrade evidence.
 
-> **Standing condition (not a blocker):** released installers stay **unsigned** until a code-signing certificate is procured (ADR 017 D2). macOS/Linux remain deferred (§2.1.1).
+> **Standing condition (deferred non-blocker):** released installers stay **unsigned** until a code-signing certificate is procured (ADR 017 D2) — store `WINDOWS_CERTIFICATE_THUMBPRINT` to enable, no code change. macOS/Linux remain deferred (§2.1.1).
 
 #### Q2F exit (already met)
 * [x] Sidecar contract documented and mapped.

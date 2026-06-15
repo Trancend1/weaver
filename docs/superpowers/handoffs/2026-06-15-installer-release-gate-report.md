@@ -2,10 +2,13 @@
 
 **Date:** 2026-06-15
 **Branch:** `docs/desktop-installer-release-hardening`
-**Verdict:** 🟡 **PASS-WITH-CONDITIONS** — all implementation + docs complete and
-verified where the local toolchain allows; four checks are owner-pending because
-they require NSIS / `cargo tauri build` / a real `v*` tag, none runnable in this
-environment.
+**Verdict:** ✅ **PASS** — implementation + docs complete; the three toolchain/CI
+conditions (NSIS install smoke, tagged release, upgrade-compat) are all verified
+on the owner machine + CI. Code signing remains the single deferred non-blocker
+(no cert yet), the same standing as Sprint P.
+
+> Updated 2026-06-15 after owner-machine validation: was PASS-WITH-CONDITIONS at
+> authoring; promoted to PASS once conditions 1–3 passed (see "Owner conditions").
 
 ## Scope delivered (ADR 017 D1–D6)
 
@@ -43,14 +46,18 @@ environment.
    handler (graceful `taskkill /T` → forced `/F /T` after 5 s), owner-confirmed
    Sprint P P-V8; an external bare `/T` is not representative.
 
-2. **First `v*` tagged release — IN PROGRESS (v0.7.1).** First run (`27528850430`)
-   **failed at the sidecar step** — a real bug found + fixed: `build-sidecar.ps1`
-   indexed `$PythonCandidates[0]` which, when only one candidate survives the
-   filter (the CI case), is a scalar string → returned `'C'` (first char of
-   `C:\...\python.exe`), which `uv --python` rejected. Fixed with `@(...)` array
-   coercion (commit `fix(desktop): force array context in sidecar python
-   discovery`); `v0.7.1` re-tagged, re-run pending confirmation. Also added
-   `actions/setup-python` so `python` is on PATH.
+2. **First `v*` tagged release — ✅ PASS (v0.7.1, run `27529052365`).** First run
+   (`27528850430`) **failed at the sidecar step** — a real bug found + fixed:
+   `build-sidecar.ps1` indexed `$PythonCandidates[0]` which, when only one
+   candidate survives the filter (the CI case), is a scalar string → returned
+   `'C'` (first char of `C:\...\python.exe`), which `uv --python` rejected. Fixed
+   with `@(...)` array coercion + added `actions/setup-python`. Re-tagged `v0.7.1`
+   → run **succeeded**: GitHub Release published (non-draft) with
+   `Weaver_0.7.1_x64-setup.exe` (39.1 MB) + `latest.json`. Verified the manifest at
+   the exact URL `update_check.rs` polls
+   (`.../releases/latest/download/latest.json`) returns `{"version":"0.7.1",...}`
+   and the installer URL returns HTTP 200 — this also validates the D3 opt-in
+   update path end-to-end.
 
 3. **Upgrade-compat test — ✅ PASS (2026-06-15, owner machine).** Installed 0.7.0,
    seeded `%APPDATA%\Weaver\projects\sentinel.txt`, then ran the 0.7.1 installer
