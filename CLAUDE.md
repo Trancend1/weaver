@@ -8,13 +8,13 @@ Offline-capable, glossary-aware **JP→EN light-novel translation workbench** wi
 >
 > **Current Orchestrator:** Repository Owner (Trancend1) + Claude acting as Lead Technical Orchestrator.
 >
-> **Current Phase:** Sprint P **✅ PASS** — bundled sidecar shipped; packaged Windows alpha launches PATH-free, serves `/healthz`+`/ui`, logs, crashes, and shuts down cleanly (human X-close owner-confirmed 2026-06-14).
+> **Current Phase:** **Desktop Installer & Release Hardening** 🟡 Active — ADR 017 + execution plan accepted 2026-06-15; implementation not yet started. Sprint P (bundled sidecar) is **✅ PASS** and remains the rollback baseline.
 >
-> **Status:** Sprint P P1–P6 complete and **PASS**. The packaged `weaver-desktop.exe` (3.27 MB) + bundled `weaver.exe` (17.2 MB PyInstaller onedir) launches with **no external `weaver` on `PATH`**, returns `/healthz` 200 then `/ui` 200 (no 401 loop), generates logs in `%APPDATA%\Weaver\logs`, shows the crash screen on failure, and leaves no orphan after both WM_CLOSE and owner-confirmed native X-button close. Deferred (not blockers): signing / auto-update / final installer / cross-platform.
+> **Status:** Planning complete. ADR 017 (`docs/decisions/017-desktop-installer-and-release-hardening.md`) and the execution plan (`docs/superpowers/plans/2026-06-15-desktop-installer-release-hardening.md`) are landed. Scope: NSIS installer, signing-ready pipeline (unsigned until a cert secret exists), opt-in notification-only update check (default OFF), single version source, exit-66 implementation, tag-triggered release workflow. No code changes yet — docs-first per §4.1.
 
-> **Current Objective:** Sprint P closed the external PATH-sidecar dependency. Next is release-grade hardening (signing + installer), tracked as a separate sprint.
+> **Current Objective:** Ship a public, installable Windows build (NSIS) with a reproducible tag-triggered release pipeline, leaving signing one secret away and macOS/Linux out of scope.
 >
-> **Current Sprint:** Sprint P — Bundled Sidecar / Standalone Desktop Alpha (PASS). Next step: open the **Desktop Installer & Release Hardening** sprint (Windows `nsis`/`msi` installer + code signing + auto-update + upgrade testing); see §2.1 / §2.1.1.
+> **Current Sprint:** Desktop Installer & Release Hardening (Active). Next step: execute the plan stage-by-stage (S1 exit-66 → S8 docs/gate), one PR per stage; see §2.3 / §2.4.
 
 
 ---
@@ -54,7 +54,7 @@ Current status: **active phase defined in §2.3**.
 | **Sprint N — Desktop Runtime Validation** | ✅ Done | `cargo tauri dev` smoke green — N1–N6 (window, transition, no-401, no-orphan, logs, crash screen) |
 | **Sprint O — Desktop Packaging / Installer Alpha** | 🟡 PASS-WITH-CONDITIONS | Packaged `weaver-desktop.exe` (3.1 MB) builds + runs (O-V1–O-V7); condition: external PATH sidecar; signing/auto-update/installer-final deferred |
 | **Sprint P — Bundled Sidecar / Standalone Desktop Alpha** | ✅ PASS | P1–P6 done; packaged app launches PATH-free, `/healthz`+`/ui` 200 (no 401), logs, crash screen, no orphan (WM_CLOSE + owner-confirmed native X-close 2026-06-14); `HEALTH_BUDGET` 5→20 s for PyInstaller cold start; signing/auto-update/installer/cross-platform deferred (not blockers) |
-| **Desktop Installer & Release Hardening** | 🔜 Next | Tauri `nsis`/`msi` installer, code signing, auto-update, and upgrade testing (plus exit-66 data-dir handling); produces a public, installable, signed Windows build. Requires a fresh plan + ADR (packaging-shape change). See §2.1.1. |
+| **Desktop Installer & Release Hardening** | 🟡 Active | Plan + ADR 017 accepted (2026-06-15). Scope locked: **NSIS installer** (no MSI), **signing-ready** CI (unsigned until a cert secret exists), **opt-in notification-only** update check (default OFF), **single version source**, **exit-66** data-dir handling, **tag-triggered** GitHub Actions release. Plan: `docs/superpowers/plans/2026-06-15-desktop-installer-release-hardening.md`. See §2.3. |
 | **Cross-Platform Desktop (macOS/Linux)** | 📋 Planned | WKWebView (macOS) + WebKitGTK (Linux) session-header injection and POSIX graceful shutdown (SIGTERM), plus per-OS bundled sidecar. See §2.1.1. |
 | **Desktop Optimization** | 📋 Backlog | onedir→onefile or payload trim and cold-start budget tuning, only after the installer ships and with evidence. See §2.1.1. |
 
@@ -131,9 +131,19 @@ Before starting any new sprint, phase, or stage:
 > Required reminder: **Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection.**
 
 
-### 2.3 Active Phase — Sprint P complete (✅ PASS)
+### 2.3 Active Phase — Desktop Installer & Release Hardening (🟡 Active)
 
-**Track(s) active:** None active — Sprint P P1–P6 closed under ADR 016, **PASS** (owner human-close confirmed 2026-06-14). Q2F + Sprint N + Sprint O also closed. Next is the **Desktop Installer & Release Hardening** sprint (Windows `nsis`/`msi` installer + code signing + auto-update + upgrade testing); open it with a fresh plan + ADR before further packaging work. Full backlog in §2.1.1.
+**Track(s) active:** Planning landed (ADR 017 + execution plan, 2026-06-15); implementation pending. Owner-facing build tracks for this sprint: T3/T4/T6 (exit-66, S1), desktop packaging (S2–S5), T9 release automation (S6), T6 upgrade QA (S7), T0 docs/gate (S8). Non-goals (scope fence): MSI/WiX, auto-download/install, `tauri-plugin-updater`, macOS/Linux packaging, onedir→onefile, any provider/translation/schema/QA/cockpit-UI change, bundling logic inside `src/weaver/`.
+
+**Decisions locked (owner, 2026-06-15):** auto-update = **opt-in notification only** (default OFF); signing = **signing-ready pipeline** (unsigned until a cert secret exists); installer = **NSIS only**; release = **GitHub Actions on tag push**. Full rationale in ADR 017.
+
+**Sequencing:** execute the plan S1 → S8, one PR per stage; S1 (Python exit-66) and S5/S6 (desktop update + release) are independent and parallelizable. Rollback baseline is Sprint P (portable exe, ADR 016).
+
+---
+
+**Historical — Sprint P complete (✅ PASS)**
+
+**Sprint P closed** under ADR 016, **PASS** (owner human-close confirmed 2026-06-14). Q2F + Sprint N + Sprint O also closed. Full backlog in §2.1.1.
 
 **Status: ✅ Sprint P PASS** — the packaged Windows alpha is self-contained. Bundled PyInstaller onedir sidecar staged via Tauri `bundle.externalBin`; resolver order per ADR 016: `WEAVER_DESKTOP_SIDECAR` override → bundled sidecar → PATH `weaver` fallback. Packaged PATH-free launch returns `/healthz` 200 then `/ui` 200 (no 401 loop), generates logs in `%APPDATA%\Weaver\logs`, shows the crash screen on forced failure, and leaves no orphan after WM_CLOSE and the owner-confirmed native X-button close.
 
@@ -177,6 +187,20 @@ Done (Sprint N — runtime smoke, owner-confirmed via `cargo tauri dev`):
 - N6 forced startup failure → crash screen with mapped exit code ✅
 
 ### 2.4 Exit Criteria
+
+#### Desktop Installer & Release Hardening exit — 🟡 in progress (ADR 017)
+* [ ] NSIS installer builds; installs per-user with a Start-menu entry + uninstaller (S2).
+* [ ] Uninstall preserves `%APPDATA%\Weaver` (projects/DB/logs) (S2/S7).
+* [ ] Signing pipeline signs when a cert secret is present and builds unsigned (without failing) when absent (S3/S6).
+* [ ] Update check is OFF by default; opted-in it notifies (no download/install) and is a silent no-op on failure (S5).
+* [ ] `pyproject` is the single version source; the drift guard fails on mismatch (S4).
+* [ ] Tag-triggered release workflow publishes a GitHub Release with the installer + `latest.json` (S6).
+* [ ] Exit 66 raised + tested; `SIDECAR_CONTRACT.md` §5 updated (S1).
+* [ ] Upgrade test: installing vN+1 over vN preserves data and replaces the binary (S7).
+* [ ] `uv run ruff check .`, `ruff format --check .`, `pyright`, `pytest` all green (every stage).
+* [ ] Final gate report records sizes, signed/unsigned status, and upgrade evidence (S8).
+
+> **Standing condition (not a blocker):** released installers stay **unsigned** until a code-signing certificate is procured (ADR 017 D2). macOS/Linux remain deferred (§2.1.1).
 
 #### Q2F exit (already met)
 * [x] Sidecar contract documented and mapped.
