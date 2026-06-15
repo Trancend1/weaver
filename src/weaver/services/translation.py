@@ -11,6 +11,7 @@ from typing import Any
 
 from weaver.core.config import load_project_config
 from weaver.core.ir import BlockIR, DocumentIR, scope_document_to_volume
+from weaver.core.task_types import TaskType
 from weaver.errors import ConfigError, ProviderError, ProviderUnavailable
 from weaver.providers import LLMProvider, build_provider
 from weaver.providers.types import (
@@ -21,6 +22,7 @@ from weaver.providers.types import (
 )
 from weaver.readers import read_source
 from weaver.services.glossary import raise_on_glossary_conflicts
+from weaver.services.routing import resolve_provider_config
 from weaver.storage.characters import list_characters
 from weaver.storage.db import connect_database, transaction
 from weaver.storage.glossary import list_glossary_terms
@@ -232,7 +234,8 @@ def translate_project(
     base_dir = cwd or Path.cwd()
     data = load_project_config(project_toml)
     project_config = data["project"]
-    provider_config = _merge_provider_config(data["provider"], provider_override)
+    base_provider_config = resolve_provider_config(project_toml, TaskType.translate, data=data)
+    provider_config = _merge_provider_config(base_provider_config, provider_override)
     translation_config = data["translation"]
     persist_raw_response = raw_response_logging_enabled(data)
     db_path = _resolve_path(str(project_config["database_path"]), base_dir, project_toml.parent)

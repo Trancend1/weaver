@@ -67,6 +67,15 @@
   {% endif %}
 </section>
 
+{# ── Active AI (ADR 018) ────────────────────────────────── #}
+<section class="panel c-panel">
+  <h2 class="panel__title">AI</h2>
+  <div id="active-ai" hx-get="/ui/projects/{{ tree.project_name }}/routing"
+       hx-trigger="load" hx-swap="innerHTML">
+    <span class="meta">loading…</span>
+  </div>
+</section>
+
 {# ── Per-volume summary ─────────────────────────────────── #}
 {% if overview.volumes %}
 <section class="panel c-panel">

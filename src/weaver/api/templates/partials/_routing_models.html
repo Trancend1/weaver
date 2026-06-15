@@ -1,0 +1,10 @@
+<span id="switch-ai-models-box">
+  <datalist id="switch-ai-models">
+    {% for m in models %}<option value="{{ m }}">{% endfor %}
+  </datalist>
+  {% if models_error %}
+  <span class="hint meta" role="status">{{ models_error }}</span>
+  {% elif models %}
+  <span class="hint meta">{{ models | length }} model{{ "" if models | length == 1 else "s" }} found — pick one or type your own.</span>
+  {% endif %}
+</span>

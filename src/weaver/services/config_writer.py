@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from weaver.core.global_config import default_global_config_path
+from weaver.core.task_types import TaskType
 from weaver.errors import ConfigError
 from weaver.providers.registry import (
     PROTOCOL_OPENAI_CHAT,
@@ -118,6 +119,49 @@ def set_provider(
     new_text = _update_section(existing, section, updates)
     target.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write(target, new_text)
+
+
+def set_routing(
+    project_toml: Path, *, task: str, connection: str, model: str | None = None
+) -> None:
+    """Write ``[routing.<task>]`` (connection + optional model) to a project.toml.
+
+    Line-aware (preserves comments and other sections). The connection name is
+    recorded as-is; resolution against the registry happens at run time in
+    ``services/routing``. An empty ``model`` is omitted so the connection's
+    ``default_model`` applies.
+
+    Raises:
+        ConfigError: unknown task, missing project file, or empty connection.
+    """
+
+    valid_tasks = {t.value for t in TaskType}
+    if task not in valid_tasks:
+        raise ConfigError(
+            f"Unknown routing task `{task}`. "
+            f"Likely cause: task must be one of: {', '.join(sorted(valid_tasks))}. "
+            "Next command: switch AI for a supported task."
+        )
+    if not project_toml.is_file():
+        raise ConfigError(
+            f"Project config not found: {project_toml}. "
+            "Likely cause: project not initialized or wrong path. "
+            "Next command: open the project, then switch AI again."
+        )
+    if not connection.strip():
+        raise ConfigError(
+            "Switching AI needs a connection. "
+            "Likely cause: no connection was selected. "
+            "Next command: pick a registered connection, then save."
+        )
+
+    updates = {"connection": connection.strip()}
+    if model and model.strip():
+        updates["model"] = model.strip()
+    existing = project_toml.read_text(encoding="utf-8")
+    new_text = _update_section(existing, f"routing.{task}", updates)
+    project_toml.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(project_toml, new_text)
 
 
 def _drop_none(**fields: str | None) -> dict[str, str]:

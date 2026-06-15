@@ -1,0 +1,53 @@
+<div id="active-ai">
+  {% if switch_saved %}<p class="saved-note" role="status">Saved ✓ — the next translation run uses this AI.</p>{% endif %}
+  {% if switch_error %}<p class="error" role="alert">{{ switch_error }}</p>{% endif %}
+
+  <div class="active-ai__current">
+    <span class="meta">Active AI · translate</span>
+    <strong>{{ active_ai.model }}</strong>
+    {% if active_ai.connection_name %}
+      <span class="meta">via {{ active_ai.connection_name }}</span>
+      {% if not active_ai.connection_exists %}<span class="badge bad">connection missing</span>{% endif %}
+    {% elif active_ai.source == "provider" %}
+      <span class="meta">legacy provider config</span>
+    {% else %}
+      <span class="badge warn">not set</span>
+    {% endif %}
+  </div>
+
+  <details class="active-ai__switch">
+    <summary>Switch AI</summary>
+    {% if connections %}
+    <form class="stack" id="switch-ai-form">
+      <input type="hidden" name="task" value="translate">
+      <label>Connection
+        <select name="connection">
+          {% for c in connections %}
+          <option value="{{ c.name }}"{% if c.name == active_ai.connection_name %} selected{% endif %}>{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Model
+        <input name="model" list="switch-ai-models" placeholder="model id (or pick from list)"
+               value="{{ active_ai.model if active_ai.source == 'routing' else '' }}"
+               aria-label="Model id">
+      </label>
+      {% include "partials/_routing_models.html" %}
+      <div class="form-row">
+        <button type="button"
+                hx-post="/ui/projects/{{ project_name }}/routing/models"
+                hx-include="#switch-ai-form"
+                hx-target="#switch-ai-models-box"
+                hx-swap="outerHTML"
+                hx-disabled-elt="this">Load models</button>
+        <button type="submit"
+                hx-post="/ui/projects/{{ project_name }}/routing/switch"
+                hx-target="#active-ai"
+                hx-swap="outerHTML">Use this AI</button>
+      </div>
+    </form>
+    {% else %}
+    <p class="empty hint">No connections yet. <a href="/ui/providers">Add a connection</a> first, then switch AI here.</p>
+    {% endif %}
+  </details>
+</div>
