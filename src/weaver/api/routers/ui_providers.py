@@ -64,7 +64,7 @@ def legacy_config_page(project: str | None = None) -> RedirectResponse:
     project_name = _opt(project)
     if project_name:
         target = f"{target}?{urlencode({'project': project_name})}"
-    return RedirectResponse(f"{target}#config-editor", status_code=307)
+    return RedirectResponse(f"{target}#connections", status_code=307)
 
 
 @router.get("/ui/providers", response_class=HTMLResponse)
@@ -121,39 +121,6 @@ def provider_healthcheck(name: str, request: Request) -> HTMLResponse:
         "partials/_provider_status.html",
         {"name": name, "status": status, "error": None},
     )
-
-
-@router.post("/ui/providers/config", response_class=HTMLResponse)
-def config_save(
-    request: Request,
-    scope: str = Form("project"),
-    project: str | None = Form(None),
-    provider_type: str | None = Form(None),
-    protocol: str | None = Form(None),
-    model: str | None = Form(None),
-    base_url: str | None = Form(None),
-    api_key_env: str | None = Form(None),
-) -> HTMLResponse:
-    """Persist provider/model config (no key value accepted), then re-render the form."""
-    base = _base_dir(request)
-    error: str | None = None
-    try:
-        config_service.write_config(
-            base,
-            scope=scope,
-            project=_opt(project),
-            provider_type=_opt(provider_type),
-            protocol=_opt(protocol),
-            model=_opt(model),
-            base_url=_opt(base_url),
-            api_key_env=_opt(api_key_env),
-        )
-    except WeaverError as exc:
-        error = str(exc)
-    ctx = _config_ctx(request, project)
-    ctx["error"] = error
-    ctx["saved"] = error is None
-    return templates.TemplateResponse(request, "partials/_config_form.html", ctx)
 
 
 @router.post("/ui/providers/secrets", response_class=HTMLResponse)

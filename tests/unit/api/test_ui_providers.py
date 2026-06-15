@@ -163,7 +163,7 @@ def test_legacy_config_page_redirects_to_providers_editor(
 ) -> None:
     resp = providers_client.get("/ui/config", follow_redirects=False)
     assert resp.status_code == 307
-    assert resp.headers["location"] == "/ui/providers#config-editor"
+    assert resp.headers["location"] == "/ui/providers#connections"
 
 
 def test_legacy_config_page_redirect_preserves_project_query(
@@ -171,7 +171,7 @@ def test_legacy_config_page_redirect_preserves_project_query(
 ) -> None:
     resp = providers_client.get("/ui/config", params={"project": "alpha"}, follow_redirects=False)
     assert resp.status_code == 307
-    assert resp.headers["location"] == "/ui/providers?project=alpha#config-editor"
+    assert resp.headers["location"] == "/ui/providers?project=alpha#connections"
 
 
 def test_legacy_config_redirect_does_not_build_providers(
@@ -268,32 +268,6 @@ def test_resources_still_renders(providers_client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_providers_config_save_persists(providers_client: TestClient) -> None:
-    r = providers_client.post(
-        "/ui/providers/config",
-        data={"scope": "project", "project": "alpha", "provider_type": "fake", "model": "fake-9"},
-    )
-    assert r.status_code == 200 and "Saved" in r.text
-    view = providers_client.get("/config?project=alpha").json()
-    assert view["model"] == "fake-9"
-
-
-def test_providers_config_unbuildable_provider_type_errors_without_persisting(
-    providers_client: TestClient,
-) -> None:
-    r = providers_client.post(
-        "/ui/providers/config",
-        data={"scope": "project", "project": "alpha", "provider_type": "not-real"},
-    )
-    assert r.status_code == 200
-    assert "Provider configuration is incomplete" in r.text
-    assert "Saved" not in r.text
-
-    view = providers_client.get("/config?project=alpha").json()
-    assert view["provider_type"] == "custom"
-    assert view["protocol"] == "openai_chat"
-
-
 def test_providers_secret_set_and_delete_without_exposing_value(
     providers_client: TestClient,
 ) -> None:
@@ -317,35 +291,25 @@ def test_providers_secret_invalid_name_error(providers_client: TestClient) -> No
 
 
 # ---------------------------------------------------------------------------
-# 10. Config editor embedded in hub (Task 3)
+# 10. Connection-first surface (legacy provider editor removed)
 # ---------------------------------------------------------------------------
 
 
-def test_providers_hub_renders_config_editor(providers_client: TestClient) -> None:
+def test_providers_hub_has_no_legacy_provider_editor(providers_client: TestClient) -> None:
     html = providers_client.get("/ui/providers").text
-    # free-form provider config fields are present (no provider <select>)
-    assert 'name="provider_type"' in html
-    assert 'name="protocol"' in html
-    assert '<select name="provider_type"' not in html
-    # the editor posts to the canonical endpoint, not the legacy /ui/config route
-    assert 'hx-post="/ui/providers/config"' in html
-    assert 'hx-post="/ui/providers/secrets"' in html
-    assert 'href="/ui/config' not in html
-    assert 'action="/ui/config' not in html
-    assert 'hx-post="/ui/config' not in html
+    # the pre-0.7.2 [provider] editor is gone
+    assert 'name="provider_type"' not in html
+    assert 'hx-post="/ui/providers/config"' not in html
+    assert "Per-project provider (legacy)" not in html
 
 
-def test_providers_hub_explains_canonical_config_surface(
+def test_providers_hub_explains_connection_first_surface(
     providers_client: TestClient,
 ) -> None:
     html = providers_client.get("/ui/providers").text
     assert "Register AI endpoints once and reuse them across projects." in html
     assert "never shown" in html
     assert "Legacy aliases remain supported" not in html
-    assert "Set an explicit protocol." in html
-    assert "openai_chat requires base_url, api_key_env, and model" in html
-    assert "Health checks run only when you press Check." in html
-    assert "This page does not call providers on load." in html
     assert "Secret values are stored but never rendered." in html
 
 
@@ -441,10 +405,3 @@ def test_connection_delete_removes(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert get_connection("c") is None
 
 
-def test_providers_hub_project_param_loads_project_config(providers_client: TestClient) -> None:
-    providers_client.post(
-        "/ui/providers/config",
-        data={"scope": "project", "project": "alpha", "provider_type": "fake", "model": "fake-42"},
-    )
-    html = providers_client.get("/ui/providers", params={"project": "alpha"}).text
-    assert "fake-42" in html
