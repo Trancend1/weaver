@@ -27,6 +27,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from weaver.errors import DataDirError
+
 DATA_DIR_ENV = "WEAVER_DATA_DIR"
 BOOKS_DIR_ENV = "WEAVER_BOOKS_DIR"
 APP_NAME = "Weaver"
@@ -87,10 +89,21 @@ class AppPaths:
         """Create the runtime-required directories. Idempotent.
 
         Only directories the runtime writes to are created here. ``root`` and
-        ``config_dir`` are the same; the rest are content-owning subdirs.
+        ``config_dir`` are the same; the rest are content-owning subdirs. A
+        filesystem failure is surfaced as :class:`DataDirError` so the sidecar
+        can exit with code 66 (SIDECAR_CONTRACT.md §5) instead of crashing
+        unmapped.
         """
         for path in (self.root, self.logs_dir, self.cache_dir, self.temp_dir):
-            path.mkdir(parents=True, exist_ok=True)
+            try:
+                path.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                raise DataDirError(
+                    f"Cannot create the Weaver data directory at {path}. "
+                    "Likely cause: the location is read-only or permission was denied. "
+                    "Next command: set WEAVER_DATA_DIR to a writable path, or fix the "
+                    "permissions on the directory above."
+                ) from exc
 
 
 def default_root() -> Path:
