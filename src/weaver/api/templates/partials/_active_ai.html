@@ -55,4 +55,39 @@
     <p class="empty hint">No connections yet. <a href="/ui/providers">Add a connection</a> first, then switch AI here.</p>
     {% endif %}
   </details>
+
+  {% if active_ai.source == "routing" %}
+  <details class="active-ai__fallback">
+    <summary>Fallback chain{% if fallbacks %} ({{ fallbacks | length }}){% endif %}</summary>
+    <p class="hint meta">If the primary AI fails on a segment, Weaver retries the next connection here (no circuit breaker — just try-next).</p>
+    {% if fallbacks %}
+    <ol class="fallback-list">
+      {% for fc, fm in fallbacks %}
+      <li class="meta">{{ fm or "(connection default)" }} via {{ fc }}</li>
+      {% endfor %}
+    </ol>
+    <button type="button" class="link-btn"
+            hx-post="/ui/projects/{{ project_name }}/routing/fallback/clear"
+            hx-target="#active-ai" hx-swap="outerHTML"
+            hx-confirm="Remove all fallbacks for translate?">Clear fallbacks</button>
+    {% else %}
+    <p class="empty hint">No fallback configured.</p>
+    {% endif %}
+    {% if connections %}
+    <form class="stack" id="add-fallback-form">
+      <label>Add fallback
+        <select name="connection">
+          {% for c in connections %}<option value="{{ c.name }}">{{ c.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Model
+        <input name="model" placeholder="model id (optional — uses connection default)" aria-label="Fallback model id">
+      </label>
+      <button type="submit"
+              hx-post="/ui/projects/{{ project_name }}/routing/fallback/add"
+              hx-target="#active-ai" hx-swap="outerHTML">Add fallback</button>
+    </form>
+    {% endif %}
+  </details>
+  {% endif %}
 </div>

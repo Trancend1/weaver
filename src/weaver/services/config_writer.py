@@ -23,7 +23,7 @@ import os
 import re
 import tempfile
 import tomllib
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -122,14 +122,22 @@ def set_provider(
 
 
 def set_routing(
-    project_toml: Path, *, task: str, connection: str, model: str | None = None
+    project_toml: Path,
+    *,
+    task: str,
+    connection: str,
+    model: str | None = None,
+    fallbacks: Sequence[tuple[str, str]] | None = None,
 ) -> None:
-    """Write ``[routing.<task>]`` (connection + optional model) to a project.toml.
+    """Write the machine-managed ``[routing.<task>]`` section to a project.toml.
 
-    Line-aware (preserves comments and other sections). The connection name is
-    recorded as-is; resolution against the registry happens at run time in
-    ``services/routing``. An empty ``model`` is omitted so the connection's
-    ``default_model`` applies.
+    Records ``connection`` + optional ``model`` and an optional ``fallback`` array
+    of ``{connection, model}`` inline tables. The whole section is rewritten (it is
+    Weaver-owned), but every other section + its comments is preserved. ``model``
+    empty is omitted (the connection's ``default_model`` applies). ``fallbacks``:
+    ``None`` keeps any existing ``fallback`` array; a list sets it; ``[]`` clears
+    it. Connection names are recorded as-is; registry resolution happens at run
+    time in ``services/routing``.
 
     Raises:
         ConfigError: unknown task, missing project file, or empty connection.
@@ -155,13 +163,71 @@ def set_routing(
             "Next command: pick a registered connection, then save."
         )
 
-    updates = {"connection": connection.strip()}
-    if model and model.strip():
-        updates["model"] = model.strip()
     existing = project_toml.read_text(encoding="utf-8")
-    new_text = _update_section(existing, f"routing.{task}", updates)
+    effective_fallbacks = _resolve_fallbacks(existing, task, fallbacks)
+    section = _render_routing_section(task, connection.strip(), model, effective_fallbacks)
+    new_text = _replace_or_append_section(existing, f"routing.{task}", section)
     project_toml.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write(project_toml, new_text)
+
+
+def _resolve_fallbacks(
+    existing: str, task: str, fallbacks: Sequence[tuple[str, str]] | None
+) -> list[tuple[str, str]]:
+    """Use the given fallbacks, or preserve the existing ``fallback`` array."""
+
+    if fallbacks is not None:
+        return [(str(c).strip(), str(m).strip()) for c, m in fallbacks if str(c).strip()]
+    parsed = _parse_toml(existing, Path("project.toml")) if existing.strip() else {}
+    routing = parsed.get("routing", {})
+    entry = routing.get(task, {}) if isinstance(routing, dict) else {}
+    raw = entry.get("fallback", []) if isinstance(entry, dict) else []
+    out: list[tuple[str, str]] = []
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict) and _clean(item.get("connection")):
+                out.append((str(item["connection"]).strip(), str(item.get("model", "")).strip()))
+    return out
+
+
+def _render_routing_section(
+    task: str, connection: str, model: str | None, fallbacks: Sequence[tuple[str, str]]
+) -> str:
+    lines = [f"[routing.{task}]", f'connection = "{_escape(connection)}"']
+    if model and model.strip():
+        lines.append(f'model = "{_escape(model.strip())}"')
+    if fallbacks:
+        items = []
+        for conn, mdl in fallbacks:
+            inner = f'connection = "{_escape(conn)}"'
+            if mdl:
+                inner += f', model = "{_escape(mdl)}"'
+            items.append("{ " + inner + " }")
+        lines.append("fallback = [" + ", ".join(items) + "]")
+    return "\n".join(lines) + "\n"
+
+
+def _replace_or_append_section(text: str, section: str, body: str) -> str:
+    """Replace the ``[section]`` block (header → next header) with ``body``."""
+
+    lines = text.splitlines()
+    header = f"[{section}]"
+    header_index = _find_header(lines, header)
+    if header_index is None:
+        return _append_section_block(text, body)
+    section_end = _section_end(lines, header_index)
+    new_lines = lines[:header_index] + body.rstrip("\n").split("\n") + lines[section_end:]
+    trailing_newline = "\n" if text.endswith("\n") or not text else ""
+    return "\n".join(new_lines) + trailing_newline
+
+
+def _append_section_block(text: str, body: str) -> str:
+    prefix = text
+    if prefix and not prefix.endswith("\n"):
+        prefix += "\n"
+    if prefix and not prefix.endswith("\n\n"):
+        prefix += "\n"
+    return f"{prefix}{body}"
 
 
 def _drop_none(**fields: str | None) -> dict[str, str]:

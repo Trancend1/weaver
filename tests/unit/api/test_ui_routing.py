@@ -138,6 +138,50 @@ def test_routing_cached_models_reads_cache_without_probe(
     assert "cached-1" in resp.text and "cached-2" in resp.text
 
 
+def test_routing_add_and_clear_fallback(tmp_path: Path) -> None:
+    import tomllib
+
+    _init(tmp_path, "alpha")
+    _register_openrouter()
+    from weaver.core.connection_registry import Connection, register_connection
+
+    register_connection(Connection(name="backup", base_url="https://b/v1", api_key_env="B_KEY"))
+    client = TestClient(create_api_app(tmp_path))
+    # set a primary first
+    client.post(
+        "/ui/projects/alpha/routing/switch",
+        data={"connection": "openrouter", "model": "pm", "task": "translate"},
+    )
+    # add a fallback
+    resp = client.post(
+        "/ui/projects/alpha/routing/fallback/add",
+        data={"connection": "backup", "model": "bm"},
+    )
+    assert resp.status_code == 200
+    assert "backup" in resp.text
+    project_toml = tmp_path / ".weaver" / "alpha" / "project.toml"
+    data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+    assert data["routing"]["translate"]["fallback"] == [{"connection": "backup", "model": "bm"}]
+
+    # clear it
+    client.post("/ui/projects/alpha/routing/fallback/clear")
+    data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+    assert "fallback" not in data["routing"]["translate"]
+
+
+def test_routing_add_fallback_without_primary_is_inline_error(tmp_path: Path) -> None:
+    _init(tmp_path, "alpha")
+    _register_openrouter()
+    client = TestClient(create_api_app(tmp_path))
+    # no primary routing set (legacy provider) -> adding a fallback is rejected
+    resp = client.post(
+        "/ui/projects/alpha/routing/fallback/add", data={"connection": "openrouter", "model": "m"}
+    )
+    assert resp.status_code == 200
+    assert 'role="alert"' in resp.text
+    assert "Set a primary AI first" in resp.text
+
+
 def test_routing_panel_shows_cached_models_for_active_connection(tmp_path: Path) -> None:
     _init(tmp_path, "alpha")
     _register_openrouter()

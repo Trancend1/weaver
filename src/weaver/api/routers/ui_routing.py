@@ -23,7 +23,7 @@ from weaver.errors import WeaverError
 from weaver.services import connections as connections_service
 from weaver.services.config_writer import set_routing
 from weaver.services.project_discovery import find_project
-from weaver.services.routing import resolve_active_ai
+from weaver.services.routing import resolve_active_ai, resolve_chain
 
 router = APIRouter(tags=["ui"], include_in_schema=False)
 
@@ -71,6 +71,15 @@ def _models_fragment(
     )
 
 
+def _current_fallbacks(toml: Path) -> list[tuple[str, str]]:
+    """Read the configured fallback chain (connection, model), best-effort."""
+    try:
+        chain = resolve_chain(toml, TaskType.translate)
+    except WeaverError:
+        return []
+    return [(c.connection_name or "", c.model) for c in chain[1:]]
+
+
 def _panel(request: Request, name: str, toml: Path, **extra: object) -> HTMLResponse:
     active = resolve_active_ai(toml, TaskType.translate)
     models, stale = _cached_for(active.connection_name)
@@ -80,9 +89,28 @@ def _panel(request: Request, name: str, toml: Path, **extra: object) -> HTMLResp
         "connections": connections_service.list_connection_views(),
         "models": models,
         "models_stale": stale,
+        "fallbacks": _current_fallbacks(toml),
     }
     ctx.update(extra)
     return templates.TemplateResponse(request, "partials/_active_ai.html", ctx)
+
+
+def _set_primary_with_fallbacks(toml: Path, fallbacks: list[tuple[str, str]]) -> None:
+    """Rewrite [routing.translate] keeping the current primary, updating fallbacks."""
+    active = resolve_active_ai(toml, TaskType.translate)
+    if active.source != "routing" or not active.connection_name:
+        raise WeaverError(
+            "Set a primary AI first. "
+            "Likely cause: this project still uses the legacy provider config. "
+            "Next command: pick a primary with Switch AI, then add a fallback."
+        )
+    set_routing(
+        toml,
+        task="translate",
+        connection=active.connection_name,
+        model=active.model if active.model != "—" else None,
+        fallbacks=fallbacks,
+    )
 
 
 @router.get("/ui/projects/{name}/routing", response_class=HTMLResponse)
@@ -134,3 +162,33 @@ def routing_cached_models(name: str, request: Request, connection: str) -> HTMLR
     """Render a connection's cached models (cache read only — no probe, Gate B1)."""
     models, stale = _cached_for(connection)
     return _models_fragment(request, models, error=None, stale=stale)
+
+
+@router.post("/ui/projects/{name}/routing/fallback/add", response_class=HTMLResponse)
+def routing_add_fallback(
+    name: str, request: Request, connection: str = Form(...), model: str | None = Form(None)
+) -> HTMLResponse:
+    """Append a (connection, model) fallback to the translate routing chain."""
+    toml = _resolve_toml(request, name)
+    if toml is None:
+        return HTMLResponse(f"<p class='error' role='alert'>No project named {name!r}.</p>")
+    fallbacks = _current_fallbacks(toml)
+    fallbacks.append((connection.strip(), _opt(model) or ""))
+    try:
+        _set_primary_with_fallbacks(toml, fallbacks)
+    except WeaverError as exc:
+        return _panel(request, name, toml, switch_error=str(exc))
+    return _panel(request, name, toml, switch_saved=True)
+
+
+@router.post("/ui/projects/{name}/routing/fallback/clear", response_class=HTMLResponse)
+def routing_clear_fallbacks(name: str, request: Request) -> HTMLResponse:
+    """Remove all fallbacks from the translate routing chain."""
+    toml = _resolve_toml(request, name)
+    if toml is None:
+        return HTMLResponse(f"<p class='error' role='alert'>No project named {name!r}.</p>")
+    try:
+        _set_primary_with_fallbacks(toml, [])
+    except WeaverError as exc:
+        return _panel(request, name, toml, switch_error=str(exc))
+    return _panel(request, name, toml, switch_saved=True)

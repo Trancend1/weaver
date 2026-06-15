@@ -133,6 +133,58 @@ def test_set_routing_unknown_task_raises(tmp_path: Path) -> None:
         set_routing(p, task="bogus", connection="c", model="m")
 
 
+def test_set_routing_writes_fallback_array(tmp_path: Path) -> None:
+    p = tmp_path / "project.toml"
+    p.write_text("", encoding="utf-8")
+    set_routing(
+        p,
+        task="translate",
+        connection="openrouter",
+        model="m",
+        fallbacks=[("backup", "bm"), ("local", "")],
+    )
+    data = tomllib.loads(p.read_text(encoding="utf-8"))
+    fb = data["routing"]["translate"]["fallback"]
+    assert fb[0] == {"connection": "backup", "model": "bm"}
+    assert fb[1] == {"connection": "local"}  # empty model omitted
+
+
+def test_set_routing_preserves_existing_fallback_when_none(tmp_path: Path) -> None:
+    p = tmp_path / "project.toml"
+    p.write_text("", encoding="utf-8")
+    set_routing(
+        p, task="translate", connection="openrouter", model="m", fallbacks=[("backup", "bm")]
+    )
+    # switch the primary model without passing fallbacks -> fallback survives
+    set_routing(p, task="translate", connection="openrouter", model="m2")
+    data = tomllib.loads(p.read_text(encoding="utf-8"))
+    assert data["routing"]["translate"]["model"] == "m2"
+    assert data["routing"]["translate"]["fallback"] == [{"connection": "backup", "model": "bm"}]
+
+
+def test_set_routing_clears_fallback_with_empty_list(tmp_path: Path) -> None:
+    p = tmp_path / "project.toml"
+    p.write_text("", encoding="utf-8")
+    set_routing(
+        p, task="translate", connection="openrouter", model="m", fallbacks=[("backup", "bm")]
+    )
+    set_routing(p, task="translate", connection="openrouter", model="m", fallbacks=[])
+    data = tomllib.loads(p.read_text(encoding="utf-8"))
+    assert "fallback" not in data["routing"]["translate"]
+
+
+def test_set_routing_preserves_other_sections(tmp_path: Path) -> None:
+    p = tmp_path / "project.toml"
+    p.write_text(
+        '[provider]\nmodel = "legacy"\n\n[translation]\nhonorifics = "preserve"\n', "utf-8"
+    )
+    set_routing(p, task="translate", connection="openrouter", model="m")
+    data = tomllib.loads(p.read_text(encoding="utf-8"))
+    assert data["provider"]["model"] == "legacy"
+    assert data["translation"]["honorifics"] == "preserve"
+    assert data["routing"]["translate"]["connection"] == "openrouter"
+
+
 # --- workspace [defaults] tier ---------------------------------------------
 
 

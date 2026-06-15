@@ -107,8 +107,8 @@
   {% endif %}
 
   <section id="config-editor" class="panel c-panel">
-    <h2 class="panel__title">Provider / model</h2>
-    <p class="meta">Global defaults and optional per-project provider overrides. No hidden default provider; set provider, protocol, model, API-key env name, and base URL here.</p>
+    <h2 class="panel__title">Per-project provider (legacy)</h2>
+    <p class="meta">The pre-0.7.2 per-project <code>[provider]</code> editor. New projects use <strong>Connections</strong> (above) and pick a model per project from the project page (<em>Switch AI</em>). This editor stays for projects that have not migrated; it still works.</p>
     <form class="inline-form form-row" method="get" action="/ui/providers">
       <label>Project
         <select name="project">

@@ -1269,3 +1269,7 @@ h2 { text-wrap: balance; letter-spacing: -0.025em; }
 .active-ai__current strong { font-size: var(--text-md, 1rem); }
 .active-ai__switch { margin-top: var(--space-sm); }
 .active-ai__switch > summary { cursor: pointer; font-weight: 650; color: var(--color-link); }
+.active-ai__fallback { margin-top: var(--space-sm); }
+.active-ai__fallback > summary { cursor: pointer; font-weight: 650; color: var(--color-link); }
+.fallback-list { margin: var(--space-xs) 0; padding-left: var(--space-lg); }
+.fallback-list li { margin: var(--space-xs) 0; }
