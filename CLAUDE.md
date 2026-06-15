@@ -240,6 +240,12 @@ Branch: `feat/connection-first-routing` (3 commits landed + uncommitted Bagian B
 
 **Key files (already built, reuse — do not re-derive):** `core/connection_registry.py`, `core/task_types.py`, `providers/discovery.py`, `services/connections.py` (hybrid key: `probe_connection`, `add_connection`, `derive_env_name`), `services/routing.py` (`resolve_provider_config`, `resolve_active_ai`), `services/config_writer.set_routing`, `api/routers/ui_providers.py` (connection routes) + `ui_routing.py` (Active AI/Switch AI), partials `_connection_*`/`_connections`/`_active_ai`/`_routing_models`. Tests mirror under `tests/unit/{core,providers,services,api}/`.
 
+##### Post-sprint owner-feedback refinements (2026-06-16)
+
+- **Connection form gained a Default Model field** (Test loads the endpoint's models into a suggestions datalist via `hx-swap-oob`). A router serves many models; the connection captures an optional default. (commit `2835b85`)
+- **Legacy per-project provider editor removed** from the cockpit — `#config-editor` + `_config_form.html` + `POST /ui/providers/config` gone; JSON `/config` API + `provider_config` service kept for automation/back-compat. `/ui/config` now redirects to `#connections`. (commit `52da0f3`)
+- **Cross-project table is now an Active-AI switch station** — each row shows the resolved Active AI (model via connection / legacy / not set) and a per-row **Switch AI** that writes `[routing.translate]` for that project and re-renders the row (`_provider_row.html`, `POST /ui/providers/{name}/switch`, `workspace_providers` carries the resolved Active AI; `resolve_active_ai` now normalizes legacy `[provider]` so a brand alias still shows its shim model). Gate B1 preserved (no provider call on render).
+
 #### Desktop Installer & Release Hardening exit — ✅ MET (ADR 017, PASS)
 
 - [x] NSIS installer builds; installs per-user with a Start-menu entry + uninstaller (owner smoke 2026-06-15).

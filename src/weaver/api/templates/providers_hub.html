@@ -32,13 +32,12 @@
 
   {% if providers.projects %}
   <div class="panel c-panel providers-projects">
-    <p class="meta">Health checks run only when you press Check. This page does not call providers on load.</p>
+    <p class="meta">Each project's <strong>Active AI</strong> for the translate task. <em>Switch AI</em> swaps its connection in place; health Check runs only when pressed. This page never calls a provider on load.</p>
     <table class="providers-table">
       <thead>
         <tr>
           <th>Project</th>
-          <th>Provider</th>
-          <th>Model</th>
+          <th>Active AI</th>
           <th>API key</th>
           <th>Tokens (in / out)</th>
           <th>Failures</th>
@@ -46,55 +45,7 @@
         </tr>
       </thead>
       <tbody>
-        {% for p in providers.projects %}
-        <tr class="providers-row">
-          <td><a href="/ui/projects/{{ p.project_name }}">{{ p.project_name }}</a></td>
-          <td><span class="badge dim">{{ p.provider_type }}</span></td>
-          <td class="meta">{{ p.model }}</td>
-          <td>
-            {% if not p.requires_key %}
-              <span class="meta">no key needed</span>
-            {% elif p.secret_present %}
-              <span class="badge good" title="{{ p.api_key_env }} is set (value never shown)">{{ p.api_key_env }} ✓</span>
-            {% else %}
-              <a href="#secrets" class="badge bad"
-                 title="{{ p.api_key_env }} is not set — set its value in Secrets below">{{ p.api_key_env or "key" }} missing</a>
-            {% endif %}
-          </td>
-          <td class="meta">
-            {% if p.input_tokens or p.output_tokens %}
-              {{ "{:,}".format(p.input_tokens) }} / {{ "{:,}".format(p.output_tokens) }}
-            {% else %}—{% endif %}
-          </td>
-          <td>
-            {% if p.failed_job_count > 0 %}
-              <details class="provider-failures">
-                <summary><span class="badge bad">{{ p.failed_job_count }}</span></summary>
-                <ul class="provider-failures__list">
-                  {% for f in p.recent_failures %}
-                  <li>
-                    <span class="meta">{{ f.kind }}</span>
-                    {% if f.error_summary %}<span class="provider-failures__msg">{{ f.error_summary }}</span>{% endif %}
-                    {% if f.finished_at %}<span class="meta">· {{ f.finished_at[:19] | replace("T", " ") }}</span>{% endif %}
-                  </li>
-                  {% endfor %}
-                </ul>
-              </details>
-            {% else %}
-              <span class="meta">none</span>
-            {% endif %}
-          </td>
-          <td>
-            <div id="provider-health-{{ p.project_name }}">
-              <button type="button" class="btn btn--small"
-                      hx-post="/ui/providers/{{ p.project_name }}/healthcheck"
-                      hx-target="#provider-health-{{ p.project_name }}"
-                      hx-swap="innerHTML"
-                      hx-disabled-elt="this">Check</button>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
+        {% for p in providers.projects %}{% include "partials/_provider_row.html" %}{% endfor %}
       </tbody>
     </table>
   </div>

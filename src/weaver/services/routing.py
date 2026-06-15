@@ -26,6 +26,7 @@ from weaver.core.connection_registry import get_connection
 from weaver.core.global_config import load_global_config
 from weaver.core.task_types import TaskType
 from weaver.errors import ConfigError
+from weaver.providers.registry import normalize_provider_config
 
 
 @dataclass(frozen=True)
@@ -164,10 +165,15 @@ def resolve_active_ai(
         )
 
     provider = data.get("provider")
-    model = _clean(provider.get("model")) if isinstance(provider, dict) else None
-    if model is None:
-        return ActiveAI(model="—", connection_name=None, source="unset", connection_exists=True)
-    return ActiveAI(model=model, connection_name=None, source="provider", connection_exists=True)
+    if isinstance(provider, dict) and provider:
+        # Normalize so a legacy brand alias (e.g. type=deepseek) still surfaces its
+        # shim model ("deepseek-chat") instead of an empty raw field.
+        model = _clean(normalize_provider_config(provider).get("model"))
+        if model is not None:
+            return ActiveAI(
+                model=model, connection_name=None, source="provider", connection_exists=True
+            )
+    return ActiveAI(model="—", connection_name=None, source="unset", connection_exists=True)
 
 
 def _clean(value: object) -> str | None:

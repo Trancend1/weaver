@@ -27,6 +27,7 @@ from weaver.api.ui_context import ws_hub_layout
 from weaver.errors import SecretNotFoundError, WeaverError
 from weaver.services import connections as connections_service
 from weaver.services import provider_config as config_service
+from weaver.services.config_writer import set_routing
 from weaver.services.project import inspect_project
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.workspace_providers import build_workspace_providers
@@ -87,6 +88,46 @@ def providers_page(request: Request, project: str | None = None) -> HTMLResponse
             "books_dir": str(base),
             "connections": connections_service.list_connection_views(),
             **config_ctx,
+        },
+    )
+
+
+def _project_summary(base: Path, name: str) -> object | None:
+    """Find one project's read-only summary (rebuilds the workspace view)."""
+    for summary in build_workspace_providers(base).projects:
+        if summary.project_name == name:
+            return summary
+    return None
+
+
+@router.post("/ui/providers/{name}/switch", response_class=HTMLResponse)
+def provider_switch(
+    name: str,
+    request: Request,
+    connection: str = Form(...),
+    model: str | None = Form(None),
+) -> HTMLResponse:
+    """Switch a project's translate AI from the workspace table, then re-render its row."""
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    toml = getattr(dp, "project_toml", None) if dp is not None else None
+    if dp is None or dp.error or not isinstance(toml, Path):
+        msg = f"No project named {name!r}."
+        return HTMLResponse(
+            f"<tr><td colspan='6'><span class='error' role='alert'>{msg}</span></td></tr>"
+        )
+    error: str | None = None
+    try:
+        set_routing(toml, task="translate", connection=connection, model=_opt(model))
+    except WeaverError as exc:
+        error = str(exc)
+    return templates.TemplateResponse(
+        request,
+        "partials/_provider_row.html",
+        {
+            "p": _project_summary(base, name),
+            "connections": connections_service.list_connection_views(),
+            "switch_error": error,
         },
     )
 

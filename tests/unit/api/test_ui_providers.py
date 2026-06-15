@@ -391,6 +391,44 @@ def test_connection_test_probe_renders_model_count(
     assert "2 models" in resp.text
 
 
+def test_providers_table_shows_active_ai_and_switch_control(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _isolate_connection_files(tmp_path, monkeypatch)
+    _init(tmp_path, "alpha", provider="deepseek")
+    client = TestClient(create_api_app(tmp_path))
+    html = client.get("/ui/providers").text
+    assert "Active AI" in html
+    assert "deepseek-chat" in html  # legacy [provider] model shown as active AI
+    assert "legacy provider" in html
+    assert "Switch AI" in html
+
+
+def test_providers_switch_writes_routing_and_updates_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import tomllib
+
+    from weaver.core.connection_registry import Connection, register_connection
+
+    _isolate_connection_files(tmp_path, monkeypatch)
+    _init(tmp_path, "alpha", provider="deepseek")
+    register_connection(
+        Connection(name="openrouter", base_url="https://o/v1", api_key_env="OPENROUTER_API_KEY")
+    )
+    client = TestClient(create_api_app(tmp_path))
+    resp = client.post(
+        "/ui/providers/alpha/switch", data={"connection": "openrouter", "model": "gpt-5"}
+    )
+    assert resp.status_code == 200
+    assert "gpt-5" in resp.text
+    assert "via openrouter" in resp.text
+    project_toml = tmp_path / ".weaver" / "alpha" / "project.toml"
+    data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+    assert data["routing"]["translate"]["connection"] == "openrouter"
+    assert data["routing"]["translate"]["model"] == "gpt-5"
+
+
 def test_connection_delete_removes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _isolate_connection_files(tmp_path, monkeypatch)
     from weaver.core.connection_registry import get_connection

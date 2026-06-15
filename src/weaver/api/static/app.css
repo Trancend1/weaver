@@ -1273,3 +1273,7 @@ h2 { text-wrap: balance; letter-spacing: -0.025em; }
 .active-ai__fallback > summary { cursor: pointer; font-weight: 650; color: var(--color-link); }
 .fallback-list { margin: var(--space-xs) 0; padding-left: var(--space-lg); }
 .fallback-list li { margin: var(--space-xs) 0; }
+.provider-active-ai strong { font-size: var(--text-sm); }
+.row-switch { margin-top: var(--space-xs); }
+.row-switch > summary { cursor: pointer; color: var(--color-link); font-size: var(--text-xs); }
+.row-switch form { margin-top: var(--space-xs); }
