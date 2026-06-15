@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from collections.abc import Callable, Iterable, Sequence
 from contextlib import closing
 from dataclasses import dataclass
@@ -22,7 +23,7 @@ from weaver.providers.types import (
 )
 from weaver.readers import read_source
 from weaver.services.glossary import raise_on_glossary_conflicts
-from weaver.services.routing import resolve_provider_config
+from weaver.services.routing import resolve_chain
 from weaver.storage.characters import list_characters
 from weaver.storage.db import connect_database, transaction
 from weaver.storage.glossary import list_glossary_terms
@@ -56,6 +57,10 @@ MEMORY_PROVIDER = "memory"
 MEMORY_MODEL = "memory"
 
 VALID_HONORIFIC_POLICIES = frozenset({"preserve", "localize", "hybrid"})
+
+# How long a connection stays cold-marked after a per-segment failure within one
+# run (ADR 018 D4 — a simple try-next window, not a circuit breaker).
+_FALLBACK_COLD_SECONDS = 30.0
 
 ProgressCallback = Callable[[int, int, SegmentRecord, bool, int | None, int | None], None]
 
@@ -234,8 +239,8 @@ def translate_project(
     base_dir = cwd or Path.cwd()
     data = load_project_config(project_toml)
     project_config = data["project"]
-    base_provider_config = resolve_provider_config(project_toml, TaskType.translate, data=data)
-    provider_config = _merge_provider_config(base_provider_config, provider_override)
+    engine_chain = resolve_chain(project_toml, TaskType.translate, data=data)
+    provider_config = _merge_provider_config(engine_chain[0].provider_config, provider_override)
     translation_config = data["translation"]
     persist_raw_response = raw_response_logging_enabled(data)
     db_path = _resolve_path(str(project_config["database_path"]), base_dir, project_toml.parent)
@@ -281,6 +286,20 @@ def translate_project(
             f"Likely cause: project.toml [translation] honorifics must be one of: {valid}. "
             "Next command: edit project.toml and correct the value."
         )
+
+    # Build the fallback engines once per run (skip any that cannot be built — a
+    # missing-key fallback must not abort the run; the primary still translates).
+    # Skipped when a provider is injected directly (test path).
+    fallback_engines: list[tuple[LLMProvider, str]] = []
+    run_cold: dict[str, float] = {}
+    if provider is None:
+        for candidate in engine_chain[1:]:
+            try:
+                fallback_engines.append(
+                    (build_provider(candidate.provider_config), candidate.model)
+                )
+            except (ConfigError, ProviderError):
+                continue
 
     translated_count = 0
     reused_count = 0
@@ -330,6 +349,8 @@ def translate_project(
                     provider_model=provider_model,
                     characters=characters,
                     persist_raw_response=persist_raw_response,
+                    fallbacks=fallback_engines,
+                    cold=run_cold,
                 )
             )
             if translated:
@@ -423,6 +444,8 @@ def translate_one_segment(
     characters: Iterable[CharacterContext] = (),
     use_translation_memory: bool = True,
     persist_raw_response: bool = False,
+    fallbacks: Sequence[tuple[LLMProvider, str]] = (),
+    cold: dict[str, float] | None = None,
 ) -> tuple[bool, bool, int | None, int | None]:
     """Translate one segment in a single transaction.
 
@@ -498,44 +521,56 @@ def translate_one_segment(
             honorific_policy=honorific_policy,
             characters=characters,
         )
-        request = TranslationRequest(
-            segment_id=segment.id,
-            source_text=source_text,
-            normalized_source_text=normalized_source_text,
-            source_language=project.source_lang,
-            target_language=project.target_lang,
-            context=context,
-            provider_model=provider_model,
-        )
-        try:
-            response = provider.translate(request)
-        except ProviderError:
-            update_segment_status(connection, segment_id=segment.id, status="failed")
-            return False, False, None, None
+        # Primary + ordered fallbacks (ADR 018 D4). Try each in turn; on a
+        # provider failure, cold-mark that engine for a short window and advance.
+        # No circuit breaker (D9) — just a simple try-next. If every candidate is
+        # currently cold, try them anyway rather than failing the segment blind.
+        candidates: list[tuple[LLMProvider, str]] = [(provider, provider_model), *fallbacks]
+        now = time.monotonic()
+        warm = [c for c in candidates if cold is None or cold.get(c[0].name, 0.0) <= now]
+        for cand_provider, cand_model in warm or candidates:
+            request = TranslationRequest(
+                segment_id=segment.id,
+                source_text=source_text,
+                normalized_source_text=normalized_source_text,
+                source_language=project.source_lang,
+                target_language=project.target_lang,
+                context=context,
+                provider_model=cand_model,
+            )
+            try:
+                response = cand_provider.translate(request)
+            except ProviderError:
+                if cold is not None:
+                    cold[cand_provider.name] = now + _FALLBACK_COLD_SECONDS
+                continue
 
-        record_translation(
-            connection,
-            segment_id=segment.id,
-            text=response.translation,
-            source_hash=segment.source_hash,
-            provider=provider.name,
-            model=provider_model,
-            raw_response=response.raw_response if persist_raw_response else None,
-            input_tokens=response.input_tokens,
-            output_tokens=response.output_tokens,
-        )
-        save_translation_memory(
-            connection,
-            project_id=project.id,
-            source_text=normalized_source_text,
-            source_hash=segment.source_hash,
-            target_text=response.translation,
-            provider=provider.name,
-            model=provider_model,
-            protect_manual=True,
-        )
-        update_segment_status(connection, segment_id=segment.id, status="translated")
-        return True, False, response.input_tokens, response.output_tokens
+            record_translation(
+                connection,
+                segment_id=segment.id,
+                text=response.translation,
+                source_hash=segment.source_hash,
+                provider=cand_provider.name,
+                model=cand_model,
+                raw_response=response.raw_response if persist_raw_response else None,
+                input_tokens=response.input_tokens,
+                output_tokens=response.output_tokens,
+            )
+            save_translation_memory(
+                connection,
+                project_id=project.id,
+                source_text=normalized_source_text,
+                source_hash=segment.source_hash,
+                target_text=response.translation,
+                provider=cand_provider.name,
+                model=cand_model,
+                protect_manual=True,
+            )
+            update_segment_status(connection, segment_id=segment.id, status="translated")
+            return True, False, response.input_tokens, response.output_tokens
+
+        update_segment_status(connection, segment_id=segment.id, status="failed")
+        return False, False, None, None
 
 
 def raw_response_logging_enabled(config: dict[str, Any]) -> bool:

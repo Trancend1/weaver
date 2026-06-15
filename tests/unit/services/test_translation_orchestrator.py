@@ -316,6 +316,52 @@ def test_translate_project_persists_raw_response_when_enabled(tmp_path, monkeypa
     assert _count_persisted_raw_responses(init.database_path) == 6
 
 
+def test_translate_project_fallback_rescues_primary_failure(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("WEAVER_CONNECTIONS_PATH", str(tmp_path / "connections.toml"))
+    from weaver.core.connection_registry import Connection, register_connection
+    from weaver.providers.fake import FakeProvider
+
+    init = initialize_project(FIXTURE_EPUB)
+    register_connection(Connection(name="primary", base_url="https://p/v1", api_key_env="P_KEY"))
+    register_connection(Connection(name="backup", base_url="https://b/v1", api_key_env="B_KEY"))
+
+    text = init.project_toml.read_text(encoding="utf-8")
+    text += (
+        "\n[routing.translate]\n"
+        'connection = "primary"\n'
+        'model = "pm"\n'
+        'fallback = [{ connection = "backup", model = "bm" }]\n'
+    )
+    init.project_toml.write_text(text, encoding="utf-8")
+
+    calls = {"primary": 0, "backup": 0}
+
+    class _CountingFake(FakeProvider):
+        def __init__(self, who: str, fail_rate: float) -> None:
+            super().__init__(fail_rate=fail_rate)
+            self.name = who
+
+        def translate(self, request: TranslationRequest) -> TranslationResponse:
+            calls[self.name] += 1
+            return super().translate(request)
+
+    def _fake_build(cfg: dict[str, object]) -> FakeProvider:
+        who = str(cfg.get("type") or "x")
+        return _CountingFake(who, 1.0 if who == "primary" else 0.0)
+
+    monkeypatch.setattr("weaver.services.translation.build_provider", _fake_build)
+
+    summary = translate_project(init.project_toml)
+
+    # The primary fails every call; the backup rescues every segment.
+    assert summary.translated_segments == 6
+    assert summary.failed_segments == 0
+    # Primary fails segment 1, is cold-marked, then skipped — backup carries the rest.
+    assert calls["primary"] == 1
+    assert calls["backup"] == 6
+
+
 def _first_segment_id(db_path: Path) -> str:
     with sqlite3.connect(db_path) as connection:
         return str(

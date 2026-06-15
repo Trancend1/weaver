@@ -11,7 +11,7 @@ from weaver.core.connection_registry import Connection, register_connection
 from weaver.core.task_types import TaskType
 from weaver.errors import ConfigError
 from weaver.services.config_writer import set_routing
-from weaver.services.routing import resolve_active_ai, resolve_provider_config
+from weaver.services.routing import resolve_active_ai, resolve_chain, resolve_provider_config
 
 _DUMMY = Path("project.toml")
 
@@ -131,3 +131,74 @@ def test_set_routing_unknown_task_raises(tmp_path: Path) -> None:
     p.write_text("", encoding="utf-8")
     with pytest.raises(ConfigError):
         set_routing(p, task="bogus", connection="c", model="m")
+
+
+# --- workspace [defaults] tier ---------------------------------------------
+
+
+def test_defaults_tier_used_when_no_routing_and_no_provider_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _register_openrouter()
+    monkeypatch.setattr(
+        "weaver.services.routing.load_global_config",
+        lambda *a, **k: {
+            "defaults": {"default_connection": "openrouter", "default_model": "from-defaults"}
+        },
+    )
+    cfg = resolve_provider_config(_DUMMY, TaskType.translate, data={})
+    assert cfg["base_url"] == "https://openrouter.ai/api/v1"
+    assert cfg["model"] == "from-defaults"
+
+
+def test_defaults_tier_not_used_when_provider_has_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _register_openrouter()
+    monkeypatch.setattr(
+        "weaver.services.routing.load_global_config",
+        lambda *a, **k: {"defaults": {"default_connection": "openrouter"}},
+    )
+    data = {"provider": {"model": "legacy", "base_url": "https://x", "api_key_env": "K"}}
+    cfg = resolve_provider_config(_DUMMY, TaskType.translate, data=data)
+    assert cfg == data["provider"]
+
+
+# --- fallback chain ---------------------------------------------------------
+
+
+def test_resolve_chain_primary_only_when_no_fallback() -> None:
+    _register_openrouter()
+    data = {"routing": {"translate": {"connection": "openrouter", "model": "m"}}}
+    chain = resolve_chain(_DUMMY, TaskType.translate, data=data)
+    assert len(chain) == 1
+    assert chain[0].connection_name == "openrouter"
+    assert chain[0].model == "m"
+
+
+def test_resolve_chain_includes_fallbacks_in_order() -> None:
+    _register_openrouter()
+    register_connection(Connection(name="backup", base_url="https://b/v1", api_key_env="B"))
+    data = {
+        "routing": {
+            "translate": {
+                "connection": "openrouter",
+                "model": "m",
+                "fallback": [{"connection": "backup", "model": "bm"}],
+            }
+        }
+    }
+    chain = resolve_chain(_DUMMY, TaskType.translate, data=data)
+    assert [c.connection_name for c in chain] == ["openrouter", "backup"]
+    assert chain[1].model == "bm"
+
+
+def test_resolve_chain_skips_unknown_fallback_connection() -> None:
+    _register_openrouter()
+    data = {
+        "routing": {
+            "translate": {"connection": "openrouter", "fallback": [{"connection": "ghost"}]}
+        }
+    }
+    chain = resolve_chain(_DUMMY, TaskType.translate, data=data)
+    assert len(chain) == 1  # unknown fallback skipped; primary still resolves
