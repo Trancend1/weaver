@@ -140,7 +140,14 @@ Get-ChildItem "$env:APPDATA\Weaver\logs\runtime.log"
 - UI routers stay presentation-only thin adapters over `services/*` — no business logic, no storage access.
 
 ## Release / baseline process
-- Bump `pyproject.toml` version; update `CHANGELOG.md`.
+- Bump `pyproject.toml` version (**single source of truth**); update `CHANGELOG.md`.
 - Run the full regression checklist + acceptance gate.
 - Build wheel (`uv build --wheel`); verify web assets (`templates/*.html`, `static/*`) ship in the wheel when relevant.
 - Commit author/committer = maintainer only. PyPI publish/tag is credential-gated.
+
+### Desktop release (Windows, ADR 017)
+- Sync the desktop version: `./desktop/scripts/sync-version.ps1` (derives `tauri.conf.json` from `pyproject.toml`). Never hand-edit the tauri version.
+- Commit, then push tag `vX.Y.Z` — it **must** equal the `pyproject` version or `check-version.ps1 -Tag` fails the release.
+- `.github/workflows/release.yml` (on `v*`, `windows-latest`) runs: version guard → `build-sidecar.ps1` → `cargo tauri build` (NSIS) → sign **iff** `WINDOWS_CERTIFICATE_THUMBPRINT` secret exists (else unsigned, no failure) → `make-latest-json.ps1` → GitHub Release with `*-setup.exe` + `latest.json`.
+- Before tagging, confirm the upgrade-compatibility test (`docs/superpowers/handoffs/2026-06-15-upgrade-test.md`) passes for the new version.
+- Code signing is **off until a certificate exists**; store the thumbprint as a repo secret to enable it (no code change needed).
