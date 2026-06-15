@@ -1,0 +1,37 @@
+<form class="stack" id="connection-form">
+  {% if add_error %}<p class="error" role="alert">{{ add_error }}</p>{% endif %}
+  <label>Connection Name
+    <input name="name" placeholder="openrouter" required aria-label="Connection name">
+  </label>
+  <label>Endpoint
+    <input name="base_url" placeholder="https://openrouter.ai/api/v1" required aria-label="Endpoint URL">
+  </label>
+  <label>API Key
+    <input name="api_key" type="password" placeholder="key value (stored, never shown)" aria-label="API key value (stored, never shown)">
+  </label>
+  <details class="connection-advanced">
+    <summary>Advanced</summary>
+    <p class="hint meta">Leave blank to auto-name the key (<code>WEAVER_CONN_&lt;NAME&gt;</code>). Override only if you manage env vars yourself.</p>
+    <label>Env-var name
+      <input name="api_key_env" placeholder="auto" aria-label="API key env-var name override">
+    </label>
+    <label class="checkbox-row">
+      <input type="checkbox" name="use_shell_env" value="1"> Use an existing shell env var (don't store the value)
+    </label>
+    <label class="checkbox-row">
+      <input type="checkbox" name="keyless" value="1"> This endpoint needs no key (e.g. local Ollama)
+    </label>
+  </details>
+  <div class="form-row">
+    <button type="button"
+            hx-post="/ui/providers/connections/test"
+            hx-target="#connection-test"
+            hx-swap="innerHTML"
+            hx-disabled-elt="this">Test Connection</button>
+    <button type="submit"
+            hx-post="/ui/providers/connections"
+            hx-target="#connections"
+            hx-swap="outerHTML">Save Connection</button>
+  </div>
+  <div id="connection-test" aria-live="polite"></div>
+</form>

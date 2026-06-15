@@ -1,16 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Providers · Weaver{% endblock %}
+{% block title %}Connections · Weaver{% endblock %}
 {% block content %}
 <section class="providers-hub">
-  {% set page_title = "Providers Hub" %}
+  {% set page_title = "Connections" %}
   {% set total_in = providers.projects | sum(attribute="input_tokens") %}
   {% set total_out = providers.projects | sum(attribute="output_tokens") %}
-  {% set page_meta = providers.degraded | length ~ " degraded · " ~ providers.projects | length ~ " projects · " ~ total_in ~ " in / " ~ total_out ~ " out tokens" %}
-  {% set page_crumbs = [{"label": "Dashboard", "href": "/ui"}, {"label": "Providers"}] %}
+  {% set page_meta = connections | length ~ " connections · " ~ providers.projects | length ~ " projects · " ~ total_in ~ " in / " ~ total_out ~ " out tokens" %}
+  {% set page_crumbs = [{"label": "Dashboard", "href": "/ui"}, {"label": "Connections"}] %}
   {% set page_actions %}
-    <span class="hint">/ui/providers is the canonical provider config page. /ui/config is compatibility-only and redirects here.</span>
+    <span class="hint">Register AI endpoints once and reuse them across projects. Keys are stored locally and never shown.</span>
   {% endset %}
   {% include "partials/_page_header.html" %}
+
+  {% include "partials/_connections.html" %}
 
   {% if providers.degraded %}
   <div class="panel c-panel providers-degraded">

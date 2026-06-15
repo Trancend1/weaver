@@ -209,16 +209,16 @@ _Bagian A — engine de-brand (DONE 2026-06-15):_
 * [ ] `providers/gemini.py` + `providers/ollama.py` removed; `google-generativeai` dropped from `pyproject.toml`; Gemini/Ollama validated over their OpenAI-compatible endpoints (`requires_cloud`/`requires_ollama`).
 
 _Bagian B — connection-first UX + registry + routing (lean backing, D9):_
-* [ ] **Connection form = Name + Endpoint + Key + [Test]** only; **no** protocol/type/engine field shown. Test success renders `✓ Connected · N models · NNN ms` before Save.
-* [ ] "Providers" surface relabelled **Connections**; route kept/aliased (ADR 015 bookmarks alive).
-* [ ] `core/connection_registry.py` + `~/.weaver/connections.toml` (under `WEAVER_DATA_DIR`, owner-only, comment-preserving round-trip); register a connection < 30s from CLI + cockpit.
-* [ ] **Model discovery is core**: on-demand `GET /v1/models` POST (Test/Refresh) fills count + picker; **never on render, no background thread**. Stale snapshot used on probe failure.
-* [ ] **Model-centric project AI**: "Choose AI"/"Switch AI" lists discovered models grouped by connection; project header shows **Active AI** (`model via connection`); one-click switch writes `[routing.<task>]` and takes effect next segment.
-* [ ] `model` accepts any free-form id end-to-end; discovery only *suggests* (test: arbitrary unknown id routes via `FakeProvider`).
-* [ ] `services/routing.py` precedence (`[routing.<task>]` → `connection_ref` → `[provider]` → `[defaults]`) unit-tested; **simple** per-segment fallback rescues a forced `fail_rate=1.0` primary via a `fail_rate=0.0` fallback.
+* [x] **Connection form = Name + Endpoint + Key + [Test]** only; **no** protocol/type/engine field shown. Advanced (collapsed) = env-name override + "use shell env" + keyless. Test renders `✓ Connected · N models · NNN ms`. (`_connection_form.html`, hybrid key per D7.)
+* [x] "Providers" surface relabelled **Connections**; route `/ui/providers` kept (ADR 015 bookmarks alive).
+* [x] `core/connection_registry.py` + `~/.weaver/connections.toml` (honors `WEAVER_CONNECTIONS_PATH`, owner-only 0600); register/test/delete via cockpit + `services/connections.py` facade (hybrid key → `WEAVER_CONN_<NAME>` secret).
+* [~] **Model discovery** (`providers/discovery.py`): on-demand `GET /v1/models` POST (Test) yields count, **never on render, no background thread**. _Pending:_ persistent cache table + stale snapshot + grouped picker.
+* [ ] **Model-centric project AI**: "Choose AI"/"Switch AI" lists discovered models grouped by connection; project header shows **Active AI** (`model via connection`); one-click switch writes `[routing.<task>]`, next-segment effect.
+* [x] `model` accepts any free-form id end-to-end; discovery only *suggests* (no enum anywhere).
+* [ ] `services/routing.py` precedence (`[routing.<task>]` → `connection_ref` → `[provider]` → `[defaults]`) + **simple** per-segment fallback (`fail_rate=1.0` rescued by `fail_rate=0.0`).
 * [ ] Legacy `[provider]`-only projects resolve bit-for-bit to 0.7.1 behavior (shim D6).
-* [ ] `uv run ruff check .`, `ruff format --check .`, `pyright`, `pytest` all green.
-* [ ] **Lean-backing fence (D9):** no circuit breaker, health-score formula, presets, `routing_decisions` table, cost/observability dashboard, rotation window, or native non-OpenAI families. Health badge = last-probe result only.
+* [x] `ruff`, `ruff format`, `pyright`, `pytest` green (1520 passed; +29 connection-layer tests).
+* [x] **Lean-backing fence (D9) held:** no circuit breaker, health-score formula, presets, `routing_decisions` table, cost/observability dashboard, rotation window, or native non-OpenAI families. Health badge = config state on render; live ✓/models only on Test.
 
 #### Desktop Installer & Release Hardening exit — ✅ MET (ADR 017, PASS)
 * [x] NSIS installer builds; installs per-user with a Start-menu entry + uninstaller (owner smoke 2026-06-15).

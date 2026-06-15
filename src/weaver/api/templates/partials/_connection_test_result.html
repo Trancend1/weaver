@@ -1,0 +1,5 @@
+{% if error %}
+<p class="error" role="alert">{{ error }}</p>
+{% elif result is not none %}
+<p class="saved-note" role="status">✓ Connected · {{ result.count }} model{{ "" if result.count == 1 else "s" }} · {{ result.latency_ms }} ms</p>
+{% endif %}

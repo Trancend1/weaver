@@ -339,14 +339,83 @@ def test_providers_hub_explains_canonical_config_surface(
     providers_client: TestClient,
 ) -> None:
     html = providers_client.get("/ui/providers").text
-    assert "/ui/providers is the canonical provider config page." in html
-    assert "/ui/config is compatibility-only and redirects here." in html
+    assert "Register AI endpoints once and reuse them across projects." in html
+    assert "never shown" in html
     assert "Legacy aliases remain supported" not in html
     assert "Set an explicit protocol." in html
     assert "openai_chat requires base_url, api_key_env, and model" in html
     assert "Health checks run only when you press Check." in html
     assert "This page does not call providers on load." in html
     assert "Secret values are stored but never rendered." in html
+
+
+def _isolate_connection_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WEAVER_CONNECTIONS_PATH", str(tmp_path / "connections.toml"))
+    monkeypatch.setenv("WEAVER_SECRETS_PATH", str(tmp_path / "secrets.toml"))
+
+
+def test_connection_add_registers_and_never_echoes_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _isolate_connection_files(tmp_path, monkeypatch)
+    from weaver.core.connection_registry import get_connection
+
+    client = TestClient(create_api_app(tmp_path))
+    resp = client.post(
+        "/ui/providers/connections",
+        data={"name": "openrouter", "base_url": "https://o/v1", "api_key": "sk-SECRET"},
+    )
+    assert resp.status_code == 200
+    assert "openrouter" in resp.text
+    assert "sk-SECRET" not in resp.text  # key value never echoed
+    conn = get_connection("openrouter")
+    assert conn is not None
+    assert conn.api_key_env == "WEAVER_CONN_OPENROUTER"
+
+
+def test_connection_add_without_key_shows_inline_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _isolate_connection_files(tmp_path, monkeypatch)
+    client = TestClient(create_api_app(tmp_path))
+    resp = client.post("/ui/providers/connections", data={"name": "c", "base_url": "https://o/v1"})
+    assert resp.status_code == 200
+    assert 'role="alert"' in resp.text
+    assert "needs an API key" in resp.text
+
+
+def test_connection_test_probe_renders_model_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _isolate_connection_files(tmp_path, monkeypatch)
+    from weaver.providers.discovery import DiscoveryResult
+
+    monkeypatch.setattr(
+        "weaver.services.connections.list_models",
+        lambda **_: DiscoveryResult(models=("m1", "m2"), latency_ms=12),
+    )
+    client = TestClient(create_api_app(tmp_path))
+    resp = client.post(
+        "/ui/providers/connections/test",
+        data={"name": "c", "base_url": "https://o/v1", "api_key": "sk-x"},
+    )
+    assert resp.status_code == 200
+    assert "Connected" in resp.text
+    assert "2 models" in resp.text
+
+
+def test_connection_delete_removes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _isolate_connection_files(tmp_path, monkeypatch)
+    from weaver.core.connection_registry import get_connection
+
+    client = TestClient(create_api_app(tmp_path))
+    client.post(
+        "/ui/providers/connections",
+        data={"name": "c", "base_url": "https://o/v1", "api_key": "sk-x"},
+    )
+    resp = client.post("/ui/providers/connections/c/delete")
+    assert resp.status_code == 200
+    assert get_connection("c") is None
 
 
 def test_providers_hub_project_param_loads_project_config(providers_client: TestClient) -> None:

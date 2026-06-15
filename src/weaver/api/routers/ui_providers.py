@@ -24,7 +24,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from weaver.api.templating import templates
 from weaver.api.ui_context import ws_hub_layout
+from weaver.core.connection_registry import get_connection
 from weaver.errors import SecretNotFoundError, WeaverError
+from weaver.services import connections as connections_service
 from weaver.services import provider_config as config_service
 from weaver.services.project import inspect_project
 from weaver.services.project_discovery import discover_projects, find_project
@@ -84,6 +86,7 @@ def providers_page(request: Request, project: str | None = None) -> HTMLResponse
             **ws_hub_layout("providers"),
             "providers": providers,
             "books_dir": str(base),
+            "connections": connections_service.list_connection_views(),
             **config_ctx,
         },
     )
@@ -186,3 +189,90 @@ def config_secret_delete(
     ctx = _config_ctx(request, project)
     ctx["secret_error"] = error
     return templates.TemplateResponse(request, "partials/_secrets.html", ctx)
+
+
+def _connections_panel(request: Request, **extra: object) -> HTMLResponse:
+    """Re-render the Connections panel (TOML read only — Gate-B1 safe)."""
+    ctx: dict[str, object] = {"connections": connections_service.list_connection_views()}
+    ctx.update(extra)
+    return templates.TemplateResponse(request, "partials/_connections.html", ctx)
+
+
+def _probe_result(request: Request, result: object | None, error: str | None) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/_connection_test_result.html",
+        {"result": result, "error": error},
+    )
+
+
+@router.post("/ui/providers/connections/test", response_class=HTMLResponse)
+def connection_test(
+    request: Request,
+    name: str = Form(""),
+    base_url: str = Form(""),
+    api_key: str | None = Form(None),
+    api_key_env: str | None = Form(None),
+    use_shell_env: str | None = Form(None),
+) -> HTMLResponse:
+    """Probe a not-yet-saved endpoint with form values (explicit POST, never on render)."""
+    try:
+        result = connections_service.probe_connection(
+            base_url=base_url,
+            api_key=_opt(api_key),
+            api_key_env=_opt(api_key_env),
+            use_shell_env=bool(use_shell_env),
+            name=name,
+        )
+    except WeaverError as exc:
+        return _probe_result(request, None, str(exc))
+    return _probe_result(request, result, None)
+
+
+@router.post("/ui/providers/connections", response_class=HTMLResponse)
+def connection_add(
+    request: Request,
+    name: str = Form(...),
+    base_url: str = Form(...),
+    api_key: str | None = Form(None),
+    api_key_env: str | None = Form(None),
+    use_shell_env: str | None = Form(None),
+    keyless: str | None = Form(None),
+) -> HTMLResponse:
+    """Register a connection (key value stored in secrets.toml, never echoed back)."""
+    try:
+        connections_service.add_connection(
+            name=name,
+            base_url=base_url,
+            api_key=_opt(api_key),
+            api_key_env=_opt(api_key_env),
+            use_shell_env=bool(use_shell_env),
+            requires_key=not bool(keyless),
+        )
+    except WeaverError as exc:
+        return _connections_panel(request, add_error=str(exc))
+    return _connections_panel(request, add_saved=True)
+
+
+@router.post("/ui/providers/connections/{name}/delete", response_class=HTMLResponse)
+def connection_delete(name: str, request: Request) -> HTMLResponse:
+    """Remove a connection (its stored secret is left in place)."""
+    connections_service.remove_connection(name)
+    return _connections_panel(request)
+
+
+@router.post("/ui/providers/connections/{name}/test", response_class=HTMLResponse)
+def connection_saved_test(name: str, request: Request) -> HTMLResponse:
+    """Probe an already-saved connection using its stored/shell key."""
+    conn = get_connection(name)
+    if conn is None:
+        return _probe_result(request, None, f"No connection named {name!r}.")
+    try:
+        result = connections_service.probe_connection(
+            base_url=conn.base_url,
+            api_key_env=conn.api_key_env or None,
+            name=conn.name,
+        )
+    except WeaverError as exc:
+        return _probe_result(request, None, str(exc))
+    return _probe_result(request, result, None)
