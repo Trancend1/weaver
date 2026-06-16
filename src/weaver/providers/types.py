@@ -28,6 +28,27 @@ class CharacterContext:
 
 
 @dataclass(frozen=True)
+class TranslationProfile:
+    """Project-level style contract emitted as the prompt `<profile>` block (ADR 019 E3).
+
+    All fields optional and free-form (no enum): the user describes the desired
+    register. `banned_phrases` is also a deterministic anti-slop check fed to the
+    enforcement gate (a soft repair trigger), never a hard block.
+    """
+
+    tone: str | None = None
+    dialog_style: str | None = None
+    name_rendering: str | None = None
+    tense: str | None = None
+    banned_phrases: tuple[str, ...] = ()
+
+    @property
+    def has_style(self) -> bool:
+        """True when any style field is set (drives whether to emit `<profile>`)."""
+        return any((self.tone, self.dialog_style, self.name_rendering, self.tense))
+
+
+@dataclass(frozen=True)
 class TranslationContext:
     """Per-segment context assembled by `build_context()`.
 
@@ -36,12 +57,14 @@ class TranslationContext:
     `glossary_terms` is pre-filtered to entries that substring-match the
     current segment's normalized source text, capped at 20 entries.
     `characters` is pre-filtered the same way (jp_name substring), capped at 20.
+    `profile` is the project-level style contract (None when unset).
     """
 
     previous_segments: tuple[tuple[str, str], ...]
     glossary_terms: tuple[GlossaryTerm, ...]
     honorific_policy: str
     characters: tuple[CharacterContext, ...] = ()
+    profile: TranslationProfile | None = None
 
 
 @dataclass(frozen=True)

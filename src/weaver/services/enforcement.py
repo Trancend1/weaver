@@ -59,13 +59,14 @@ def evaluate_translation(
     translation_text: str,
     glossary_terms: Iterable[GlossaryTerm] = (),
     characters: Iterable[CharacterContext] = (),
+    banned_phrases: Sequence[str] = (),
 ) -> EnforcementResult:
     """Return the deterministic enforcement violations for one fresh translation.
 
     Pure (no model call, no DB). Reuses :func:`check_glossary_mismatch`,
     :func:`check_character_name_missing`, and :func:`check_untranslated_japanese`
     so the gate agrees with the advisory QA report, plus a loose anti-truncation
-    floor.
+    floor and an optional anti-slop ``banned_phrases`` check (soft trigger).
     """
 
     seg = SegmentInput(
@@ -85,6 +86,14 @@ def evaluate_translation(
         messages.append(
             "Translation is empty or far shorter than the source (possible truncation)."
         )
+    haystack = translation_text.casefold()
+    for phrase in banned_phrases:
+        needle = phrase.strip().casefold()
+        if needle and needle in haystack:
+            messages.append(
+                f"Avoid the phrase {phrase.strip()!r} — it reads as machine translation; "
+                "rephrase it naturally."
+            )
     return EnforcementResult(violations=tuple(messages))
 
 

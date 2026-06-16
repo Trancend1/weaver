@@ -7,12 +7,13 @@ from pathlib import Path
 
 import pytest
 
+from weaver.core.slop_seed import DEFAULT_BANNED_PHRASES
 from weaver.errors import GlossaryConflictError, ProviderResponseError
 from weaver.providers.base import LLMProvider, ProviderStatus
 from weaver.providers.fake import FakeProvider
 from weaver.providers.types import TranslationRequest, TranslationResponse
 from weaver.services.project import initialize_project
-from weaver.services.translation import translate_project
+from weaver.services.translation import build_translation_profile, translate_project
 from weaver.storage.db import connect_database, transaction
 from weaver.storage.glossary import approve_glossary_candidate, insert_glossary_candidate
 from weaver.storage.segments import update_segment_status
@@ -162,6 +163,93 @@ def test_translate_project_keeps_primary_when_repair_unparseable(tmp_path, monke
             ).fetchone()[0]
         )
     assert repaired == 0  # nothing fabricated; original primary kept
+
+
+class _UncertainProvider(LLMProvider):
+    name = "fake"
+
+    def translate(self, request: TranslationRequest) -> TranslationResponse:
+        return TranslationResponse(
+            translation="A clean english line.",
+            notes=(),
+            uncertain_terms=("ナルトX", "新世界Y"),
+            raw_response="{}",
+            input_tokens=1,
+            output_tokens=1,
+        )
+
+    def complete(self, prompt, *, system=None, max_output_tokens):  # pragma: no cover
+        raise NotImplementedError
+
+    def healthcheck(self) -> ProviderStatus:
+        return ProviderStatus(
+            healthy=True, provider_name=self.name, model="u", message=None, latency_ms=0
+        )
+
+
+def test_enforcement_records_uncertain_terms_as_candidates(tmp_path, monkeypatch) -> None:
+    # ADR 019 E4: the model's self-reported uncertain terms become discovered
+    # glossary candidates (deduped across segments, no extra model call).
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+
+    translate_project(init.project_toml, provider=_UncertainProvider())
+
+    with sqlite3.connect(init.database_path) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            "SELECT source, status, frequency, category FROM glossary_candidates "
+            "WHERE source IN ('ナルトX', '新世界Y') ORDER BY source"
+        ).fetchall()
+    assert len(rows) == 2  # one row per term, deduped across the 6 segments
+    assert all(r["status"] == "pending" and r["category"] == "discovered" for r in rows)
+    assert all(r["frequency"] == 6 for r in rows)  # bumped once per translated segment
+
+
+def test_uncertain_term_already_approved_is_not_recorded(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    _approve_pinned_term(init.database_path, source="ナルトX", target="Naruto")
+
+    translate_project(init.project_toml, provider=_UncertainProvider())
+
+    with sqlite3.connect(init.database_path) as connection:
+        discovered = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM glossary_candidates "
+                "WHERE source = 'ナルトX' AND category = 'discovered'"
+            ).fetchone()[0]
+        )
+    assert discovered == 0  # already handled -> never re-proposed as a discovery
+
+
+def test_build_translation_profile_absent_is_none() -> None:
+    assert build_translation_profile({"translation": {}}) is None
+
+
+def test_build_translation_profile_applies_seed_and_style() -> None:
+    profile = build_translation_profile(
+        {"translation_profile": {"tone": "formal", "tense": "past"}}
+    )
+    assert profile is not None
+    assert profile.tone == "formal"
+    assert profile.has_style
+    assert profile.banned_phrases == DEFAULT_BANNED_PHRASES  # seed applies once declared
+
+
+def test_build_translation_profile_empty_banned_disables_seed() -> None:
+    profile = build_translation_profile({"translation_profile": {"banned_phrases": []}})
+    assert profile is not None
+    assert profile.banned_phrases == ()
+    assert not profile.has_style
+
+
+def test_build_translation_profile_custom_banned_replaces_seed() -> None:
+    profile = build_translation_profile(
+        {"translation_profile": {"banned_phrases": ["very unique slop"]}}
+    )
+    assert profile is not None
+    assert profile.banned_phrases == ("very unique slop",)
 
 
 def test_translate_project_resets_interrupted_segment_and_resumes(tmp_path, monkeypatch) -> None:

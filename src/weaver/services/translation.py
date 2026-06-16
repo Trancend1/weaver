@@ -12,6 +12,7 @@ from typing import Any
 
 from weaver.core.config import load_project_config
 from weaver.core.ir import BlockIR, DocumentIR, scope_document_to_volume
+from weaver.core.slop_seed import DEFAULT_BANNED_PHRASES
 from weaver.core.task_types import TaskType
 from weaver.errors import ConfigError, ParserError, ProviderError, ProviderUnavailable
 from weaver.providers import LLMProvider, build_provider
@@ -19,6 +20,7 @@ from weaver.providers.types import (
     CharacterContext,
     GlossaryTerm,
     TranslationContext,
+    TranslationProfile,
     TranslationRequest,
     TranslationResponse,
 )
@@ -28,7 +30,7 @@ from weaver.services.glossary import raise_on_glossary_conflicts
 from weaver.services.routing import resolve_chain
 from weaver.storage.characters import list_characters
 from weaver.storage.db import connect_database, transaction
-from weaver.storage.glossary import list_glossary_terms
+from weaver.storage.glossary import list_glossary_terms, record_uncertain_glossary_candidate
 from weaver.storage.projects import ProjectRecord, get_project
 from weaver.storage.segments import (
     SegmentRecord,
@@ -89,6 +91,7 @@ def build_context(
     previous_segments: Sequence[tuple[str, str]],
     honorific_policy: str = "preserve",
     characters: Iterable[CharacterContext] = (),
+    profile: TranslationProfile | None = None,
 ) -> TranslationContext:
     """Assemble a `TranslationContext` for one segment.
 
@@ -128,6 +131,7 @@ def build_context(
         glossary_terms=filtered_glossary,
         honorific_policy=honorific_policy,
         characters=filtered_characters,
+        profile=profile,
     )
 
 
@@ -246,6 +250,7 @@ def translate_project(
     translation_config = data["translation"]
     persist_raw_response = raw_response_logging_enabled(data)
     enforce_repair = enforce_repair_enabled(data)
+    profile = build_translation_profile(data)
     db_path = _resolve_path(str(project_config["database_path"]), base_dir, project_toml.parent)
     source_path = _resolve_path(str(project_config["source_file"]), base_dir, project_toml.parent)
 
@@ -355,6 +360,7 @@ def translate_project(
                     fallbacks=fallback_engines,
                     cold=run_cold,
                     enforce_repair=enforce_repair,
+                    profile=profile,
                 )
             )
             if translated:
@@ -451,6 +457,7 @@ def translate_one_segment(
     fallbacks: Sequence[tuple[LLMProvider, str]] = (),
     cold: dict[str, float] | None = None,
     enforce_repair: bool = True,
+    profile: TranslationProfile | None = None,
 ) -> tuple[bool, bool, int | None, int | None]:
     """Translate one segment in a single transaction.
 
@@ -525,7 +532,9 @@ def translate_one_segment(
             previous_segments=previous_segments,
             honorific_policy=honorific_policy,
             characters=characters,
+            profile=profile,
         )
+        banned_phrases = profile.banned_phrases if profile is not None else ()
         # Primary + ordered fallbacks (ADR 018 D4). Try each in turn; on a
         # provider failure, cold-mark that engine for a short window and advance.
         # No circuit breaker (D9) — just a simple try-next. If every candidate is
@@ -565,6 +574,7 @@ def translate_one_segment(
                     translation_text=response.translation,
                     glossary_terms=glossary_terms,
                     characters=characters,
+                    banned_phrases=banned_phrases,
                 )
                 if not verdict.ok:
                     repaired = _try_repair(
@@ -586,6 +596,7 @@ def translate_one_segment(
                             translation_text=repaired.translation,
                             glossary_terms=glossary_terms,
                             characters=characters,
+                            banned_phrases=banned_phrases,
                         )
                         # Keep the repaired attempt unless it is strictly worse than
                         # the original (a targeted fix that regressed is discarded).
@@ -613,6 +624,13 @@ def translate_one_segment(
                 model=cand_model,
                 protect_manual=True,
             )
+            # Recover the model's self-reported uncertain terms as discovered
+            # glossary candidates (ADR 019 E4) — free entity discovery, no extra
+            # model call. Idempotent + non-intrusive; the user reviews them later.
+            for uncertain_term in final.uncertain_terms:
+                record_uncertain_glossary_candidate(
+                    connection, project_id=project.id, source=uncertain_term
+                )
             update_segment_status(connection, segment_id=segment.id, status="translated")
             return True, False, spent_input, spent_output
 
@@ -660,6 +678,39 @@ def enforce_repair_enabled(config: dict[str, Any]) -> bool:
     if not isinstance(translation_config, dict):
         return True
     return bool(translation_config.get("enforce_repair", True))
+
+
+def build_translation_profile(config: dict[str, Any]) -> TranslationProfile | None:
+    """Build the project's ``[translation_profile]`` style contract (ADR 019 E3).
+
+    Returns ``None`` when the section is absent (no behavior change). When present,
+    ``banned_phrases`` defaults to the shipped seed; ``[]`` disables it and a custom
+    array replaces it (the seed only applies once a profile is declared).
+    """
+    raw = config.get("translation_profile")
+    if not isinstance(raw, dict):
+        return None
+    banned = raw.get("banned_phrases")
+    if banned is None:
+        banned_phrases = DEFAULT_BANNED_PHRASES
+    elif isinstance(banned, list):
+        banned_phrases = tuple(str(phrase) for phrase in banned)
+    else:
+        banned_phrases = ()
+    return TranslationProfile(
+        tone=_clean_profile_field(raw.get("tone")),
+        dialog_style=_clean_profile_field(raw.get("dialog_style")),
+        name_rendering=_clean_profile_field(raw.get("name_rendering")),
+        tense=_clean_profile_field(raw.get("tense")),
+        banned_phrases=banned_phrases,
+    )
+
+
+def _clean_profile_field(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def raw_response_logging_enabled(config: dict[str, Any]) -> bool:

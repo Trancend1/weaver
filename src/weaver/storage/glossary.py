@@ -200,6 +200,51 @@ def insert_glossary_candidate(
     return int(cursor.lastrowid)
 
 
+def record_uncertain_glossary_candidate(
+    connection: sqlite3.Connection, *, project_id: int, source: str
+) -> None:
+    """Record a model-reported uncertain term as a discovered glossary candidate.
+
+    Idempotent and non-intrusive (ADR 019 E4 — free entity discovery): skips terms
+    that are already an approved glossary term; bumps an existing **pending**
+    candidate's frequency instead of duplicating the row; never resurrects an
+    already-handled (approved/rejected/edited) candidate. The candidate is a
+    suggestion only — the user reviews it in the existing candidates page.
+    """
+
+    term = source.strip()
+    if not term:
+        return
+    known = connection.execute(
+        "SELECT 1 FROM glossary_terms WHERE project_id = ? AND source = ?",
+        (project_id, term),
+    ).fetchone()
+    if known is not None:
+        return
+    existing = connection.execute(
+        "SELECT id, status FROM glossary_candidates "
+        "WHERE project_id = ? AND source = ? ORDER BY id LIMIT 1",
+        (project_id, term),
+    ).fetchone()
+    if existing is not None:
+        if existing["status"] == "pending":
+            connection.execute(
+                "UPDATE glossary_candidates SET frequency = frequency + 1 WHERE id = ?",
+                (existing["id"],),
+            )
+        return
+    insert_glossary_candidate(
+        connection,
+        project_id=project_id,
+        source=term,
+        target=None,
+        category="discovered",
+        notes=None,
+        status="pending",
+        frequency=1,
+    )
+
+
 def list_glossary_candidates(
     connection: sqlite3.Connection, *, project_id: int
 ) -> list[GlossaryCandidateRecord]:

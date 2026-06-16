@@ -42,13 +42,14 @@ from weaver.errors import (
 )
 from weaver.providers import GlossaryTerm, LLMProvider, build_provider
 from weaver.providers.registry import normalize_provider_config
-from weaver.providers.types import CharacterContext
+from weaver.providers.types import CharacterContext, TranslationProfile
 from weaver.services.glossary import raise_on_glossary_conflicts
 from weaver.services.project_paths import resolve_database_path
 from weaver.services.routing import Candidate, resolve_chain
 from weaver.services.translation import (
     VALID_HONORIFIC_POLICIES,
     ProgressCallback,
+    build_translation_profile,
     enforce_repair_enabled,
     load_character_contexts,
     raw_response_logging_enabled,
@@ -90,6 +91,7 @@ class TranslationPlan:
     use_translation_memory: bool
     persist_raw_response: bool
     enforce_repair: bool = True
+    profile: TranslationProfile | None = None
     # Ordered per-task fallback engines (ADR 018 D4); the run tries each in turn
     # after the primary fails a segment. Empty when no `[routing.<task>].fallback`
     # is configured or none could be built.
@@ -215,6 +217,7 @@ def prepare_chapter_translation(
         use_translation_memory=(mode == "skip_existing"),
         persist_raw_response=raw_response_logging_enabled(data),
         enforce_repair=enforce_repair_enabled(data),
+        profile=build_translation_profile(data),
     )
 
 
@@ -275,6 +278,7 @@ def run_translation(
                 fallbacks=plan.fallback_engines,
                 cold=run_cold,
                 enforce_repair=plan.enforce_repair,
+                profile=plan.profile,
             )
             if ok:
                 translated += 1

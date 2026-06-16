@@ -9,7 +9,7 @@ from weaver.providers.prompts import (
     render_glossary_suggestion_prompt,
     render_user_message,
 )
-from weaver.providers.types import GlossaryTerm, TranslationContext
+from weaver.providers.types import GlossaryTerm, TranslationContext, TranslationProfile
 
 
 def test_glossary_suggestion_prompt_is_grounded_and_jsonmode_safe() -> None:
@@ -96,3 +96,37 @@ def test_user_message_renders_context_with_prev_markers() -> None:
     assert "[PREV-2] 彼は剣を鞘に収めた。" in rendered
     assert "[PREV-1] 「まだ終わりじゃない」とカイは言った。" in rendered
     assert "→ He sheathed his sword." in rendered
+
+
+def test_user_message_omits_profile_when_unset() -> None:
+    context = TranslationContext(
+        previous_segments=(), glossary_terms=(), honorific_policy="preserve"
+    )
+    rendered = render_user_message(context, source_text="テスト")
+    assert "<profile>" not in rendered
+
+
+def test_user_message_emits_profile_block_with_set_style_fields() -> None:
+    context = TranslationContext(
+        previous_segments=(),
+        glossary_terms=(),
+        honorific_policy="preserve",
+        profile=TranslationProfile(tone="formal", tense="past"),
+    )
+    rendered = render_user_message(context, source_text="テスト")
+    assert "<profile>" in rendered
+    assert "tone: formal" in rendered
+    assert "tense: past" in rendered
+    assert "dialogue:" not in rendered  # only set fields are emitted
+
+
+def test_user_message_omits_profile_when_only_banned_phrases() -> None:
+    # banned_phrases alone (no style fields) is a gate-only contract — no prompt block.
+    context = TranslationContext(
+        previous_segments=(),
+        glossary_terms=(),
+        honorific_policy="preserve",
+        profile=TranslationProfile(banned_phrases=("it can't be helped",)),
+    )
+    rendered = render_user_message(context, source_text="テスト")
+    assert "<profile>" not in rendered

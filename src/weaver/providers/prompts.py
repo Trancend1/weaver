@@ -55,6 +55,7 @@ def render_user_message(context: TranslationContext, *, source_text: str) -> str
         glossary_terms=context.glossary_terms,
         characters=context.characters,
         previous_segments=context.previous_segments,
+        profile=context.profile,
         source_text=source_text,
     )
 

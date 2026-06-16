@@ -75,6 +75,31 @@ def test_terse_but_valid_translation_is_not_truncation() -> None:
     assert result.ok
 
 
+def test_banned_phrase_is_a_soft_violation() -> None:
+    result = evaluate_translation(
+        segment_id="s1",
+        source_text="花子は走った。",
+        normalized_source_text="花子は走った。",
+        translation_text="It can't be helped, Hanako ran.",
+        characters=_CHARACTERS,
+        banned_phrases=("it can't be helped",),
+    )
+    assert not result.ok
+    assert any("can't be helped" in v.lower() for v in result.violations)
+
+
+def test_banned_phrase_absent_is_clean() -> None:
+    result = evaluate_translation(
+        segment_id="s1",
+        source_text="花子は走った。",
+        normalized_source_text="花子は走った。",
+        translation_text="Hanako ran.",
+        characters=_CHARACTERS,
+        banned_phrases=("it can't be helped",),
+    )
+    assert result.ok
+
+
 def test_repair_returns_reparsed_response_and_tokens() -> None:
     provider = FakeProvider(completion='{"translation": "Li Chen met Hanako."}')
     response = repair_translation(
