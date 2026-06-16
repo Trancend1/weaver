@@ -1,0 +1,36 @@
+{# Inline volume batch-translate panel (project page). Lives in the volume row's
+   #batch-vol-<volume_id> slot and self-refreshes while running, mirroring
+   _export_job.html. scope_id is the volume id, so each row owns its own panel. #}
+<div class="job-panel progress-panel" id="batch-vol-{{ job.scope_id }}"
+  {% if job.status == "running" %}
+  hx-get="/ui/projects/{{ name }}/batch/jobs/{{ job.id }}"
+  hx-trigger="load delay:1s" hx-target="#batch-vol-{{ job.scope_id }}" hx-swap="outerHTML"
+  {% endif %}>
+  <div class="job-head">
+    <strong>Translate volume</strong>
+    <span class="badge c-badge {{ 'ok' if job.status == 'done' else 'bad' if job.status == 'failed' else '' }}">{{ job_status_label(job.status) }}</span>
+    <span class="meta">only untranslated segments</span>
+  </div>
+
+  {% if job.status == "running" %}
+  <div class="progress-block progress-block--wide">
+    <progress value="{{ progress.chapters_done }}" max="{{ progress.chapters_total or 1 }}"></progress>
+    <span class="meta">{{ progress.chapters_done }}/{{ progress.chapters_total }} chapters ·
+      {{ progress.segments_done }}/{{ progress.segments_total }} segments ·
+      translated {{ progress.translated }} · reused {{ progress.reused_from_memory }} · failed {{ progress.failed }}</span>
+  </div>
+  <button type="button" class="btn btn--quiet"
+          hx-post="/ui/projects/{{ name }}/batch/jobs/{{ job.id }}/cancel"
+          hx-target="#batch-vol-{{ job.scope_id }}" hx-swap="outerHTML">Cancel</button>
+  {% elif job.status == "failed" %}
+  <p class="error" role="alert">{{ job.error }}</p>
+  {% else %}
+  {% if job.result %}
+  <p class="meta" aria-live="polite">translated {{ job.result.translated }} · reused {{ job.result.reused_from_memory }} ·
+    skipped {{ job.result.skipped }} · failed {{ job.result.failed }}{% if job.status == "cancelled" %} · cancelled{% endif %}</p>
+  {% endif %}
+  <button type="button" class="btn btn--quiet"
+          hx-get="/ui/projects/{{ name }}/tree"
+          hx-target="#tree" hx-swap="outerHTML">Refresh progress</button>
+  {% endif %}
+</div>
