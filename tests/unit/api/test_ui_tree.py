@@ -12,7 +12,9 @@ from types import SimpleNamespace
 from weaver.api.templating import templates
 
 
-def _tree_with(chapters: list[SimpleNamespace]) -> SimpleNamespace:
+def _tree_with(
+    chapters: list[SimpleNamespace], *, active_batch_job_id: str | None = None
+) -> SimpleNamespace:
     volume = SimpleNamespace(
         id=1,
         title="Vol 1",
@@ -22,6 +24,7 @@ def _tree_with(chapters: list[SimpleNamespace]) -> SimpleNamespace:
         chapter_count=len(chapters),
         segment_count=sum(c.segment_count for c in chapters),
         chapters=chapters,
+        active_batch_job_id=active_batch_job_id,
     )
     return SimpleNamespace(project_name="Proj", volumes=[volume])
 
@@ -55,3 +58,23 @@ def test_normal_chapter_still_renders_progress() -> None:
     assert "<progress" in html
     assert "7/7" in html
     assert "No translatable text" not in html
+
+
+def test_running_batch_reattaches_panel_and_hides_start_button() -> None:
+    tree = _tree_with([_ch("c2", "Ch 2", 7)], active_batch_job_id="JOB123")
+    html = _render(tree)
+
+    # The slot auto-loads the live panel on page load (reconnect, not reset).
+    assert "/batch/jobs/JOB123" in html
+    assert 'hx-trigger="load"' in html
+    # The start button is hidden while a batch is running (no accidental 2nd job).
+    assert "Translate volume" not in html
+
+
+def test_idle_volume_shows_start_button_and_empty_slot() -> None:
+    tree = _tree_with([_ch("c2", "Ch 2", 7)])
+    html = _render(tree)
+
+    assert "Translate volume" in html
+    assert 'id="batch-vol-1"' in html
+    assert "/batch/jobs/" not in html  # nothing to re-attach

@@ -12,16 +12,27 @@
                 data-volume-status="{{ v.status }}"
                 title="Volume lifecycle: {{ v.status_label }}">{{ v.status_label }}</span>
           <span class="qa-badge-slot" id="qa-badge-vol-{{ v.id }}"></span>
+          {% if not v.active_batch_job_id %}
           <button type="button" class="btn btn--quiet vol-translate"
                   hx-post="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/translate"
                   hx-target="#batch-vol-{{ v.id }}" hx-swap="outerHTML"
                   title="Translate every untranslated segment in this volume (skips done and manual edits)">Translate volume</button>
+          {% endif %}
           <button type="button" class="btn btn--quiet vol-delete"
                   hx-post="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/delete"
                   hx-target="#tree" hx-swap="outerHTML"
                   hx-confirm="Delete volume &quot;{{ v.title }}&quot;? This permanently removes its chapters, translations, and quality history. Glossary and translation memory stay.">Delete volume</button>
         </div>
+        {% if v.active_batch_job_id %}
+        {# A batch translate is still running for this volume. Re-attach the live
+           progress panel on page load (the job runs in the background regardless
+           of navigation), so progress is never lost — it reconnects, not resets. #}
+        <div id="batch-vol-{{ v.id }}" class="batch-slot"
+             hx-get="/ui/projects/{{ tree.project_name }}/batch/jobs/{{ v.active_batch_job_id }}"
+             hx-trigger="load" hx-target="#batch-vol-{{ v.id }}" hx-swap="outerHTML"></div>
+        {% else %}
         <div id="batch-vol-{{ v.id }}" class="batch-slot"></div>
+        {% endif %}
         <div class="vol-snapshot" id="snapshot-vol-{{ v.id }}">
           <button type="button" class="btn btn--quiet"
                   hx-get="/ui/projects/{{ tree.project_name }}/volumes/{{ v.id }}/snapshot"

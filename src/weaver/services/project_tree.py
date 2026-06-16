@@ -51,6 +51,10 @@ class VolumeView:
     chapters: list[ChapterView]
     status: VolumeStatus
     status_label: str
+    # Id of a batch-translate job still running for this volume (else None). Lets
+    # the project page re-attach the inline progress panel after a reload — the
+    # job keeps running in the background even when the page is left.
+    active_batch_job_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -134,6 +138,11 @@ def _volume_view(
         project_name=project_name,
         jobs=jobs,
     )
+    active_batch = (
+        jobs.find_running_batch(project_name=project_name, scope="volume", scope_id=str(volume.id))
+        if jobs is not None
+        else None
+    )
     return VolumeView(
         id=volume.id,
         title=volume.title,
@@ -144,6 +153,7 @@ def _volume_view(
         chapters=chapters,
         status=status_view.status,
         status_label=status_view.label,
+        active_batch_job_id=active_batch.id if active_batch is not None else None,
     )
 
 
