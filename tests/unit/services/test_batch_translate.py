@@ -7,12 +7,14 @@ from pathlib import Path
 
 import pytest
 
+from weaver.core.connection_registry import Connection, register_connection
 from weaver.errors import ChapterNotFoundError, VolumeNotFoundError
 from weaver.services.batch_translate import (
     BatchTranslationResult,
     prepare_batch_translation,
     run_batch_translation,
 )
+from weaver.services.config_writer import set_routing
 from weaver.storage.db import initialize_database, transaction
 from weaver.storage.projects import create_project
 from weaver.storage.segments import insert_segment
@@ -304,3 +306,33 @@ def test_run_cancel_mid_chapter(tmp_path: Path) -> None:
     assert len(result.chapters) == 1
     assert result.chapters[0].chapter_id == "v1c1"
     assert result.chapters[0].cancelled is True
+
+
+def test_batch_connection_first_routing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Regression (ADR 018): the batch path must resolve [routing.translate] too,
+    # not only the raw [provider] block — so a connection-first project (no
+    # [provider] model, Active AI set) translates instead of raising.
+    monkeypatch.setenv("WEAVER_CONNECTIONS_PATH", str(tmp_path / "connections.toml"))
+    project_toml = _seed(tmp_path, [[("v1c1", ["pending", "pending"])]])
+    # Drop the [provider] model so only routing can supply one.
+    text = project_toml.read_text(encoding="utf-8").replace('model = "fake-1"\n', "")
+    project_toml.write_text(text, encoding="utf-8")
+    register_connection(
+        Connection(
+            name="batchfake",
+            base_url="https://fake.invalid/v1",
+            api_key_env="",
+            default_model="fake-1",
+            protocol="fake",
+            requires_key=False,
+        )
+    )
+    set_routing(project_toml, task="translate", connection="batchfake", model="fake-1")
+
+    plan = prepare_batch_translation(project_toml, scope="novel")
+    result = run_batch_translation(plan)
+
+    assert plan.provider_model == "fake-1"
+    assert result.segments_total == 2
+    assert result.translated == 2
+    assert result.failed == 0

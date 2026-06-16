@@ -49,9 +49,9 @@ from weaver.services.workspace_translate import (
     load_single_project,
     load_translation_context,
     raw_response_logging_enabled,
+    resolve_translation_engines,
     run_translation,
     select_chapter_targets,
-    validate_provider_config,
 )
 from weaver.storage.db import connect_readonly_database
 from weaver.storage.projects import ProjectRecord
@@ -211,8 +211,8 @@ def prepare_batch_translation(
         )
 
     data = load_project_config(project_toml)
-    provider_config, provider_model, honorific_policy = validate_provider_config(
-        data, provider_override
+    provider_config, provider_model, honorific_policy, fallback_engines = (
+        resolve_translation_engines(project_toml, data, provider_override)
     )
 
     db_path = resolve_database_path(project_toml, cwd=cwd)
@@ -252,6 +252,7 @@ def prepare_batch_translation(
             requested_count=requested_count,
             use_translation_memory=use_translation_memory,
             persist_raw_response=persist_raw_response,
+            fallback_engines=fallback_engines,
         )
         for chapter_id, target_segment_ids, requested_count in collected
     )

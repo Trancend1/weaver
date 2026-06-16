@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from weaver.core.connection_registry import Connection, register_connection
 from weaver.errors import ChapterNotFoundError, SegmentNotFoundError
+from weaver.services.config_writer import set_routing
 from weaver.services.project import initialize_project
 from weaver.services.workspace_edit import save_segment_translation
 from weaver.services.workspace_translate import (
@@ -27,6 +29,21 @@ def _set_fake_provider(project_toml: Path) -> None:
     text = text.replace('model = ""', 'model = "fake-1"\npattern = "EN: {source}"')
     text = text.replace('model = "deepseek-chat"', 'model = "fake-1"\npattern = "EN: {source}"')
     project_toml.write_text(text, encoding="utf-8")
+
+
+def _register_fake_connection(name: str, model: str = "fake-1") -> None:
+    """Register a `fake`-protocol connection so the cockpit path can run offline."""
+
+    register_connection(
+        Connection(
+            name=name,
+            base_url="https://fake.invalid/v1",
+            api_key_env="",
+            default_model=model,
+            protocol="fake",
+            requires_key=False,
+        )
+    )
 
 
 def _first_chapter_id(db_path: Path) -> str:
@@ -244,3 +261,48 @@ def test_force_selected_overwrites_manual_and_appends_attempt(tmp_path, monkeypa
     assert len(after) == len(before) + 1  # append-only
     assert "hand edit" in after  # prior manual attempt preserved as history
     assert _status(init.database_path, segment_ids[0]) == "translated"
+
+
+def test_connection_first_project_translates_via_routing(tmp_path, monkeypatch) -> None:
+    # Regression (ADR 018): a connection-first project sets its model under
+    # [routing.translate] (Active AI) and leaves [provider] model empty. The
+    # cockpit chapter path must resolve routing — not raise "no model configured".
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("WEAVER_CONNECTIONS_PATH", str(tmp_path / "connections.toml"))
+    init = initialize_project(FIXTURE_EPUB)  # [provider] model left empty on purpose
+    _register_fake_connection("localfake")
+    set_routing(init.project_toml, task="translate", connection="localfake", model="fake-1")
+    chapter_id = _first_chapter_id(init.database_path)
+    segment_ids = _chapter_segment_ids(init.database_path, chapter_id)
+
+    plan = prepare_chapter_translation(init.project_toml, chapter_id)
+    result = run_translation(plan)
+
+    assert plan.provider.name == "fake"
+    assert plan.provider_model == "fake-1"
+    assert result.translated == len(segment_ids)
+    assert result.failed == 0
+
+
+def test_routing_fallback_chain_lands_on_the_plan(tmp_path, monkeypatch) -> None:
+    # The cockpit plan must carry the configured fallback engines (ADR 018 D4) so
+    # run_translation can try-next per segment, matching translate_project (CLI).
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("WEAVER_CONNECTIONS_PATH", str(tmp_path / "connections.toml"))
+    init = initialize_project(FIXTURE_EPUB)
+    _register_fake_connection("primary")
+    _register_fake_connection("backup", model="fake-2")
+    set_routing(
+        init.project_toml,
+        task="translate",
+        connection="primary",
+        model="fake-1",
+        fallbacks=[("backup", "fake-2")],
+    )
+    chapter_id = _first_chapter_id(init.database_path)
+
+    plan = prepare_chapter_translation(init.project_toml, chapter_id)
+
+    assert plan.provider_model == "fake-1"
+    assert [model for _provider, model in plan.fallback_engines] == ["fake-2"]
+    assert plan.fallback_engines[0][0].name == "fake"
