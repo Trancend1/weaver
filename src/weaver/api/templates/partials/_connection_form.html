@@ -15,12 +15,12 @@
   </label>
   <details class="connection-advanced">
     <summary>Advanced</summary>
-    <p class="hint meta">Leave blank to auto-name the key (<code>WEAVER_CONN_&lt;NAME&gt;</code>). Override only if you manage env vars yourself.</p>
+    <p class="hint meta">Leave blank and Weaver names the key for you. Only change this if you manage your own environment variables.</p>
     <label>Env-var name
       <input name="api_key_env" placeholder="auto" aria-label="API key env-var name override">
     </label>
     <label class="checkbox-row">
-      <input type="checkbox" name="use_shell_env" value="1"> Use an existing shell env var (don't store the value)
+      <input type="checkbox" name="use_shell_env" value="1"> Use a key already set in my environment (don't save it here)
     </label>
     <label class="checkbox-row">
       <input type="checkbox" name="keyless" value="1"> This endpoint needs no key (e.g. local Ollama)

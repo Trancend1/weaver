@@ -14,7 +14,7 @@
     </div>
     <div class="stat stat--muted">
       <span class="stat__value">{{ report.total_segments }}</span>
-      <span class="stat__label">Segments scanned</span>
+      <span class="stat__label">Segments checked</span>
     </div>
   </div>
   <p class="qa-summary__status">
@@ -22,7 +22,7 @@
     <span class="meta">{{ report.total_issues }} issue{{ "" if report.total_issues == 1 else "s" }} found across {{ report.total_segments }} segment{{ "" if report.total_segments == 1 else "s" }}.</span>
   </p>
   {% if report.badge != "clean" %}
-  <p class="hint">Advisory only — Draft export is never blocked, and segments with issues fall back to their source text. Final export may be gated by critical QA when "require clean" is enabled.</p>
+  <p class="hint">These are suggestions — a Draft export always works. Lines without a good translation are exported in their original language. A Final export can be set to stop if there are Errors.</p>
   {% endif %}
 
   {% if report.summary_by_volume %}

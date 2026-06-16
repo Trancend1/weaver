@@ -23,7 +23,7 @@
         <span class="degraded-row__name">{{ d.name }}</span>
         <span class="badge bad">{{ d.state | replace("_", " ") }}</span>
         {% if d.error %}<span class="degraded-row__error">{{ d.error }}</span>{% endif %}
-        <span class="degraded-row__note">Provider info for this project is unavailable.</span>
+        <span class="degraded-row__note">This project couldn't be loaded.</span>
       </li>
       {% endfor %}
     </ul>
@@ -32,7 +32,7 @@
 
   {% if providers.projects %}
   <div class="panel c-panel providers-projects">
-    <p class="meta">Each project's <strong>Active AI</strong> for the translate task. <em>Switch AI</em> swaps its connection in place; health Check runs only when pressed. This page never calls a provider on load.</p>
+    <p class="meta">Each project's translation AI. <em>Switch AI</em> changes it instantly. Press <strong>Check</strong> to test a connection — nothing is tested automatically.</p>
     <table class="providers-table">
       <thead>
         <tr>
@@ -40,8 +40,8 @@
           <th>Active AI</th>
           <th>API key</th>
           <th>Tokens (in / out)</th>
-          <th>Failures</th>
-          <th>Health</th>
+          <th>Recent errors</th>
+          <th>Status</th>
         </tr>
       </thead>
       <tbody>
@@ -58,8 +58,8 @@
   {% endif %}
 
   <section id="secrets" class="panel c-panel">
-    <h2 class="panel__title">Secrets</h2>
-    <p class="meta">API-key values are stored in <code>~/.weaver/secrets.toml</code> and never returned by the API or rendered here.</p>
+    <h2 class="panel__title">API keys</h2>
+    <p class="meta">Your API keys are stored safely on this computer and never shown again after you save them.</p>
     {% include "partials/_secrets.html" %}
   </section>
 

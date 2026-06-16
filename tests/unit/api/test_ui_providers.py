@@ -310,7 +310,7 @@ def test_providers_hub_explains_connection_first_surface(
     assert "Register AI endpoints once and reuse them across projects." in html
     assert "never shown" in html
     assert "Legacy aliases remain supported" not in html
-    assert "Secret values are stored but never rendered." in html
+    assert "never shown again after you save them" in html
 
 
 def _isolate_connection_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -400,7 +400,7 @@ def test_providers_table_shows_active_ai_and_switch_control(
     html = client.get("/ui/providers").text
     assert "Active AI" in html
     assert "deepseek-chat" in html  # legacy [provider] model shown as active AI
-    assert "legacy provider" in html
+    assert "older settings" in html
     assert "Switch AI" in html
 
 

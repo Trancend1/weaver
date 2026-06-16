@@ -241,8 +241,11 @@ def test_workspace_renders_translate_controls(jobs_client: TestClient) -> None:
     cid = _first_chapter(jobs_client, name)
     page = jobs_client.get(f"/ui/projects/{name}/chapters/{cid}").text
     assert "Translate untranslated" in page
-    for mode in ("skip_existing", "retranslate_non_manual", "force_selected"):
+    # Only the two overwrite modes are offered in the Retranslate dropdown; the
+    # skip_existing path is the primary "Translate" button, not a duplicate option.
+    for mode in ("retranslate_non_manual", "force_selected"):
         assert mode in page
+    assert "skip_existing" not in page
 
 
 # --- cancel -----------------------------------------------------------------

@@ -4,7 +4,7 @@
 <section class="panel c-panel">
   {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href": none, "label":"new project"}] %}
   {% set page_title = "Create a project" %}
-  {% set page_meta = "Enter a project name. You can import source files (EPUB/TXT/HTML) later." %}
+  {% set page_meta = "Name your project. You can add your book files (EPUB, TXT, or HTML) in the next step." %}
   {% include "partials/_page_header.html" %}
 
   {% if error %}<div class="error error-state" role="alert">{{ error }}</div>{% endif %}
@@ -13,8 +13,8 @@
     <label>Project name
       <input type="text" name="project_name" placeholder="My Novel Project" required>
     </label>
-    <p class="hint">Provider settings start empty. Configure type, protocol, endpoint, model, and API key after creating the project.</p>
-    <label>Template <input name="template" placeholder="(default)"></label>
+    <p class="hint">You'll connect an AI service after creating the project — just a name, its address (endpoint), and an API key.</p>
+    <label>Starting template (optional) <input name="template" placeholder="Leave empty for the standard setup"></label>
     <button type="submit">Create project</button>
   </form>
 

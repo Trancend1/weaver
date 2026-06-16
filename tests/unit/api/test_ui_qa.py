@@ -149,8 +149,8 @@ def test_filtered_empty_state_says_no_matching_issues(ctx) -> None:
 def test_qa_summary_clarifies_final_export_gate(ctx) -> None:
     client, chapter_id, _ = ctx
     body = client.get(f"/ui/projects/issues/chapters/{chapter_id}/qa").text
-    assert "Draft export is never blocked" in body
-    assert "require clean" in body
+    assert "a Draft export always works" in body
+    assert "Final export can be set to stop" in body
 
 
 def test_project_page_links_to_qa(ctx) -> None:
@@ -182,7 +182,7 @@ def test_tree_render_does_not_run_qa(ctx, monkeypatch) -> None:
 def test_project_tree_has_badge_slots_and_button(ctx) -> None:
     client, chapter_id, volume_id = ctx
     page = client.get("/ui/projects/issues").text
-    assert "Load quality badges" in page
+    assert "Show quality badges" in page
     assert "/ui/projects/issues/qa/tree-badges" in page
     assert f'id="qa-badge-ch-{chapter_id}"' in page
     assert f'id="qa-badge-vol-{volume_id}"' in page

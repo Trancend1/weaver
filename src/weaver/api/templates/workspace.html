@@ -15,14 +15,14 @@
   {% set page_title = ws.chapter_title or "Chapter" %}
   {% set page_meta %}{{ ws.segment_count }} segments · {{ workflow_done }} translated/manual · {{ counts.pending }} pending{% endset %}
   {% set page_actions %}
-    <a class="btn btn--secondary" href="/ui/projects/{{ ws.project_name }}/export/preflight">Export / preflight</a>
+    <a class="btn btn--secondary" href="/ui/projects/{{ ws.project_name }}/export/preflight">Export</a>
   {% endset %}
   {% include "partials/_page_header.html" %}
 
   <div class="workspace-progress" aria-label="Chapter progress">
     <div class="workspace-progress__bar"><span style="width: {{ '%.1f'|format(progress_pct) }}%"></span></div>
     <p>{{ '%.0f'|format(progress_pct) }}% translated · manual edits are protected unless force retranslate is chosen.</p>
-    <p class="meta">Counts translated/manual segments only — not review approval or export readiness. Final export readiness also depends on QA/preflight. Review status is tracked separately.</p>
+    <p class="meta">Counts segments with an AI or manual translation only — not whether they've been reviewed or are ready to export. Review status is tracked separately.</p>
   </div>
 
   <div class="workspace-summary" role="group" aria-label="Filter segments by status">
@@ -30,7 +30,7 @@
     <button type="button" class="ws-stat" data-ws-filter="translated" aria-pressed="false"><b>{{ ws.translated_count }}</b>AI translated</button>
     <button type="button" class="ws-stat" data-ws-filter="manual" aria-pressed="false"><b>{{ counts.manual }}</b>Manual</button>
     <button type="button" class="ws-stat" data-ws-filter="pending" aria-pressed="false"><b>{{ counts.pending }}</b>Pending</button>
-    <button type="button" class="ws-stat" data-ws-filter="failed,stale" aria-pressed="false"><b>{{ counts.failed + counts.stale }}</b>Failed/stale</button>
+    <button type="button" class="ws-stat" data-ws-filter="failed,stale" aria-pressed="false"><b>{{ counts.failed + counts.stale }}</b>Needs attention</button>
   </div>
 
   <div class="workspace-actions">
@@ -48,7 +48,6 @@
             hx-target="#job-panel" hx-swap="outerHTML" class="inline-form form-row">
         <label>Retranslate
           <select name="mode">
-            <option value="skip_existing">skip existing</option>
             <option value="retranslate_non_manual">re-translate (protect manual)</option>
             <option value="force_selected">force (overwrite manual)</option>
           </select>

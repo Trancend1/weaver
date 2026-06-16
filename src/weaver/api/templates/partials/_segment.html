@@ -15,7 +15,7 @@
       <div class="seg-statusline" id="seg-statusline-{{ seg.id }}">
         {% set _badge = badge_class_for_translation(seg.status) %}
         <span class="badge c-badge seg-status seg-status--{{ seg.status }} {{ _badge }}">{{ translation_status_label(seg.status) }}</span>
-        <span class="seg-protection">{% if seg.status == "manual" %}Manual source of truth; protected from normal retranslate{% elif seg.status == "translated" %}Provider translation{% elif seg.status == "pending" %}Needs translation{% elif seg.status in ("failed", "stale") %}Needs attention{% else %}{{ translation_status_label(seg.status) }}{% endif %}</span>
+        <span class="seg-protection">{% if seg.status == "manual" %}Your manual edit — kept safe unless you force a retranslate{% elif seg.status == "translated" %}AI translation{% elif seg.status == "pending" %}Needs translation{% elif seg.status in ("failed", "stale") %}Needs attention{% else %}{{ translation_status_label(seg.status) }}{% endif %}</span>
         {% set _review = seg.review_status|default('not_reviewed') %}
         <span class="badge c-badge seg-review-status seg-review-status--{{ _review }} {{ badge_class_for_review(_review) }}">{{ review_status_label(_review) }}</span>
       </div>
@@ -82,7 +82,7 @@
           <button type="button" class="link-btn"
                   hx-post="/ui/projects/{{ name }}/chapters/{{ chapter_id }}/segments/{{ seg.id }}/candidates/generate"
                   hx-target="#seg-{{ seg.id }}-candidates" hx-swap="innerHTML"
-                  hx-indicator="#seg-{{ seg.id }}-gen-loader" hx-disabled-elt="this">Generate candidate</button>
+                  hx-indicator="#seg-{{ seg.id }}-gen-loader" hx-disabled-elt="this">Suggest another translation</button>
         </div>
         <span class="htmx-indicator calm-loader calm-loader--small" id="seg-{{ seg.id }}-gen-loader" role="status">Generating…</span>
       </div>

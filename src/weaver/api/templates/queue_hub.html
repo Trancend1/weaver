@@ -35,9 +35,9 @@
         <thead>
           <tr>
             <th>Project</th>
-            <th>Kind</th>
+            <th>Type</th>
             <th>Status</th>
-            <th>Scope</th>
+            <th>Range</th>
             <th>Progress</th>
             <th>Started</th>
             <th></th>
@@ -77,7 +77,7 @@
     {% else %}
       {% if not queue.degraded %}
       {% set empty_title = "Queue is empty" %}
-      {% set empty_hint = "Start a translation, batch, export, or parse job from any project. Jobs appear here automatically." %}
+      {% set empty_hint = "Start a translation, export, or import from any project — it'll show up here automatically." %}
       {% include "partials/_empty_state.html" %}
       {% endif %}
     {% endif %}

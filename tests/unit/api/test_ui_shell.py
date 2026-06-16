@@ -50,7 +50,7 @@ def test_dashboard_empty_state(tmp_path: Path) -> None:
     client = TestClient(create_api_app(tmp_path))
     r = client.get("/ui")
     assert r.status_code == 200
-    assert "No projects found" in r.text
+    assert "No projects yet" in r.text
 
 
 # --- project view -----------------------------------------------------------

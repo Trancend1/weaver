@@ -134,7 +134,7 @@ def test_dashboard_shows_ws_grid(hub_client: TestClient) -> None:
 
 def test_dashboard_empty_state_when_no_projects(empty_hub_client: TestClient) -> None:
     html = empty_hub_client.get("/ui").text
-    assert "No projects found" in html
+    assert "No projects yet" in html
 
 
 def test_dashboard_shows_books_dir_in_meta(hub_client: TestClient) -> None:
@@ -174,7 +174,7 @@ def test_needs_upgrade_project_renders_warn_card(
     client = TestClient(create_api_app(tmp_path))
     resp = client.get("/ui")
     assert resp.status_code == 200
-    assert "needs upgrade" in resp.text
+    assert "Needs update" in resp.text
     assert "project-card--warn" in resp.text
 
 

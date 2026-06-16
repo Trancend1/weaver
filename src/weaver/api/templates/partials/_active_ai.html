@@ -3,15 +3,15 @@
   {% if switch_error %}<p class="error" role="alert">{{ switch_error }}</p>{% endif %}
 
   <div class="active-ai__current">
-    <span class="meta">Active AI · translate</span>
+    <span class="meta">Active AI for translation</span>
     <strong>{{ active_ai.model }}</strong>
     {% if active_ai.connection_name %}
       <span class="meta">via {{ active_ai.connection_name }}</span>
       {% if not active_ai.connection_exists %}<span class="badge bad">connection missing</span>{% endif %}
     {% elif active_ai.source == "provider" %}
-      <span class="meta">legacy provider config</span>
+      <span class="meta">from older settings</span>
     {% else %}
-      <span class="badge warn">not set</span>
+      <span class="badge warn">Not set yet</span>
     {% endif %}
   </div>
 
@@ -59,7 +59,7 @@
   {% if active_ai.source == "routing" %}
   <details class="active-ai__fallback">
     <summary>Fallback chain{% if fallbacks %} ({{ fallbacks | length }}){% endif %}</summary>
-    <p class="hint meta">If the primary AI fails on a segment, Weaver retries the next connection here (no circuit breaker — just try-next).</p>
+    <p class="hint meta">If the main AI fails on a line, Weaver automatically tries the next one in this list.</p>
     {% if fallbacks %}
     <ol class="fallback-list">
       {% for fc, fm in fallbacks %}

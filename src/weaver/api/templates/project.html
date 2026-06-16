@@ -44,7 +44,7 @@
       <span>Failed / Stale</span>
     </div>
   </div>
-  <p class="meta">"Done" counts translated/manual segments only — not review approval or export readiness. Final export readiness also depends on QA/preflight. Review status is tracked separately.</p>
+  <p class="meta">"Done" means a segment has an AI or manual translation. It doesn't mean it's been reviewed or is ready to export — those are tracked separately below.</p>
 
   {% if overview.segment_count %}
   <div class="overview-review-bar">
@@ -69,10 +69,10 @@
 
 {# ── Active AI (ADR 018) ────────────────────────────────── #}
 <section class="panel c-panel">
-  <h2 class="panel__title">AI</h2>
+  <h2 class="panel__title">Translation AI</h2>
   <div id="active-ai" hx-get="/ui/projects/{{ tree.project_name }}/routing"
        hx-trigger="load" hx-swap="innerHTML">
-    <span class="meta">loading…</span>
+    <span class="meta">Loading…</span>
   </div>
 </section>
 
@@ -114,11 +114,11 @@
 <section class="panel c-panel">
   <ol class="workflow-rail" aria-label="Translation workflow">
     <li><span>1</span><strong>Import</strong><small>Add volumes</small></li>
-    <li><span>2</span><strong>Inspect</strong><small>EPUB + images</small></li>
+    <li><span>2</span><strong>Inspect</strong><small>Structure &amp; images</small></li>
     <li><span>3</span><strong>Translate</strong><small>Chapter workspace</small></li>
-    <li><span>4</span><strong>Review</strong><small>Candidates + glossary</small></li>
-    <li><span>5</span><strong>QA</strong><small>Prioritize issues</small></li>
-    <li><span>6</span><strong>Export</strong><small>Preflight first</small></li>
+    <li><span>4</span><strong>Review</strong><small>Suggestions &amp; glossary</small></li>
+    <li><span>5</span><strong>Check quality</strong><small>Find issues</small></li>
+    <li><span>6</span><strong>Export</strong><small>Quick check first</small></li>
   </ol>
 </section>
 
@@ -126,8 +126,8 @@
 <section class="panel c-panel">
   <p class="actions toolbar-row">
     <button type="button" hx-get="/ui/projects/{{ tree.project_name }}/qa/tree-badges"
-            hx-target="#qa-badge-status" hx-swap="innerHTML">Load quality badges</button>
-    <span id="qa-badge-status" class="meta">Quality badges load only when you ask — the list never checks on its own.</span>
+            hx-target="#qa-badge-status" hx-swap="innerHTML">Show quality badges</button>
+    <span id="qa-badge-status" class="meta">Badges load only when you ask, to keep this page fast.</span>
   </p>
 
   {% include "partials/_tree.html" %}
@@ -138,7 +138,7 @@
 {# ── Import volume ──────────────────────────────────────── #}
 <section class="panel c-panel" id="import-volume">
   <h2>Import volume</h2>
-  <p class="meta">A Project is the workspace. Each EPUB/TXT/HTML file you add becomes a Volume inside it.</p>
+  <p class="meta">Each book file you add (EPUB, TXT, or HTML) becomes a volume in this project.</p>
 
   <div class="error" id="import_error" hidden></div>
 
@@ -151,7 +151,7 @@
     <div class="field">Browsed source: <span id="selected_source" class="meta">(none)</span>
       <input type="hidden" name="source_path" id="source_path">
     </div>
-    <button type="submit">Import first / next volume</button>
+    <button type="submit">Add volume</button>
     <span class="htmx-indicator calm-loader" role="status">Importing volume</span>
   </form>
 
@@ -164,7 +164,7 @@
 {# ── Export project ─────────────────────────────────────── #}
 <section class="panel c-panel">
   <h2>Export project</h2>
-  <p class="meta">Run preflight before writing files. Export preserves volume structure and reports fallback risk; advisory QA never silently blocks export.</p>
+  <p class="meta">We'll run a quick quality check before saving any files. Your volume structure is kept, and quality warnings never stop you from exporting.</p>
   <form hx-get="/ui/projects/{{ tree.project_name }}/export/preflight"
         hx-target="#export-panel" hx-swap="outerHTML" class="inline-form form-row">
     <label>Format

@@ -46,9 +46,9 @@ def test_translation_status_label_maps_all_db_values() -> None:
     assert translation_status_label("pending") == "Untranslated"
     assert translation_status_label("in_progress") == "Translating"
     assert translation_status_label("translated") == "Translated"
-    assert translation_status_label("manual") == "Manual"
+    assert translation_status_label("manual") == "Manual edit"
     assert translation_status_label("failed") == "Failed"
-    assert translation_status_label("stale") == "Stale"
+    assert translation_status_label("stale") == "Outdated"
     assert translation_status_label("skipped") == "Skipped"
     assert translation_status_label("unknown") == "unknown"
 

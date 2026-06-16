@@ -4,11 +4,11 @@
 <section class="panel c-panel">
   {% set page_crumbs = [{"href":"/ui", "label":"Dashboard"}, {"href":"/ui/projects/" ~ report.project, "label": report.project}, {"href": none, "label":"QA"}] %}
   {% set page_title = "Quality report · " ~ scope_label %}
-  {% set page_meta %}{% if report.scope == "chapter" %}<a href="/ui/projects/{{ name }}/chapters/{{ report.scope_id }}">← Back to workspace</a>{% else %}Read-only checks run before export. Nothing here changes your translations.{% endif %}{% endset %}
+  {% set page_meta %}{% if report.scope == "chapter" %}<a href="/ui/projects/{{ name }}/chapters/{{ report.scope_id }}">← Back to workspace</a>{% else %}Checks that run before export. Nothing here changes your translations.{% endif %}{% endset %}
   {% include "partials/_page_header.html" %}
   <div class="workflow-note workflow-note--qa">
-    <strong>Review order</strong>
-    <span>Start with Errors, then Warnings, then Info. QA is advisory; export remains an explicit choice.</span>
+    <strong>Where to start</strong>
+    <span>Fix Errors first, then Warnings, then Info. These are suggestions — they never stop you from exporting.</span>
   </div>
   {% include "partials/_qa_summary.html" %}
 </section>

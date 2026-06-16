@@ -7,7 +7,7 @@
       <span class="meta">via {{ p.active_connection }}</span>
       {% if not p.connection_exists %}<span class="badge bad">missing</span>{% endif %}
     {% elif p.active_source == "provider" %}
-      <span class="meta">legacy provider</span>
+      <span class="meta">older settings</span>
     {% else %}
       <span class="badge warn">not set</span>
     {% endif %}
@@ -34,12 +34,12 @@
   </td>
   <td>
     {% if not p.requires_key %}
-      <span class="meta">no key needed</span>
+      <span class="meta">No key needed</span>
     {% elif p.secret_present %}
-      <span class="badge good" title="{{ p.api_key_env }} is set (value never shown)">{{ p.api_key_env }} ✓</span>
+      <span class="badge good" title="{{ p.api_key_env }} is set (value never shown)">Key set ✓</span>
     {% else %}
       <a href="#secrets" class="badge bad"
-         title="{{ p.api_key_env }} is not set — set its value in Secrets below">{{ p.api_key_env or "key" }} missing</a>
+         title="{{ p.api_key_env }} is not set — add it under API keys below">Key missing</a>
     {% endif %}
   </td>
   <td class="meta">
