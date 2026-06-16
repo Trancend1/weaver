@@ -22,6 +22,7 @@ from typing import Any
 
 from weaver.core.config import load_project_config
 from weaver.core.segment import normalize_japanese_text
+from weaver.core.task_types import TaskType
 from weaver.errors import (
     ConfigError,
     ProviderError,
@@ -37,6 +38,7 @@ from weaver.providers.types import (
 )
 from weaver.services.glossary import raise_on_glossary_conflicts
 from weaver.services.project_paths import resolve_database_path
+from weaver.services.routing import resolve_consumer_config
 from weaver.storage.candidates import (
     CandidateRecord,
     insert_candidate,
@@ -114,7 +116,9 @@ def generate_candidate(
 
     base_dir = cwd or Path.cwd()
     data = load_project_config(project_toml)
-    provider_config = _merge_provider_config(data["provider"], provider_override)
+    provider_config = _merge_provider_config(
+        resolve_consumer_config(project_toml, TaskType.candidate, data=data), provider_override
+    )
     translation_config = data["translation"]
     db_path = resolve_database_path(project_toml, cwd=base_dir)
 

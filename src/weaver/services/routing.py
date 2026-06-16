@@ -118,6 +118,30 @@ def resolve_provider_config(
     return dict(provider) if isinstance(provider, dict) else {}
 
 
+def resolve_consumer_config(
+    project_toml: Path, task: TaskType, *, data: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Resolve a secondary on-demand task (``glossary_suggest``, ``candidate``).
+
+    Same precedence as :func:`resolve_provider_config`, but when the task has no
+    ``[routing.<task>]`` entry and no legacy ``[provider]`` model, it inherits the
+    project's ``translate`` Active AI. So a connection-first project (its model
+    set under ``[routing.translate]``, an empty ``[provider]``) drives these
+    consumers too, without configuring each task separately — matching the task
+    taxonomy's note that these are existing consumers of the project's AI.
+
+    Raises:
+        ConfigError: when a named connection in the resolved chain is not
+            registered (never a silent fallback).
+    """
+
+    data = data if data is not None else load_project_config(project_toml)
+    config = resolve_provider_config(project_toml, task, data=data)
+    if _clean(config.get("model")):
+        return config
+    return resolve_provider_config(project_toml, TaskType.translate, data=data)
+
+
 def resolve_chain(
     project_toml: Path, task: TaskType, *, data: dict[str, Any] | None = None
 ) -> list[Candidate]:

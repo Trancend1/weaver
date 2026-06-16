@@ -11,7 +11,12 @@ from weaver.core.connection_registry import Connection, register_connection
 from weaver.core.task_types import TaskType
 from weaver.errors import ConfigError
 from weaver.services.config_writer import set_routing
-from weaver.services.routing import resolve_active_ai, resolve_chain, resolve_provider_config
+from weaver.services.routing import (
+    resolve_active_ai,
+    resolve_chain,
+    resolve_consumer_config,
+    resolve_provider_config,
+)
 
 _DUMMY = Path("project.toml")
 
@@ -106,6 +111,41 @@ def test_active_ai_unset() -> None:
     ai = resolve_active_ai(_DUMMY, TaskType.translate, data={})
     assert ai.source == "unset"
     assert ai.model == "—"
+
+
+def test_consumer_inherits_translate_when_task_unset() -> None:
+    # Connection-first project: only translate is routed. A secondary task
+    # (glossary_suggest) with no own entry and empty [provider] inherits the
+    # project's translate Active AI instead of failing with an incomplete config.
+    _register_openrouter()
+    data = {"routing": {"translate": {"connection": "openrouter", "model": "x"}}}
+    cfg = resolve_consumer_config(_DUMMY, TaskType.glossary_suggest, data=data)
+    assert cfg["base_url"] == "https://openrouter.ai/api/v1"
+    assert cfg["model"] == "x"
+
+
+def test_consumer_uses_own_routing_when_set() -> None:
+    _register_openrouter()
+    register_connection(
+        Connection(name="other", base_url="https://other/v1", api_key_env="K2", default_model="m2")
+    )
+    data = {
+        "routing": {
+            "translate": {"connection": "openrouter", "model": "x"},
+            "candidate": {"connection": "other", "model": "c"},
+        }
+    }
+    cfg = resolve_consumer_config(_DUMMY, TaskType.candidate, data=data)
+    assert cfg["base_url"] == "https://other/v1"
+    assert cfg["model"] == "c"
+
+
+def test_consumer_uses_legacy_provider_when_present() -> None:
+    data = {
+        "provider": {"type": "custom", "model": "m", "base_url": "https://x", "api_key_env": "K"}
+    }
+    cfg = resolve_consumer_config(_DUMMY, TaskType.glossary_suggest, data=data)
+    assert cfg == data["provider"]
 
 
 def test_set_routing_writes_block(tmp_path: Path) -> None:

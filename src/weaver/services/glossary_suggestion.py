@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from weaver.core.config import load_project_config
+from weaver.core.task_types import TaskType
 from weaver.errors import ConfigError, GlossarySuggestionError
 from weaver.providers import LLMProvider, build_provider
 from weaver.providers.prompts import (
@@ -26,6 +27,7 @@ from weaver.providers.prompts import (
 )
 from weaver.services.glossary_review import _segment_examples
 from weaver.services.project_paths import resolve_database_path
+from weaver.services.routing import resolve_consumer_config
 from weaver.storage.db import connect_readonly_database
 from weaver.storage.glossary import get_glossary_candidate
 from weaver.storage.projects import ProjectRecord, get_project
@@ -65,7 +67,7 @@ def suggest_glossary_target(
     """
 
     data = load_project_config(project_toml)
-    provider_config = data["provider"]
+    provider_config = resolve_consumer_config(project_toml, TaskType.glossary_suggest, data=data)
     configured_model = str(provider_config.get("model", ""))
     db_path = resolve_database_path(project_toml, cwd=cwd)
 

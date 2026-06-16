@@ -6,9 +6,11 @@ from pathlib import Path
 
 import pytest
 
+from weaver.core.connection_registry import Connection, register_connection
 from weaver.errors import GlossarySuggestionError, ProviderUnavailable
 from weaver.providers.base import LLMProvider, ProviderStatus
 from weaver.providers.types import Completion
+from weaver.services.config_writer import set_routing
 from weaver.services.glossary_review import open_glossary_review_session
 from weaver.services.glossary_suggestion import GlossarySuggestion, suggest_glossary_target
 from weaver.services.project import initialize_project
@@ -65,6 +67,33 @@ def test_suggest_returns_grounded_target(tmp_path: Path, monkeypatch) -> None:
     assert (out.input_tokens, out.output_tokens) == (5, 2)
     # grounded: the prompt the provider saw contains the candidate's source term
     assert source in (stub.last_prompt or "")
+
+
+def test_suggest_connection_first_resolves_routing_model(tmp_path: Path, monkeypatch) -> None:
+    # Regression (ADR 018): a connection-first project sets its model under
+    # [routing.translate] and leaves [provider] empty. Glossary suggest must
+    # inherit that Active AI, not fail with "Provider configuration is incomplete".
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("WEAVER_CONNECTIONS_PATH", str(tmp_path / "connections.toml"))
+    init = initialize_project(FIXTURE_EPUB)  # empty [provider] on purpose
+    register_connection(
+        Connection(
+            name="cf",
+            base_url="https://cf.invalid/v1",
+            api_key_env="",
+            default_model="router-model",
+            protocol="fake",
+            requires_key=False,
+        )
+    )
+    set_routing(init.project_toml, task="translate", connection="cf", model="router-model")
+    cid, _ = _candidate_source(init.project_toml)
+
+    stub = _StubProvider(text='{"target": "Demon King"}')
+    out = suggest_glossary_target(init.project_toml, cid, cwd=tmp_path, provider=stub)
+
+    assert out.target == "Demon King"
+    assert out.model == "router-model"  # resolved from routing, not the empty [provider]
 
 
 def test_suggest_unavailable_provider_raises(tmp_path: Path, monkeypatch) -> None:
