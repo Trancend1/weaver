@@ -406,6 +406,44 @@ def reject_glossary_candidate(
     return get_glossary_candidate(connection, candidate_id=candidate_id)
 
 
+def return_glossary_term_to_review(
+    connection: sqlite3.Connection, *, project_id: int, source: str
+) -> None:
+    """Un-approve a term: drop it and put its source back in the pending queue.
+
+    A term that originated from a candidate flips that candidate back to
+    ``pending`` (its EN target is kept so it can be reviewed with the wording
+    already in place). A manually-added term (no originating candidate) gets a
+    fresh ``pending`` candidate created from it so it still lands in Candidate
+    review. Raises ``LookupError`` if no approved term has that source.
+    """
+
+    term = get_glossary_term(connection, project_id=project_id, source=source)
+    if term is None:
+        raise LookupError(f"Glossary term not found: {source}")
+
+    cursor = connection.execute(
+        """
+        UPDATE glossary_candidates
+        SET status = 'pending'
+        WHERE project_id = ? AND source = ? AND status IN ('approved', 'edited')
+        """,
+        (project_id, source),
+    )
+    if cursor.rowcount == 0:
+        insert_glossary_candidate(
+            connection,
+            project_id=project_id,
+            source=source,
+            target=term.target,
+            category=term.category,
+            notes=term.notes,
+            status="pending",
+            frequency=0,
+        )
+    delete_glossary_term(connection, project_id=project_id, source=source)
+
+
 def restore_glossary_candidate(
     connection: sqlite3.Connection, *, candidate: GlossaryCandidateRecord
 ) -> None:

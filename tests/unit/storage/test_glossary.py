@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from weaver.storage.db import initialize_database
 from weaver.storage.glossary import (
     approve_glossary_candidate,
@@ -11,6 +13,7 @@ from weaver.storage.glossary import (
     list_glossary_candidates,
     list_glossary_terms,
     reject_glossary_candidate,
+    return_glossary_term_to_review,
     upsert_glossary_term,
 )
 from weaver.storage.projects import create_project
@@ -79,6 +82,77 @@ def test_candidate_review_actions_persist_and_update_terms(tmp_path) -> None:
 
         assert rejected.status == "rejected"
         assert terms == []
+
+
+def test_return_term_to_review_flips_candidate_back_to_pending(tmp_path) -> None:
+    db_path = tmp_path / "weaver.db"
+    with initialize_database(db_path) as connection:
+        project_id = create_project(
+            connection,
+            name="fixture",
+            source_path="fixture.epub",
+            source_lang="ja",
+            target_lang="en",
+        )
+        candidate_id = insert_glossary_candidate(
+            connection,
+            project_id=project_id,
+            source="カイ",
+            target="カイ",
+            category="katakana",
+            notes=None,
+            status="pending",
+            frequency=2,
+        )
+        edit_glossary_candidate(connection, candidate_id=candidate_id, target="Kai", notes=None)
+        assert list_glossary_candidates(connection, project_id=project_id)[0].status == "edited"
+
+        return_glossary_term_to_review(connection, project_id=project_id, source="カイ")
+
+        candidate = list_glossary_candidates(connection, project_id=project_id)[0]
+        # The same candidate row returns to the queue with its EN target kept for re-review.
+        assert candidate.status == "pending"
+        assert candidate.target == "Kai"
+        assert list_glossary_terms(connection, project_id=project_id) == []
+
+
+def test_return_term_to_review_recreates_candidate_for_manual_term(tmp_path) -> None:
+    db_path = tmp_path / "weaver.db"
+    with initialize_database(db_path) as connection:
+        project_id = create_project(
+            connection,
+            name="fixture",
+            source_path="fixture.epub",
+            source_lang="ja",
+            target_lang="en",
+        )
+        # Manually-added term: no originating candidate row.
+        upsert_glossary_term(
+            connection, project_id=project_id, source="魔王", target="Demon King", category="title"
+        )
+        assert list_glossary_candidates(connection, project_id=project_id) == []
+
+        return_glossary_term_to_review(connection, project_id=project_id, source="魔王")
+
+        candidates = list_glossary_candidates(connection, project_id=project_id)
+        assert len(candidates) == 1
+        assert candidates[0].status == "pending"
+        assert (candidates[0].source, candidates[0].target) == ("魔王", "Demon King")
+        assert list_glossary_terms(connection, project_id=project_id) == []
+
+
+def test_return_term_to_review_missing_term_raises(tmp_path) -> None:
+    db_path = tmp_path / "weaver.db"
+    with initialize_database(db_path) as connection:
+        project_id = create_project(
+            connection,
+            name="fixture",
+            source_path="fixture.epub",
+            source_lang="ja",
+            target_lang="en",
+        )
+        with pytest.raises(LookupError):
+            return_glossary_term_to_review(connection, project_id=project_id, source="絶対ない")
 
 
 def test_list_glossary_terms_default_returns_all_in_id_order(tmp_path) -> None:

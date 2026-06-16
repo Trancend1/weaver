@@ -54,9 +54,13 @@
    Approved-terms table — all without a page reload. A failed POST is shown in-row. #}
 <script>
 (function () {
-  var container = document.getElementById("glossary-candidates");
-  if (!container) return;
-  var project = container.dataset.project || "";
+  // Resolve the candidates container live: HTMX swaps (search, paging, and the
+  // OOB return-to-review refresh) REPLACE this node, so caching it would leave
+  // the listeners bound to a detached element. Delegating to document and
+  // resolving per-call keeps bulk/selection/suggest working after every swap.
+  function cont() { return document.getElementById("glossary-candidates"); }
+  function project() { var c = cont(); return (c && c.dataset.project) || ""; }
+  if (!cont()) return;
 
   function actionForm(elt) { return elt && elt.matches && elt.matches("form.row-form") ? elt : null; }
   function gcAction(form) { var b = form.querySelector("[data-gc-action]"); return b ? b.dataset.gcAction : null; }
@@ -111,7 +115,7 @@
     adjustCounts(action === "reject" ? { pending: -1, rejected: 1, matching: -1 } : { pending: -1, approved: 1, matching: -1 });
 
     if ((action === "approve" || action === "edit") && window.htmx) {
-      htmx.ajax("GET", "/ui/projects/" + encodeURIComponent(project) + "/glossary/terms",
+      htmx.ajax("GET", "/ui/projects/" + encodeURIComponent(project()) + "/glossary/terms",
         { target: "#glossary-terms", swap: "outerHTML" });
     }
     refreshSelection();
@@ -119,7 +123,9 @@
 
   // ── Selection + bulk ─────────────────────────────────────────────────────
   function liveRows() {
-    return Array.from(container.querySelectorAll("tr[data-cand-id]")).filter(
+    var c = cont();
+    if (!c) return [];
+    return Array.from(c.querySelectorAll("tr[data-cand-id]")).filter(
       function (r) { return !r.classList.contains("cand-result"); }
     );
   }
@@ -127,10 +133,12 @@
     return liveRows().filter(function (r) { var c = r.querySelector(".gc-select"); return c && c.checked; });
   }
   function refreshSelection() {
+    var c = cont();
+    if (!c) return;
     var n = selectedRows().length;
-    container.querySelectorAll("[data-gc-selcount]").forEach(function (s) { s.textContent = n; });
-    container.querySelectorAll("[data-gc-bulk]").forEach(function (b) { b.disabled = n === 0; });
-    var all = container.querySelector("[data-gc-selectall]");
+    c.querySelectorAll("[data-gc-selcount]").forEach(function (s) { s.textContent = n; });
+    c.querySelectorAll("[data-gc-bulk]").forEach(function (b) { b.disabled = n === 0; });
+    var all = c.querySelector("[data-gc-selectall]");
     var rows = liveRows();
     if (all) all.checked = rows.length > 0 && n === rows.length;
   }
@@ -142,7 +150,16 @@
     return false;
   }
   function bulk(action) {
-    // approve has no meaning for rows without a target — they are skipped
+    if (action === "approve") {
+      // "Approve selected" must persist the EN target the user suggested/typed,
+      // so it submits each row's Save & approve (edit) form — not the approve
+      // form, which would store the JP placeholder. Rows still on the
+      // placeholder (no real EN target) are skipped.
+      selectedRows().forEach(function (r) {
+        if (!rowNeedsTarget(r)) submitAction(r, "edit");
+      });
+      return;
+    }
     selectedRows().forEach(function (r) { submitAction(r, action); });
   }
 
@@ -150,12 +167,16 @@
   // Fill every empty target on the page with one AI suggestion, sequentially
   // (one LLM call at a time → natural pacing + per-row error isolation, reusing
   // the existing per-row /suggest endpoint).
-  function rowsNeedingTarget() {
-    return liveRows().filter(function (r) {
-      var input = r.querySelector('input[name="target"]');
-      return input && !input.value.trim();
-    });
+  function rowNeedsTarget(r) {
+    var input = r.querySelector('input[name="target"]');
+    if (!input) return false;
+    var value = input.value.trim();
+    // Empty, or still the untranslated source placeholder (extraction seeds
+    // target = source) means no real EN target yet — exactly the rows bulk
+    // suggest should fill. A real EN target never equals the JP source.
+    return !value || value === (r.dataset.candSource || "").trim();
   }
+  function rowsNeedingTarget() { return liveRows().filter(rowNeedsTarget); }
   function suggestAll(button) {
     if (!window.htmx) return;
     var rows = rowsNeedingTarget();
@@ -170,14 +191,14 @@
       var id = row.dataset.candId;
       htmx.ajax(
         "POST",
-        "/ui/projects/" + encodeURIComponent(project) + "/glossary/candidates/" + id + "/suggest",
+        "/ui/projects/" + encodeURIComponent(project()) + "/glossary/candidates/" + id + "/suggest",
         { target: "#cand-edit-" + id, swap: "innerHTML" }
       ).then(next, next);
     }
     next();
   }
 
-  container.addEventListener("change", function (e) {
+  document.addEventListener("change", function (e) {
     var t = e.target;
     if (t.matches && t.matches(".gc-select")) {
       var row = t.closest("tr");
@@ -188,7 +209,7 @@
       refreshSelection();
     }
   });
-  container.addEventListener("click", function (e) {
+  document.addEventListener("click", function (e) {
     var b = e.target.closest("[data-gc-bulk]");
     if (b) { bulk(b.dataset.gcBulk); return; }
     var s = e.target.closest("[data-gc-suggest-all]");
@@ -205,7 +226,8 @@
     rows[focusIdx].scrollIntoView({ block: "nearest" });
   }
   document.addEventListener("keydown", function (e) {
-    if (!container.querySelector("tr[data-cand-id]")) return;
+    var kc = cont();
+    if (!kc || !kc.querySelector("tr[data-cand-id]")) return;
     var tag = (document.activeElement && document.activeElement.tagName) || "";
     var typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
     if (typing && e.key !== "Escape") return;

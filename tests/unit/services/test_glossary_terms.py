@@ -14,11 +14,13 @@ import pytest
 from weaver.errors import GlossaryTermNotFoundError
 from weaver.providers.prompts import render_user_message
 from weaver.providers.types import GlossaryTerm
+from weaver.services.glossary_review import list_pending
 from weaver.services.glossary_terms import (
     add_term,
     delete_term,
     list_terms,
     list_terms_page,
+    return_term_to_review,
     update_term,
 )
 from weaver.services.project import initialize_project
@@ -62,6 +64,26 @@ def test_delete_missing_raises(tmp_path) -> None:
     init = initialize_project(FIXTURE_EPUB_A, cwd=tmp_path, provider="fake")
     with pytest.raises(GlossaryTermNotFoundError):
         delete_term(init.project_toml, source="未登録", cwd=tmp_path)
+
+
+def test_return_term_to_review_moves_term_back_to_candidate_queue(tmp_path) -> None:
+    init = initialize_project(FIXTURE_EPUB_A, cwd=tmp_path, provider="fake")
+    add_term(init.project_toml, source="魔王", target="Demon King", cwd=tmp_path)
+
+    return_term_to_review(init.project_toml, source="魔王", cwd=tmp_path)
+
+    # Term left Approved terms...
+    assert list_terms(init.project_toml, cwd=tmp_path) == ()
+    # ...and is back in Candidate review as a pending row (EN kept for re-review).
+    pending = list_pending(init.project_toml, cwd=tmp_path)
+    rows = [(c.source, c.target, c.status) for c in pending.items if c.source == "魔王"]
+    assert rows == [("魔王", "Demon King", "pending")]
+
+
+def test_return_term_to_review_missing_raises(tmp_path) -> None:
+    init = initialize_project(FIXTURE_EPUB_A, cwd=tmp_path, provider="fake")
+    with pytest.raises(GlossaryTermNotFoundError):
+        return_term_to_review(init.project_toml, source="未登録", cwd=tmp_path)
 
 
 def test_empty_source_or_target_rejected(tmp_path) -> None:

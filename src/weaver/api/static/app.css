@@ -819,7 +819,8 @@ progress::-moz-progress-bar { background: var(--color-primary); border-radius: v
 .diff-cols ul,
 .plain-list { list-style: none; padding-left: 0; margin: var(--space-xs) 0; }
 .plain-list li { padding: 0.25rem 0; }
-.pager { display: flex; gap: var(--space-sm); margin-top: var(--space-sm); }
+.pager { display: flex; align-items: center; gap: var(--space-sm); margin-top: var(--space-sm); }
+.pager-status { margin-inline: auto; }
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(116px, 1fr)); gap: var(--space-sm); margin: 0 0 var(--space-md); }
 .stat { display: flex; flex-direction: column; gap: 2px; padding: var(--space-sm) var(--space-md); border: 1px solid var(--color-line); border-radius: var(--radius-md); background: var(--color-canvas); }
 .stat__value { font-size: var(--text-xl); font-weight: 760; line-height: 1.1; letter-spacing: -0.01em; color: var(--color-muted-soft); }

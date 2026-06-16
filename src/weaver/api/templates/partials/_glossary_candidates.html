@@ -1,4 +1,4 @@
-<div id="glossary-candidates" data-project="{{ name }}">
+<div id="glossary-candidates" data-project="{{ name }}"{% if oob %} hx-swap-oob="true"{% endif %}>
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <p class="meta" id="glossary-candidate-counts">
     pending <b data-count="pending">{{ page.counts.pending }}</b> ·
@@ -59,7 +59,7 @@
             <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/approve"
                   hx-swap="none" hx-disabled-elt="find button" style="display:inline">
               <button type="submit" data-gc-action="approve" data-gc-target="{{ c.target or '' }}"
-                      {% if not c.target %}disabled title="No existing target — use Save &amp; approve"{% endif %}>Approve target</button>
+                      {% if not c.target or c.target == c.source %}disabled title="No English target yet — use Save &amp; approve"{% endif %}>Approve target</button>
             </form>
             <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ c.id }}/reject"
                   hx-swap="none" hx-disabled-elt="find button" style="display:inline">
@@ -78,6 +78,12 @@
             hx-get="/ui/projects/{{ name }}/glossary/candidates?offset={{ prev_offset }}&find={{ find|urlencode }}"
             hx-target="#glossary-candidates" hx-swap="outerHTML">← prev</button>
     {% endif %}
+    {# Page indicator: without it, prev/next give no sense of how many candidates
+       there are in total or where you are. total_pending honors the active search. #}
+    <span class="pager-status meta" aria-live="polite">
+      {{ page.offset + 1 }}–{{ page.offset + page.items|length }} of {{ page.total_pending }}
+      · page {{ page.offset // page.limit + 1 }} of {{ (page.total_pending + page.limit - 1) // page.limit }}
+    </span>
     {% if next_offset is not none %}
     <button type="button" class="link-btn"
             hx-get="/ui/projects/{{ name }}/glossary/candidates?offset={{ next_offset }}&find={{ find|urlencode }}"
