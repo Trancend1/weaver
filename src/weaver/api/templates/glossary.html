@@ -146,6 +146,37 @@
     selectedRows().forEach(function (r) { submitAction(r, action); });
   }
 
+  // ── Bulk "Suggest targets" ───────────────────────────────────────────────
+  // Fill every empty target on the page with one AI suggestion, sequentially
+  // (one LLM call at a time → natural pacing + per-row error isolation, reusing
+  // the existing per-row /suggest endpoint).
+  function rowsNeedingTarget() {
+    return liveRows().filter(function (r) {
+      var input = r.querySelector('input[name="target"]');
+      return input && !input.value.trim();
+    });
+  }
+  function suggestAll(button) {
+    if (!window.htmx) return;
+    var rows = rowsNeedingTarget();
+    if (!rows.length) return;
+    var label = button.textContent;
+    button.disabled = true;
+    var i = 0;
+    function next() {
+      if (i >= rows.length) { button.disabled = false; button.textContent = label; return; }
+      var row = rows[i++];
+      button.textContent = "Suggesting… " + i + "/" + rows.length;
+      var id = row.dataset.candId;
+      htmx.ajax(
+        "POST",
+        "/ui/projects/" + encodeURIComponent(project) + "/glossary/candidates/" + id + "/suggest",
+        { target: "#cand-edit-" + id, swap: "innerHTML" }
+      ).then(next, next);
+    }
+    next();
+  }
+
   container.addEventListener("change", function (e) {
     var t = e.target;
     if (t.matches && t.matches(".gc-select")) {
@@ -159,7 +190,9 @@
   });
   container.addEventListener("click", function (e) {
     var b = e.target.closest("[data-gc-bulk]");
-    if (b) bulk(b.dataset.gcBulk);
+    if (b) { bulk(b.dataset.gcBulk); return; }
+    var s = e.target.closest("[data-gc-suggest-all]");
+    if (s) suggestAll(s);
   });
 
   // ── Keyboard (power-user review) ─────────────────────────────────────────

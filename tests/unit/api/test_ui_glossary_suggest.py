@@ -39,7 +39,10 @@ def _cid(c: TestClient, name: str) -> int:
     return page["candidates"][0]["id"]
 
 
-def test_suggest_fills_target_and_shows_cost(client: TestClient, monkeypatch) -> None:
+def test_suggest_fills_target_without_provenance_clutter(client: TestClient, monkeypatch) -> None:
+    # Owner UX feedback: the per-row provider/model/token line was redundant noise.
+    # The suggestion still fills the editable target (the user reviews + approves);
+    # token cost stays visible project-wide in analytics, not per row.
     name = _name(client)
     cid = _cid(client, name)
     monkeypatch.setattr(
@@ -50,8 +53,8 @@ def test_suggest_fills_target_and_shows_cost(client: TestClient, monkeypatch) ->
     r = client.post(f"/ui/projects/{name}/glossary/candidates/{cid}/suggest")
     assert r.status_code == 200
     assert 'value="Demon King"' in r.text  # editable field pre-filled (gate 4)
-    assert "deepseek" in r.text and "deepseek-chat" in r.text  # cost/provenance (gate 6)
-    assert "14 tokens" in r.text
+    assert "deepseek-chat" not in r.text  # no per-row provenance line
+    assert "tokens" not in r.text  # no per-row token line
 
 
 def test_suggest_failure_is_visible_not_silent(client: TestClient, monkeypatch) -> None:
