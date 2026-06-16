@@ -12,10 +12,12 @@ is what writes the glossary term. The provider is resolved from the user's
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from weaver.core.config import load_project_config
 from weaver.core.task_types import TaskType
@@ -107,12 +109,40 @@ def suggest_glossary_target(
                 close()
 
 
+_JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
+
+
+def _load_json_object(text: str) -> dict[str, Any] | None:
+    """Parse a JSON object, tolerating markdown fences / prose around it.
+
+    Mirrors the translate parser (`providers/parser`): try a direct parse, then
+    extract the first ``{...}`` block. Real models often wrap the object in a
+    ```json fence or a sentence; a strict `json.loads` rejected those, which is
+    what produced the spurious "not valid JSON" suggestion error.
+    """
+
+    for candidate in (text, _first_json_block(text)):
+        if candidate is None:
+            continue
+        try:
+            value = json.loads(candidate)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(value, dict):
+            return value
+    return None
+
+
+def _first_json_block(text: str) -> str | None:
+    match = _JSON_BLOCK_RE.search(text or "")
+    return match.group() if match else None
+
+
 def _parse_target(text: str) -> str:
-    try:
-        data = json.loads(text)
-    except (json.JSONDecodeError, TypeError) as exc:
-        raise _unusable("the AI response was not valid JSON") from exc
-    if not isinstance(data, dict) or "target" not in data or not isinstance(data["target"], str):
+    data = _load_json_object(text)
+    if data is None:
+        raise _unusable("the AI response was not valid JSON")
+    if "target" not in data or not isinstance(data["target"], str):
         raise _unusable("the AI response had no `target` string")
     target = data["target"].strip()
     if not target:

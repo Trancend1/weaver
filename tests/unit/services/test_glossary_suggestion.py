@@ -69,6 +69,28 @@ def test_suggest_returns_grounded_target(tmp_path: Path, monkeypatch) -> None:
     assert source in (stub.last_prompt or "")
 
 
+@pytest.mark.parametrize(
+    "wrapped",
+    [
+        '```json\n{"target": "Demon King"}\n```',  # markdown fence
+        'Here is the term: {"target": "Demon King"}',  # prose prefix
+        '{"target": "Demon King"}\n\nHope that helps!',  # prose suffix
+    ],
+)
+def test_suggest_extracts_wrapped_json(tmp_path: Path, monkeypatch, wrapped: str) -> None:
+    # Real models often wrap the object in a fence or a sentence; the parser must
+    # extract it instead of raising a spurious "not valid JSON" error.
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB, provider="fake")
+    cid, _ = _candidate_source(init.project_toml)
+
+    out = suggest_glossary_target(
+        init.project_toml, cid, cwd=tmp_path, provider=_StubProvider(text=wrapped)
+    )
+
+    assert out.target == "Demon King"
+
+
 def test_suggest_connection_first_resolves_routing_model(tmp_path: Path, monkeypatch) -> None:
     # Regression (ADR 018): a connection-first project sets its model under
     # [routing.translate] and leaves [provider] empty. Glossary suggest must
