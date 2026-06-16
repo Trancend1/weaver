@@ -1,9 +1,11 @@
 # Execution Plan — Translation Enforcement Loop (ADR 019, P0)
 
 **Status:** Active — **ADR 019 accepted (2026-06-16).** Folded into **v0.7.2**.
+**E1+E2 shipped** (commit `992d533`, full suite 1564 passed) — they shipped together because a
+detection-only gate would be a zero-caller module (§4.2/§4.3). **Remaining: E3, E4.**
 **Governs:** the P0 core of ADR 019 (make glossary/character binding + anti-slop real).
 **Branch target:** `feat/connection-first-routing` (owner direction: complete everything in
-v0.7.2, no PR). E1 first.
+v0.7.2, no PR).
 
 ---
 
