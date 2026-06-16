@@ -12,7 +12,6 @@ is what writes the glossary term. The provider is resolved from the user's
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
@@ -36,7 +35,10 @@ from weaver.storage.projects import ProjectRecord, get_project
 
 EXAMPLE_LIMIT = 3
 MAX_TARGET_CHARS = 80
-MAX_OUTPUT_TOKENS = 120
+# Generous so a "thinking"/reasoning model has room to finish its reasoning AND
+# still emit the small JSON object — a tight budget truncated the answer, which
+# surfaced as a spurious "not valid JSON".
+MAX_OUTPUT_TOKENS = 512
 _SENTENCE_END = ".!?。！？"
 
 __all__ = ["GlossarySuggestion", "suggest_glossary_target", "GLOSSARY_SUGGEST_PROMPT_VERSION"]
@@ -109,33 +111,56 @@ def suggest_glossary_target(
                 close()
 
 
-_JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
-
-
 def _load_json_object(text: str) -> dict[str, Any] | None:
-    """Parse a JSON object, tolerating markdown fences / prose around it.
+    """Parse the answer JSON object, tolerating markdown fences / prose / reasoning.
 
-    Mirrors the translate parser (`providers/parser`): try a direct parse, then
-    extract the first ``{...}`` block. Real models often wrap the object in a
-    ```json fence or a sentence; a strict `json.loads` rejected those, which is
-    what produced the spurious "not valid JSON" suggestion error.
+    Real models wrap the object in a ```json fence, a sentence, or (for
+    "thinking" models) a ``<think>`` block whose stray ``{`` braces would defeat a
+    greedy first-to-last match. So: try a direct parse, then scan every balanced
+    top-level ``{...}`` candidate and return the first that is an object carrying
+    ``target`` (falling back to the first object). Mirrors the intent of the
+    translate parser but is reasoning-safe.
     """
 
-    for candidate in (text, _first_json_block(text)):
-        if candidate is None:
+    direct = _as_dict(text)
+    if direct is not None:
+        return direct
+    fallback: dict[str, Any] | None = None
+    for candidate in _brace_candidates(text or ""):
+        obj = _as_dict(candidate)
+        if obj is None:
             continue
-        try:
-            value = json.loads(candidate)
-        except (json.JSONDecodeError, TypeError):
-            continue
-        if isinstance(value, dict):
-            return value
-    return None
+        if "target" in obj:
+            return obj
+        if fallback is None:
+            fallback = obj
+    return fallback
 
 
-def _first_json_block(text: str) -> str | None:
-    match = _JSON_BLOCK_RE.search(text or "")
-    return match.group() if match else None
+def _as_dict(text: str) -> dict[str, Any] | None:
+    try:
+        value = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _brace_candidates(text: str) -> list[str]:
+    """Return each balanced top-level ``{...}`` substring (depth-tracked scan)."""
+    spans: list[str] = []
+    depth = 0
+    start = -1
+    for index, char in enumerate(text):
+        if char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}" and depth > 0:
+            depth -= 1
+            if depth == 0 and start >= 0:
+                spans.append(text[start : index + 1])
+                start = -1
+    return spans
 
 
 def _parse_target(text: str) -> str:

@@ -75,6 +75,8 @@ def test_suggest_returns_grounded_target(tmp_path: Path, monkeypatch) -> None:
         '```json\n{"target": "Demon King"}\n```',  # markdown fence
         'Here is the term: {"target": "Demon King"}',  # prose prefix
         '{"target": "Demon King"}\n\nHope that helps!',  # prose suffix
+        '<think>hmm, maybe {something} else</think>{"target": "Demon King"}',  # reasoning braces
+        '{"reasoning": "weighed options"}\n{"target": "Demon King"}',  # answer is 2nd object
     ],
 )
 def test_suggest_extracts_wrapped_json(tmp_path: Path, monkeypatch, wrapped: str) -> None:
