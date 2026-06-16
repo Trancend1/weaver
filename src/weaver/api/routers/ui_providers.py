@@ -16,6 +16,7 @@ triggered by a render).
 
 from __future__ import annotations
 
+from html import escape
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -112,7 +113,7 @@ def provider_switch(
     dp = find_project(base, name)
     toml = getattr(dp, "project_toml", None) if dp is not None else None
     if dp is None or dp.error or not isinstance(toml, Path):
-        msg = f"No project named {name!r}."
+        msg = f"No project named {escape(name)!r}."
         return HTMLResponse(
             f"<tr><td colspan='6'><span class='error' role='alert'>{msg}</span></td></tr>"
         )

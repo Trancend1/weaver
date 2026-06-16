@@ -86,6 +86,12 @@ def find_project(books_dir: Path, name: str) -> DiscoveredProject | None:
         The matching DiscoveredProject, or None when no such project exists.
     """
 
+    # `name` is a single directory name. Reject path separators and traversal
+    # tokens so a crafted route param cannot escape the `.weaver` root — on
+    # Windows (the desktop target) a backslash is a separator, so `..\..\x` would
+    # otherwise traverse. Legitimate project dir names never contain these.
+    if not name or name in {".", ".."} or "/" in name or "\\" in name:
+        return None
     project_toml = books_dir / ".weaver" / name / "project.toml"
     if not project_toml.is_file():
         return None

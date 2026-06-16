@@ -11,6 +11,7 @@ connection's ``/v1/models`` — never on render, no background thread (Gate B1).
 
 from __future__ import annotations
 
+from html import escape
 from pathlib import Path
 
 from fastapi import APIRouter, Form, Request
@@ -42,6 +43,13 @@ def _resolve_toml(request: Request, name: str) -> Path | None:
         return None
     toml = getattr(dp, "project_toml", None)
     return toml if isinstance(toml, Path) else None
+
+
+def _no_project(name: str) -> HTMLResponse:
+    """Escaped 'no such project' fragment (path param is untrusted — no raw HTML)."""
+    return HTMLResponse(
+        f"<p class='error' role='alert'>No project named {escape(name)!r}.</p>"
+    )
 
 
 def _task(value: str) -> TaskType:
@@ -118,7 +126,7 @@ def routing_panel(name: str, request: Request) -> HTMLResponse:
     """Render the Active AI panel for the project (TOML read only — Gate-B1 safe)."""
     toml = _resolve_toml(request, name)
     if toml is None:
-        return HTMLResponse(f"<p class='error' role='alert'>No project named {name!r}.</p>")
+        return _no_project(name)
     return _panel(request, name, toml)
 
 
@@ -133,7 +141,7 @@ def routing_switch(
     """Persist the chosen (connection, model) for a task, then re-render the panel."""
     toml = _resolve_toml(request, name)
     if toml is None:
-        return HTMLResponse(f"<p class='error' role='alert'>No project named {name!r}.</p>")
+        return _no_project(name)
     try:
         set_routing(toml, task=_task(task).value, connection=connection, model=_opt(model))
     except WeaverError as exc:
@@ -171,7 +179,7 @@ def routing_add_fallback(
     """Append a (connection, model) fallback to the translate routing chain."""
     toml = _resolve_toml(request, name)
     if toml is None:
-        return HTMLResponse(f"<p class='error' role='alert'>No project named {name!r}.</p>")
+        return _no_project(name)
     fallbacks = _current_fallbacks(toml)
     fallbacks.append((connection.strip(), _opt(model) or ""))
     try:
@@ -186,7 +194,7 @@ def routing_clear_fallbacks(name: str, request: Request) -> HTMLResponse:
     """Remove all fallbacks from the translate routing chain."""
     toml = _resolve_toml(request, name)
     if toml is None:
-        return HTMLResponse(f"<p class='error' role='alert'>No project named {name!r}.</p>")
+        return _no_project(name)
     try:
         _set_primary_with_fallbacks(toml, [])
     except WeaverError as exc:

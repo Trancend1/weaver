@@ -61,6 +61,17 @@ def test_routing_panel_lists_connections(tmp_path: Path) -> None:
     assert "Switch AI" in resp.text
 
 
+def test_routing_panel_escapes_unknown_project_name(tmp_path: Path) -> None:
+    # The unknown-project fallback reflects the route param — it must be escaped,
+    # never injected as raw HTML (reflected-XSS guard).
+    client = TestClient(create_api_app(tmp_path))
+    # Slash-free payload so FastAPI keeps it in the single {name} segment.
+    resp = client.get("/ui/projects/<img src=x onerror=alert(1)>/routing")
+    assert resp.status_code == 200
+    assert "<img src=x onerror=alert(1)>" not in resp.text  # not reflected raw
+    assert "&lt;img" in resp.text  # escaped
+
+
 def test_routing_switch_writes_routing_block(tmp_path: Path) -> None:
     _init(tmp_path, "alpha")
     _register_openrouter()
