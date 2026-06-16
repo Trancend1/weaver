@@ -39,14 +39,23 @@
       {% if v.chapters %}
       <ul class="chapters">
         {% for c in v.chapters %}
-        <li class="chapter">
-          <a class="ch-title" href="/ui/projects/{{ tree.project_name }}/chapters/{{ c.id }}">{{ c.title }}</a>
+        <li class="chapter{% if c.segment_count == 0 %} chapter--empty{% endif %}">
+          <a class="ch-title" href="/ui/projects/{{ tree.project_name }}/chapters/{{ c.id }}">{{ c.title or "Untitled" }}</a>
           <span class="qa-badge-slot" id="qa-badge-ch-{{ c.id }}"></span>
+          {% if c.segment_count == 0 %}
+          {# 0/0 chapters carry no translatable text — illustration or front/back
+             matter. Mark them so they aren't mistaken for un-translated work; they
+             are skipped by batch translate. (Image/illustration OCR is out of
+             scope — ADR 012.) #}
+          <span class="ch-progress meta ch-no-text"
+                title="No translatable text — likely an illustration or front/back-matter page.">No translatable text</span>
+          {% else %}
           <span class="ch-progress meta progress-block">
             <progress value="{{ c.done_count }}" max="{{ c.segment_count or 1 }}"
               title="{{ c.done_count }} of {{ c.segment_count }} segments done"></progress>
             {{ c.done_count }}/{{ c.segment_count }}
           </span>
+          {% endif %}
         </li>
         {% endfor %}
       </ul>
