@@ -46,6 +46,7 @@ from weaver.services.workspace_translate import (
     ChapterTranslationResult,
     TranslationPlan,
     build_healthy_provider,
+    enforce_repair_enabled,
     load_single_project,
     load_translation_context,
     raw_response_logging_enabled,
@@ -236,6 +237,7 @@ def prepare_batch_translation(
     provider = build_healthy_provider(provider_config)
     use_translation_memory = mode == "skip_existing"
     persist_raw_response = raw_response_logging_enabled(data)
+    enforce_repair = enforce_repair_enabled(data)
     chapter_plans = tuple(
         TranslationPlan(
             project_toml=project_toml,
@@ -252,6 +254,7 @@ def prepare_batch_translation(
             requested_count=requested_count,
             use_translation_memory=use_translation_memory,
             persist_raw_response=persist_raw_response,
+            enforce_repair=enforce_repair,
             fallback_engines=fallback_engines,
         )
         for chapter_id, target_segment_ids, requested_count in collected

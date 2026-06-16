@@ -49,6 +49,7 @@ from weaver.services.routing import Candidate, resolve_chain
 from weaver.services.translation import (
     VALID_HONORIFIC_POLICIES,
     ProgressCallback,
+    enforce_repair_enabled,
     load_character_contexts,
     raw_response_logging_enabled,
     translate_one_segment,
@@ -88,6 +89,7 @@ class TranslationPlan:
     requested_count: int
     use_translation_memory: bool
     persist_raw_response: bool
+    enforce_repair: bool = True
     # Ordered per-task fallback engines (ADR 018 D4); the run tries each in turn
     # after the primary fails a segment. Empty when no `[routing.<task>].fallback`
     # is configured or none could be built.
@@ -212,6 +214,7 @@ def prepare_chapter_translation(
         # not a silent no-op; the memory is still refreshed on success.
         use_translation_memory=(mode == "skip_existing"),
         persist_raw_response=raw_response_logging_enabled(data),
+        enforce_repair=enforce_repair_enabled(data),
     )
 
 
@@ -271,6 +274,7 @@ def run_translation(
                 persist_raw_response=plan.persist_raw_response,
                 fallbacks=plan.fallback_engines,
                 cold=run_cold,
+                enforce_repair=plan.enforce_repair,
             )
             if ok:
                 translated += 1

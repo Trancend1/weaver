@@ -9,6 +9,7 @@ import pytest
 
 from weaver.errors import GlossaryConflictError, ProviderResponseError
 from weaver.providers.base import LLMProvider, ProviderStatus
+from weaver.providers.fake import FakeProvider
 from weaver.providers.types import TranslationRequest, TranslationResponse
 from weaver.services.project import initialize_project
 from weaver.services.translation import translate_project
@@ -99,6 +100,68 @@ def test_translate_project_injects_approved_glossary_terms_into_matching_prompt(
     assert [(term.source, term.target) for term in first_request_terms] == [
         (term_source, "Pinned Term")
     ]
+
+
+def _approve_pinned_term(db_path: Path, *, source: str, target: str) -> None:
+    with connect_database(db_path) as connection, transaction(connection):
+        project_id = connection.execute("SELECT id FROM projects LIMIT 1").fetchone()["id"]
+        candidate_id = insert_glossary_candidate(
+            connection,
+            project_id=project_id,
+            source=source,
+            target=target,
+            category="fallback",
+            notes=None,
+            status="pending",
+            frequency=1,
+        )
+        approve_glossary_candidate(connection, candidate_id=candidate_id)
+
+
+def test_enforcement_repairs_missing_glossary_target(tmp_path, monkeypatch) -> None:
+    # ADR 019 E1+E2: the model dropped a glossary target -> one bounded repair re-ask
+    # supplies it, and the repaired text is committed in place.
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    term_source = _first_segment_text(init.database_path)[:2]
+    _approve_pinned_term(init.database_path, source=term_source, target="PinnedTarget")
+
+    # Primary translation omits the target; the repair completion supplies it.
+    provider = FakeProvider(
+        pattern="A clean english line without the term.",
+        completion='{"translation": "A line containing PinnedTarget exactly.",'
+        ' "notes": [], "uncertain_terms": []}',
+    )
+    translate_project(init.project_toml, provider=provider)
+
+    with sqlite3.connect(init.database_path) as connection:
+        repaired = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM translations WHERE text LIKE '%PinnedTarget%'"
+            ).fetchone()[0]
+        )
+    assert repaired >= 1  # the matching segment was repaired in place
+
+
+def test_translate_project_keeps_primary_when_repair_unparseable(tmp_path, monkeypatch) -> None:
+    # A repair whose output cannot be parsed must keep the good primary translation
+    # (never blocked, never substituted).
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    term_source = _first_segment_text(init.database_path)[:2]
+    _approve_pinned_term(init.database_path, source=term_source, target="PinnedTarget")
+
+    provider = FakeProvider(pattern="No target here.", completion="not valid json")
+    summary = translate_project(init.project_toml, provider=provider)
+
+    assert summary.translated_segments == 6  # all committed despite the repair parse-fail
+    with sqlite3.connect(init.database_path) as connection:
+        repaired = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM translations WHERE text LIKE '%PinnedTarget%'"
+            ).fetchone()[0]
+        )
+    assert repaired == 0  # nothing fabricated; original primary kept
 
 
 def test_translate_project_resets_interrupted_segment_and_resumes(tmp_path, monkeypatch) -> None:

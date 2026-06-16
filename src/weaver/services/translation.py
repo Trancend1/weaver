@@ -13,15 +13,17 @@ from typing import Any
 from weaver.core.config import load_project_config
 from weaver.core.ir import BlockIR, DocumentIR, scope_document_to_volume
 from weaver.core.task_types import TaskType
-from weaver.errors import ConfigError, ProviderError, ProviderUnavailable
+from weaver.errors import ConfigError, ParserError, ProviderError, ProviderUnavailable
 from weaver.providers import LLMProvider, build_provider
 from weaver.providers.types import (
     CharacterContext,
     GlossaryTerm,
     TranslationContext,
     TranslationRequest,
+    TranslationResponse,
 )
 from weaver.readers import read_source
+from weaver.services.enforcement import evaluate_translation, repair_translation
 from weaver.services.glossary import raise_on_glossary_conflicts
 from weaver.services.routing import resolve_chain
 from weaver.storage.characters import list_characters
@@ -243,6 +245,7 @@ def translate_project(
     provider_config = _merge_provider_config(engine_chain[0].provider_config, provider_override)
     translation_config = data["translation"]
     persist_raw_response = raw_response_logging_enabled(data)
+    enforce_repair = enforce_repair_enabled(data)
     db_path = _resolve_path(str(project_config["database_path"]), base_dir, project_toml.parent)
     source_path = _resolve_path(str(project_config["source_file"]), base_dir, project_toml.parent)
 
@@ -351,6 +354,7 @@ def translate_project(
                     persist_raw_response=persist_raw_response,
                     fallbacks=fallback_engines,
                     cold=run_cold,
+                    enforce_repair=enforce_repair,
                 )
             )
             if translated:
@@ -446,6 +450,7 @@ def translate_one_segment(
     persist_raw_response: bool = False,
     fallbacks: Sequence[tuple[LLMProvider, str]] = (),
     cold: dict[str, float] | None = None,
+    enforce_repair: bool = True,
 ) -> tuple[bool, bool, int | None, int | None]:
     """Translate one segment in a single transaction.
 
@@ -545,32 +550,116 @@ def translate_one_segment(
                     cold[cand_provider.name] = now + _FALLBACK_COLD_SECONDS
                 continue
 
+            # Enforcement gate (ADR 019 E1+E2): glossary/character/anti-slop must
+            # bind. Detection is free; on violation, one bounded repair re-ask (E2)
+            # when enforce_repair is on. Never blocks — the committed text is the
+            # best attempt and any residual violation stays visible in the QA report.
+            final = response
+            spent_input = response.input_tokens or 0
+            spent_output = response.output_tokens or 0
+            if enforce_repair:
+                verdict = evaluate_translation(
+                    segment_id=segment.id,
+                    source_text=source_text,
+                    normalized_source_text=normalized_source_text,
+                    translation_text=response.translation,
+                    glossary_terms=glossary_terms,
+                    characters=characters,
+                )
+                if not verdict.ok:
+                    repaired = _try_repair(
+                        cand_provider,
+                        source_text=source_text,
+                        previous_translation=response.translation,
+                        violations=verdict.violations,
+                        source_language=project.source_lang,
+                        target_language=project.target_lang,
+                    )
+                    if repaired is not None:
+                        # The repair was spent regardless; count its tokens.
+                        spent_input += repaired.input_tokens or 0
+                        spent_output += repaired.output_tokens or 0
+                        recheck = evaluate_translation(
+                            segment_id=segment.id,
+                            source_text=source_text,
+                            normalized_source_text=normalized_source_text,
+                            translation_text=repaired.translation,
+                            glossary_terms=glossary_terms,
+                            characters=characters,
+                        )
+                        # Keep the repaired attempt unless it is strictly worse than
+                        # the original (a targeted fix that regressed is discarded).
+                        if len(recheck.violations) <= len(verdict.violations):
+                            final = repaired
+
             record_translation(
                 connection,
                 segment_id=segment.id,
-                text=response.translation,
+                text=final.translation,
                 source_hash=segment.source_hash,
                 provider=cand_provider.name,
                 model=cand_model,
-                raw_response=response.raw_response if persist_raw_response else None,
-                input_tokens=response.input_tokens,
-                output_tokens=response.output_tokens,
+                raw_response=final.raw_response if persist_raw_response else None,
+                input_tokens=final.input_tokens,
+                output_tokens=final.output_tokens,
             )
             save_translation_memory(
                 connection,
                 project_id=project.id,
                 source_text=normalized_source_text,
                 source_hash=segment.source_hash,
-                target_text=response.translation,
+                target_text=final.translation,
                 provider=cand_provider.name,
                 model=cand_model,
                 protect_manual=True,
             )
             update_segment_status(connection, segment_id=segment.id, status="translated")
-            return True, False, response.input_tokens, response.output_tokens
+            return True, False, spent_input, spent_output
 
         update_segment_status(connection, segment_id=segment.id, status="failed")
         return False, False, None, None
+
+
+def _try_repair(
+    provider: LLMProvider,
+    *,
+    source_text: str,
+    previous_translation: str,
+    violations: tuple[str, ...],
+    source_language: str,
+    target_language: str,
+) -> TranslationResponse | None:
+    """One bounded enforcement-repair re-ask; None when it fails (keep the original).
+
+    The repair is best-effort on an already-successful translation: any failure —
+    a provider error, unparseable output, or a provider that does not implement the
+    ``complete()`` primitive (``NotImplementedError``) — must never lose the good
+    primary translation. The caller commits the original attempt and the residual
+    violation stays visible in the QA report (never blocked, never substituted).
+    """
+
+    try:
+        return repair_translation(
+            provider,
+            source_text=source_text,
+            previous_translation=previous_translation,
+            violations=violations,
+            source_language=source_language,
+            target_language=target_language,
+        )
+    except (ProviderError, ParserError, NotImplementedError):
+        return None
+
+
+def enforce_repair_enabled(config: dict[str, Any]) -> bool:
+    """Read ``[translation] enforce_repair`` (default True — ADR 019 §6).
+
+    Detection always runs; this flag only gates the token-costing repair re-ask.
+    """
+    translation_config = config.get("translation", {})
+    if not isinstance(translation_config, dict):
+        return True
+    return bool(translation_config.get("enforce_repair", True))
 
 
 def raw_response_logging_enabled(config: dict[str, Any]) -> bool:
