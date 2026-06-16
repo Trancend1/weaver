@@ -12,6 +12,7 @@ ships on ``weaver serve-api`` alongside the JSON API (Flask removed in Sprint 13
 
 from __future__ import annotations
 
+import sqlite3
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -476,6 +477,19 @@ async def import_volume_submit(
         tree = project_tree(dp.project_toml, cwd=base, jobs=_jobs(request))
     except WeaverError as exc:
         return _import_error(request, str(exc))
+    except sqlite3.OperationalError as exc:
+        # Usually "database is locked": another writer (a running translation or
+        # batch job) holds the DB. Surface a retry message, never a silent 500.
+        busy = "locked" in str(exc).lower()
+        message = (
+            "The project is busy — a translation or another import may be running. "
+            "Please wait a moment and try again."
+            if busy
+            else f"Import failed: a database error occurred ({exc})."
+        )
+        return _import_error(request, message)
+    except Exception as exc:  # noqa: BLE001 - web boundary: surface, never silently 500
+        return _import_error(request, f"Import failed unexpectedly: {exc}")
     return templates.TemplateResponse(request, "partials/_tree.html", {"tree": tree})
 
 

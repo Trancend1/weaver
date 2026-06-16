@@ -36,6 +36,17 @@ def test_initialize_database_creates_schema_and_enables_wal(tmp_path) -> None:
     assert foreign_keys == 1
 
 
+def test_writable_connection_sets_busy_timeout(tmp_path) -> None:
+    """Writable connections wait on a contended lock instead of failing fast,
+    so a transient overlap (e.g. a running translation) doesn't 500 an import."""
+    db_path = tmp_path / "weaver.db"
+    with initialize_database(db_path):
+        pass
+    with connect_database(db_path) as connection:
+        busy_timeout = connection.execute("PRAGMA busy_timeout").fetchone()[0]
+    assert busy_timeout == 10000
+
+
 def test_connect_database_does_not_reset_in_progress_segments(tmp_path) -> None:
     """connect_database must NOT reset in_progress segments (R-02 / Q2b)."""
     db_path = tmp_path / "weaver.db"

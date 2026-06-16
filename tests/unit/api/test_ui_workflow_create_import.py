@@ -142,6 +142,46 @@ def test_import_no_source_error_fragment(tmp_path: Path) -> None:
     assert "Import failed" in r.text
 
 
+def test_import_db_locked_shows_visible_busy_error_not_500(tmp_path: Path, monkeypatch) -> None:
+    """A locked DB (e.g. a translation job is writing) must surface a retry message,
+    not a silent 500 — the reported 'loads but no feedback' bug."""
+    import sqlite3
+
+    import weaver.api.routers.ui as ui_module
+
+    client, name = _with_project(tmp_path)
+
+    def _locked(*_a, **_k):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(ui_module, "import_volume", _locked)
+    epub = _fixture_epub()
+    data = {"file": (epub.name, BytesIO(epub.read_bytes()), "application/epub+zip")}
+    r = client.post(f"/ui/projects/{name}/import", files=data)
+
+    assert r.status_code == 200  # HTMX-swappable fragment, never a silent 500
+    assert r.headers.get("HX-Retarget") == "#import_error"
+    assert "busy" in r.text.lower() and "try again" in r.text.lower()
+
+
+def test_import_unexpected_error_is_visible_not_500(tmp_path: Path, monkeypatch) -> None:
+    import weaver.api.routers.ui as ui_module
+
+    client, name = _with_project(tmp_path)
+
+    def _boom(*_a, **_k):
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setattr(ui_module, "import_volume", _boom)
+    epub = _fixture_epub()
+    data = {"file": (epub.name, BytesIO(epub.read_bytes()), "application/epub+zip")}
+    r = client.post(f"/ui/projects/{name}/import", files=data)
+
+    assert r.status_code == 200
+    assert r.headers.get("HX-Retarget") == "#import_error"
+    assert "Import failed" in r.text
+
+
 # --- JSON create unchanged after the service extraction ---------------------
 
 
