@@ -47,9 +47,7 @@ def _resolve_toml(request: Request, name: str) -> Path | None:
 
 def _no_project(name: str) -> HTMLResponse:
     """Escaped 'no such project' fragment (path param is untrusted — no raw HTML)."""
-    return HTMLResponse(
-        f"<p class='error' role='alert'>No project named {escape(name)!r}.</p>"
-    )
+    return HTMLResponse(f"<p class='error' role='alert'>No project named {escape(name)!r}.</p>")
 
 
 def _task(value: str) -> TaskType:

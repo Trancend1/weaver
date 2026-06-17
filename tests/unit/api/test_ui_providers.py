@@ -441,5 +441,3 @@ def test_connection_delete_removes(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     resp = client.post("/ui/providers/connections/c/delete")
     assert resp.status_code == 200
     assert get_connection("c") is None
-
-

@@ -32,22 +32,25 @@
 
   {% if providers.projects %}
   <div class="panel c-panel providers-projects">
+    <h2 class="panel__title">Projects</h2>
     <p class="meta">Each project's translation AI. <em>Switch AI</em> changes it instantly. Press <strong>Check</strong> to test a connection — nothing is tested automatically.</p>
+    <div class="c-table-wrap">
     <table class="providers-table">
       <thead>
         <tr>
           <th>Project</th>
-          <th>Active AI</th>
-          <th>API key</th>
-          <th>Tokens (in / out)</th>
-          <th>Recent errors</th>
-          <th>Status</th>
+          <th class="col-active">Active AI</th>
+          <th class="col-fit">API key</th>
+          <th class="col-num">Tokens (in / out)</th>
+          <th class="col-fit">Recent errors</th>
+          <th class="col-fit">Status</th>
         </tr>
       </thead>
       <tbody>
         {% for p in providers.projects %}{% include "partials/_provider_row.html" %}{% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
   {% else %}
     {% if not providers.degraded %}
@@ -57,11 +60,7 @@
     {% endif %}
   {% endif %}
 
-  <section id="secrets" class="panel c-panel">
-    <h2 class="panel__title">API keys</h2>
-    <p class="meta">Your API keys are stored safely on this computer and never shown again after you save them.</p>
-    {% include "partials/_secrets.html" %}
-  </section>
+  {% include "partials/_secrets.html" %}
 
 </section>
 {% endblock %}

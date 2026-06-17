@@ -1,6 +1,6 @@
 <tr class="providers-row" id="provider-row-{{ p.project_name }}">
   <td><a href="/ui/projects/{{ p.project_name }}">{{ p.project_name }}</a></td>
-  <td class="provider-active-ai">
+  <td class="provider-active-ai col-active">
     {% if switch_error %}<p class="error" role="alert">{{ switch_error }}</p>{% endif %}
     <strong>{{ p.active_model }}</strong>
     {% if p.active_connection %}
@@ -32,7 +32,7 @@
       {% endif %}
     </details>
   </td>
-  <td>
+  <td class="col-fit">
     {% if not p.requires_key %}
       <span class="meta">No key needed</span>
     {% elif p.secret_present %}
@@ -42,12 +42,12 @@
          title="{{ p.api_key_env }} is not set — add it under API keys below">Key missing</a>
     {% endif %}
   </td>
-  <td class="meta">
+  <td class="meta col-num">
     {% if p.input_tokens or p.output_tokens %}
       {{ "{:,}".format(p.input_tokens) }} / {{ "{:,}".format(p.output_tokens) }}
     {% else %}—{% endif %}
   </td>
-  <td>
+  <td class="col-fit">
     {% if p.failed_job_count > 0 %}
       <details class="provider-failures">
         <summary><span class="badge bad">{{ p.failed_job_count }}</span></summary>
@@ -65,7 +65,7 @@
       <span class="meta">none</span>
     {% endif %}
   </td>
-  <td>
+  <td class="col-fit">
     <div id="provider-health-{{ p.project_name }}">
       <button type="button" class="btn btn--small"
               hx-post="/ui/providers/{{ p.project_name }}/healthcheck"

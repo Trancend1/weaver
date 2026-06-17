@@ -27,7 +27,23 @@ _PACKAGE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = _PACKAGE_DIR / "templates"
 STATIC_DIR = _PACKAGE_DIR / "static"
 
+
+def _asset_version() -> str:
+    """Cache-busting token for ``/static/app.css``.
+
+    Computed once at import from the stylesheet's mtime so a CSS change is
+    picked up on the next server start (browsers otherwise serve a stale copy
+    of the un-versioned ``app.css``). No render-path filesystem cost.
+    """
+
+    try:
+        return str(int(STATIC_DIR.joinpath("app.css").stat().st_mtime))
+    except OSError:
+        return "0"
+
+
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates.env.globals["asset_version"] = _asset_version()
 templates.env.globals["translation_status_label"] = translation_status_label
 templates.env.globals["job_status_label"] = job_status_label
 templates.env.globals["review_status_label"] = review_status_label
