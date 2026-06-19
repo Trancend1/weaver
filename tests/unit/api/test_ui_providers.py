@@ -199,7 +199,7 @@ def test_legacy_config_redirect_does_not_build_providers(
 
 def test_empty_providers_renders_empty_state(empty_providers_client: TestClient) -> None:
     html = empty_providers_client.get("/ui/providers").text
-    assert "No providers to show" in html
+    assert "No projects to show" in html
 
 
 def test_degraded_project_does_not_blank_hub(

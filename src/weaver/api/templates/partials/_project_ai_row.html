@@ -1,6 +1,6 @@
-<tr class="providers-row" id="provider-row-{{ p.project_name }}">
+<tr class="project-ai-row" id="project-row-{{ p.project_name }}">
   <td><a href="/ui/projects/{{ p.project_name }}">{{ p.project_name }}</a></td>
-  <td class="provider-active-ai col-active">
+  <td class="active-ai-cell col-active">
     {% if switch_error %}<p class="error" role="alert">{{ switch_error }}</p>{% endif %}
     <strong>{{ p.active_model }}</strong>
     {% if p.active_connection %}
@@ -23,7 +23,7 @@
         <input name="model" placeholder="model (optional)" aria-label="Model id">
         <button type="button"
                 hx-post="/ui/providers/{{ p.project_name }}/switch"
-                hx-target="#provider-row-{{ p.project_name }}"
+                hx-target="#project-row-{{ p.project_name }}"
                 hx-swap="outerHTML"
                 hx-disabled-elt="this">Use</button>
       </form>
@@ -49,13 +49,13 @@
   </td>
   <td class="col-fit">
     {% if p.failed_job_count > 0 %}
-      <details class="provider-failures">
+      <details class="recent-failures">
         <summary><span class="badge bad">{{ p.failed_job_count }}</span></summary>
-        <ul class="provider-failures__list">
+        <ul class="recent-failures__list">
           {% for f in p.recent_failures %}
           <li>
             <span class="meta">{{ f.kind }}</span>
-            {% if f.error_summary %}<span class="provider-failures__msg">{{ f.error_summary }}</span>{% endif %}
+            {% if f.error_summary %}<span class="recent-failures__msg">{{ f.error_summary }}</span>{% endif %}
             {% if f.finished_at %}<span class="meta">· {{ f.finished_at[:19] | replace("T", " ") }}</span>{% endif %}
           </li>
           {% endfor %}
@@ -66,10 +66,10 @@
     {% endif %}
   </td>
   <td class="col-fit">
-    <div id="provider-health-{{ p.project_name }}">
+    <div id="project-health-{{ p.project_name }}">
       <button type="button" class="btn btn--small"
               hx-post="/ui/providers/{{ p.project_name }}/healthcheck"
-              hx-target="#provider-health-{{ p.project_name }}"
+              hx-target="#project-health-{{ p.project_name }}"
               hx-swap="innerHTML"
               hx-disabled-elt="this">Check</button>
     </div>

@@ -18,7 +18,7 @@ import os
 import re
 from dataclasses import dataclass
 
-from weaver.core.connection_models import CachedModels, get_cached, save_cached
+from weaver.core.connection_models import CachedModels, get_cached, load_all, save_cached
 from weaver.core.connection_registry import (
     Connection,
     delete_connection,
@@ -180,6 +180,12 @@ def cached_models(name: str) -> CachedModels | None:
     """Return the last cached model snapshot for a connection (no probe)."""
 
     return get_cached(name)
+
+
+def all_cached_models() -> dict[str, CachedModels]:
+    """Return every connection's cached model snapshot (no probe, Gate B1)."""
+
+    return load_all()
 
 
 def list_connection_views() -> list[ConnectionView]:

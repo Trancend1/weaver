@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Connections · Weaver{% endblock %}
 {% block content %}
-<section class="providers-hub">
+<section class="connections-hub">
   {% set page_title = "Connections" %}
   {% set total_in = providers.projects | sum(attribute="input_tokens") %}
   {% set total_out = providers.projects | sum(attribute="output_tokens") %}
@@ -15,7 +15,7 @@
   {% include "partials/_connections.html" %}
 
   {% if providers.degraded %}
-  <div class="panel c-panel providers-degraded">
+  <div class="panel c-panel degraded-projects">
     <h2 class="panel__title">Project issues</h2>
     <ul class="degraded-list">
       {% for d in providers.degraded %}
@@ -31,11 +31,11 @@
   {% endif %}
 
   {% if providers.projects %}
-  <div class="panel c-panel providers-projects">
+  <div class="panel c-panel projects-ai">
     <h2 class="panel__title">Projects</h2>
     <p class="meta">Each project's translation AI. <em>Switch AI</em> changes it instantly. Press <strong>Check</strong> to test a connection — nothing is tested automatically.</p>
     <div class="c-table-wrap">
-    <table class="providers-table">
+    <table class="projects-table">
       <thead>
         <tr>
           <th>Project</th>
@@ -47,14 +47,14 @@
         </tr>
       </thead>
       <tbody>
-        {% for p in providers.projects %}{% include "partials/_provider_row.html" %}{% endfor %}
+        {% for p in providers.projects %}{% include "partials/_project_ai_row.html" %}{% endfor %}
       </tbody>
     </table>
     </div>
   </div>
   {% else %}
     {% if not providers.degraded %}
-    {% set empty_title = "No providers to show" %}
+    {% set empty_title = "No projects to show" %}
     {% set empty_hint = "Import a project to see its Active AI, API-key status, token usage, and recent failures. Register a connection above, then pick a model per project with Switch AI." %}
     {% include "partials/_empty_state.html" %}
     {% endif %}

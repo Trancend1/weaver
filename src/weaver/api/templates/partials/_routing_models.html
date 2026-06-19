@@ -10,3 +10,24 @@
   <span class="hint meta">{{ models | length }} model{{ "" if models | length == 1 else "s" }} — pick one or type your own.</span>
   {% endif %}
 </span>
+{% if grouped_models %}
+<div class="grouped-models">
+  {% for conn_name, conn_models in grouped_models | dictsort %}
+  {% set stale = grouped_stale.get(conn_name, false) %}
+  <details class="grouped-models__group"{% if loop.first %} open{% endif %}>
+    <summary>
+      {{ conn_name }}
+      <span class="meta">({{ conn_models | length }} model{{ "" if conn_models | length == 1 else "s" }}{% if stale %}, stale{% endif %})</span>
+    </summary>
+    <ul class="grouped-models__list">
+      {% for m in conn_models %}
+      <li>
+        <a href="#" class="model-option"
+           onclick="var i=document.querySelector('input[name=\\'model\\']');i.value=this.textContent;return false">{{ m }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endfor %}
+</div>
+{% endif %}

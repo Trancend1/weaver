@@ -82,7 +82,7 @@ def test_dashboard_has_workspace_sidebar(hub_client: TestClient) -> None:
 
 def test_workspace_sidebar_has_six_entries(hub_client: TestClient) -> None:
     html = hub_client.get("/ui").text
-    for label in ("Projects", "Queue", "Resources", "Providers", "Exports", "Settings"):
+    for label in ("Projects", "Queue", "Resources", "Connections", "Exports", "Settings"):
         assert label in html, f"Sidebar entry '{label}' missing from dashboard"
 
 
@@ -93,7 +93,7 @@ def test_workspace_sidebar_projects_entry_is_active(hub_client: TestClient) -> N
 
 def test_workspace_sidebar_disabled_entries_have_no_links(hub_client: TestClient) -> None:
     html = hub_client.get("/ui").text
-    # Providers (Q6) + Exports (Q7) are now active hubs; Settings remains disabled.
+    # Connections (Q6) + Exports (Q7) are now active hubs; Settings remains disabled.
     for disabled in ("Settings",):
         # Disabled entries render as <span> not <a href=...>
         # Quick check: no href pointing to missing hub routes

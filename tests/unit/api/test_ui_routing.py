@@ -208,3 +208,39 @@ def test_routing_panel_shows_cached_models_for_active_connection(tmp_path: Path)
     resp = client.get("/ui/projects/alpha/routing")
     assert resp.status_code == 200
     assert "panel-model" in resp.text
+
+
+def test_routing_panel_shows_grouped_models_across_connections(tmp_path: Path) -> None:
+    _init(tmp_path, "alpha")
+    _register_openrouter()
+    from weaver.core.connection_models import save_cached
+    from weaver.core.connection_registry import Connection, register_connection
+
+    register_connection(
+        Connection(name="local", base_url="http://localhost:11434/v1", api_key_env="")
+    )
+    save_cached("openrouter", ["m1", "m2"])
+    save_cached("local", ["l1"])
+    client = TestClient(create_api_app(tmp_path))
+    resp = client.get("/ui/projects/alpha/routing")
+    assert resp.status_code == 200
+    assert "openrouter" in resp.text
+    assert "local" in resp.text
+    assert "m1" in resp.text
+    assert "m2" in resp.text
+    assert "l1" in resp.text
+
+
+def test_routing_panel_stale_badge_on_expired_cache(tmp_path: Path) -> None:
+    _init(tmp_path, "alpha")
+    _register_openrouter()
+    from datetime import UTC, datetime, timedelta
+
+    from weaver.core.connection_models import DEFAULT_TTL_SECONDS, save_cached
+
+    past = (datetime.now(UTC) - timedelta(seconds=DEFAULT_TTL_SECONDS + 1)).isoformat()
+    save_cached("openrouter", ["old-model"], now=datetime.fromisoformat(past))
+    client = TestClient(create_api_app(tmp_path))
+    resp = client.get("/ui/projects/alpha/routing")
+    assert resp.status_code == 200
+    assert "stale" in resp.text

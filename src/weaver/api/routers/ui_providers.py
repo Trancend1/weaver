@@ -84,7 +84,7 @@ def providers_page(request: Request, project: str | None = None) -> HTMLResponse
         request,
         "providers_hub.html",
         {
-            **ws_hub_layout("providers"),
+            **ws_hub_layout("connections"),
             "providers": providers,
             "books_dir": str(base),
             "connections": connections_service.list_connection_views(),
@@ -124,7 +124,7 @@ def provider_switch(
         error = str(exc)
     return templates.TemplateResponse(
         request,
-        "partials/_provider_row.html",
+        "partials/_project_ai_row.html",
         {
             "p": _project_summary(base, name),
             "connections": connections_service.list_connection_views(),
@@ -146,7 +146,7 @@ def provider_healthcheck(name: str, request: Request) -> HTMLResponse:
         message = dp.error if dp else f"No project named {name!r}."
         return templates.TemplateResponse(
             request,
-            "partials/_provider_status.html",
+            "partials/_project_status.html",
             {"name": name, "status": None, "error": message},
         )
     try:
@@ -155,12 +155,12 @@ def provider_healthcheck(name: str, request: Request) -> HTMLResponse:
     except WeaverError as exc:
         return templates.TemplateResponse(
             request,
-            "partials/_provider_status.html",
+            "partials/_project_status.html",
             {"name": name, "status": None, "error": str(exc)},
         )
     return templates.TemplateResponse(
         request,
-        "partials/_provider_status.html",
+        "partials/_project_status.html",
         {"name": name, "status": status, "error": None},
     )
 

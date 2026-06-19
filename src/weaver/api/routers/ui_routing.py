@@ -18,6 +18,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from weaver.api.templating import templates
+from weaver.core.connection_models import CachedModels
 from weaver.core.connection_registry import get_connection
 from weaver.core.task_types import TaskType
 from weaver.errors import WeaverError
@@ -57,6 +58,11 @@ def _task(value: str) -> TaskType:
         return TaskType.translate
 
 
+def _all_cached() -> dict[str, CachedModels]:
+    """Return all connections' cached model snapshots — cache read only, no probe."""
+    return connections_service.all_cached_models()
+
+
 def _cached_for(connection_name: str | None) -> tuple[list[str], bool]:
     """Return (cached models, stale?) for a connection — cache read only, no probe."""
     if not connection_name:
@@ -65,16 +71,6 @@ def _cached_for(connection_name: str | None) -> tuple[list[str], bool]:
     if cached is None:
         return [], False
     return list(cached.models), cached.is_stale()
-
-
-def _models_fragment(
-    request: Request, models: list[str], *, error: str | None, stale: bool
-) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request,
-        "partials/_routing_models.html",
-        {"models": models, "models_error": error, "models_stale": stale},
-    )
 
 
 def _current_fallbacks(toml: Path) -> list[tuple[str, str]]:
@@ -89,12 +85,20 @@ def _current_fallbacks(toml: Path) -> list[tuple[str, str]]:
 def _panel(request: Request, name: str, toml: Path, **extra: object) -> HTMLResponse:
     active = resolve_active_ai(toml, TaskType.translate)
     models, stale = _cached_for(active.connection_name)
+    all_cache = _all_cached()
+    grouped: dict[str, list[str]] = {}
+    grouped_stale: dict[str, bool] = {}
+    for conn_name, cached in all_cache.items():
+        grouped[conn_name] = list(cached.models)
+        grouped_stale[conn_name] = cached.is_stale()
     ctx: dict[str, object] = {
         "project_name": name,
         "active_ai": active,
         "connections": connections_service.list_connection_views(),
         "models": models,
         "models_stale": stale,
+        "grouped_models": grouped,
+        "grouped_stale": grouped_stale,
         "fallbacks": _current_fallbacks(toml),
     }
     ctx.update(extra)
@@ -149,25 +153,26 @@ def routing_switch(
 
 @router.post("/ui/projects/{name}/routing/models", response_class=HTMLResponse)
 def routing_models(name: str, request: Request, connection: str = Form(...)) -> HTMLResponse:
-    """Live-probe one connection's models (explicit POST) and refresh its cache."""
+    """Live-probe one connection's models (explicit POST), refresh cache, re-render panel."""
+    toml = _resolve_toml(request, name)
+    if toml is None:
+        return _no_project(name)
     if get_connection(connection) is None:
-        return _models_fragment(
-            request, [], error=f"No connection named {connection!r}.", stale=False
-        )
+        return _panel(request, name, toml, models_error=f"No connection named {connection!r}.")
     try:
-        result = connections_service.refresh_models(connection)
+        connections_service.refresh_models(connection)
     except WeaverError as exc:
-        # Don't strand the user: fall back to the last cached snapshot if any.
-        cached, _ = _cached_for(connection)
-        return _models_fragment(request, cached, error=str(exc), stale=bool(cached))
-    return _models_fragment(request, list(result.models), error=None, stale=False)
+        return _panel(request, name, toml, models_error=str(exc))
+    return _panel(request, name, toml)
 
 
 @router.get("/ui/projects/{name}/routing/cached-models", response_class=HTMLResponse)
 def routing_cached_models(name: str, request: Request, connection: str) -> HTMLResponse:
-    """Render a connection's cached models (cache read only — no probe, Gate B1)."""
-    models, stale = _cached_for(connection)
-    return _models_fragment(request, models, error=None, stale=stale)
+    """Render the panel with cached models (cache read only — no probe, Gate B1)."""
+    toml = _resolve_toml(request, name)
+    if toml is None:
+        return _no_project(name)
+    return _panel(request, name, toml)
 
 
 @router.post("/ui/projects/{name}/routing/fallback/add", response_class=HTMLResponse)
