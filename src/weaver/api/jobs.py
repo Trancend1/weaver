@@ -1077,6 +1077,27 @@ class JobRegistry:
                     return job
             return None
 
+    def find_running_batch(
+        self, *, project_name: str, scope: str, scope_id: str | None
+    ) -> BatchJob | None:
+        """Return the first running batch job matching project+scope+scope_id, or None.
+
+        Lets the project page re-attach the inline volume progress panel after a
+        page reload or navigation: the batch keeps running in the background, and
+        the UI reconnects to its live progress instead of showing an empty slot.
+        """
+
+        with self._lock:
+            for batch in self._batch_jobs.values():
+                if (
+                    batch.project_name == project_name
+                    and batch.scope == scope
+                    and batch.scope_id == scope_id
+                    and batch.status == "running"
+                ):
+                    return batch
+            return None
+
     def submit_batch(
         self,
         *,

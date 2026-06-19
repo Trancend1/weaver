@@ -1,0 +1,41 @@
+<form class="stack" id="connection-form">
+  {% if add_error %}<p class="error" role="alert">{{ add_error }}</p>{% endif %}
+  <label>Connection Name
+    <input name="name" placeholder="openrouter" required aria-label="Connection name">
+  </label>
+  <label>Endpoint
+    <input name="base_url" placeholder="https://openrouter.ai/api/v1" required aria-label="Endpoint URL">
+  </label>
+  <label>API Key
+    <input name="api_key" type="password" placeholder="key value (stored, never shown)" aria-label="API key value (stored, never shown)">
+  </label>
+  <label>Default Model
+    <input name="default_model" list="connection-model-options" placeholder="optional — e.g. deepseek/deepseek-chat (press Test to load this endpoint's models)" aria-label="Default model id">
+    <datalist id="connection-model-options"></datalist>
+  </label>
+  <details class="connection-advanced">
+    <summary>Advanced</summary>
+    <p class="hint meta">Leave blank and Weaver names the key for you. Only change this if you manage your own environment variables.</p>
+    <label>Env-var name
+      <input name="api_key_env" placeholder="auto" aria-label="API key env-var name override">
+    </label>
+    <label class="checkbox-row">
+      <input type="checkbox" name="use_shell_env" value="1"> Use a key already set in my environment (don't save it here)
+    </label>
+    <label class="checkbox-row">
+      <input type="checkbox" name="keyless" value="1"> This endpoint needs no key (e.g. local Ollama)
+    </label>
+  </details>
+  <div class="form-row">
+    <button type="button"
+            hx-post="/ui/providers/connections/test"
+            hx-target="#connection-test"
+            hx-swap="innerHTML"
+            hx-disabled-elt="this">Test Connection</button>
+    <button type="submit"
+            hx-post="/ui/providers/connections"
+            hx-target="#connections"
+            hx-swap="outerHTML">Save Connection</button>
+  </div>
+  <div id="connection-test" aria-live="polite"></div>
+</form>

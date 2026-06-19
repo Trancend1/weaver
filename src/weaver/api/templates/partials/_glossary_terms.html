@@ -41,11 +41,11 @@
           <form class="row-form" style="display:inline"
                 hx-post="/ui/projects/{{ name }}/glossary/term/delete"
                 hx-target="#glossary-terms" hx-swap="outerHTML"
-                hx-confirm="Delete glossary term '{{ t.source }}'? This cannot be undone.">
+                hx-confirm="Return '{{ t.source }}' to Candidate review? It leaves Approved terms and can be reviewed again (Reject there deletes it).">
             <input type="hidden" name="offset" value="{{ page.offset }}">
             <input type="hidden" name="find" value="{{ find }}">
             <input type="hidden" name="source" value="{{ t.source }}">
-            <button type="submit" class="link-btn">Delete</button>
+            <button type="submit" class="link-btn">Return to review</button>
           </form>
         </td>
       </tr>

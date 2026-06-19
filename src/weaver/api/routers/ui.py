@@ -12,6 +12,7 @@ ships on ``weaver serve-api`` alongside the JSON API (Flask removed in Sprint 13
 
 from __future__ import annotations
 
+import sqlite3
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -20,8 +21,9 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Respon
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from weaver.api.jobs import JobRegistry
+from weaver.api.routers.batch import _start_batch
 from weaver.api.routers.export import EXPORT_GATE_BLOCKED_STATUS, _start_export
-from weaver.api.schemas import ExportRequest
+from weaver.api.schemas import BatchTranslateRequest, ExportRequest
 from weaver.api.templating import templates
 from weaver.api.ui_context import global_layout, project_layout, ws_hub_layout
 from weaver.errors import (
@@ -475,6 +477,19 @@ async def import_volume_submit(
         tree = project_tree(dp.project_toml, cwd=base, jobs=_jobs(request))
     except WeaverError as exc:
         return _import_error(request, str(exc))
+    except sqlite3.OperationalError as exc:
+        # Usually "database is locked": another writer (a running translation or
+        # batch job) holds the DB. Surface a retry message, never a silent 500.
+        busy = "locked" in str(exc).lower()
+        message = (
+            "The project is busy — a translation or another import may be running. "
+            "Please wait a moment and try again."
+            if busy
+            else f"Import failed: a database error occurred ({exc})."
+        )
+        return _import_error(request, message)
+    except Exception as exc:  # noqa: BLE001 - web boundary: surface, never silently 500
+        return _import_error(request, f"Import failed unexpectedly: {exc}")
     return templates.TemplateResponse(request, "partials/_tree.html", {"tree": tree})
 
 
@@ -554,3 +569,66 @@ def ui_export_cancel(name: str, job_id: str, request: Request) -> HTMLResponse:
         )
     job.request_cancel()
     return _render_export_job(request, name, job_id)
+
+
+# --- volume batch translate (inline project-page panel) ---------------------
+
+
+def _render_batch_job(request: Request, name: str, job_id: str) -> HTMLResponse:
+    job = _jobs(request).get_batch(job_id)
+    if job is None or job.project_name != name:
+        raise HTTPException(status_code=404, detail=f"Batch job '{job_id}' not found for '{name}'.")
+    return templates.TemplateResponse(
+        request, "partials/_batch_job.html", {"job": job, "progress": job.snapshot(), "name": name}
+    )
+
+
+@router.post("/ui/projects/{name}/volumes/{volume_id}/translate", response_class=HTMLResponse)
+def ui_translate_volume(name: str, volume_id: int, request: Request) -> HTMLResponse:
+    """Start a volume-scope batch translation (skip_existing) from the project page.
+
+    Reuses the JSON batch path (``batch._start_batch``); only pending/failed/stale
+    segments are translated (never overwrites manual or done work). Renders the
+    inline panel into the volume row's ``#batch-vol-<id>`` slot, or a visible
+    error fragment when the provider/config is not ready (anti-slop: no silent skip).
+    """
+    try:
+        started = _start_batch(
+            request,
+            name,
+            scope="volume",
+            target_id=str(volume_id),
+            body=BatchTranslateRequest(mode="skip_existing"),
+        )
+    except HTTPException as exc:
+        return _job_error(request, str(exc.detail), panel_id=f"batch-vol-{volume_id}")
+    return _render_batch_job(request, name, started.job_id)
+
+
+@router.get("/ui/projects/{name}/batch/jobs/{job_id}", response_class=HTMLResponse)
+def ui_batch_status(name: str, job_id: str, request: Request) -> HTMLResponse:
+    """Poll a volume batch job's progress (HTMX self-refresh until terminal)."""
+    return _render_batch_job(request, name, job_id)
+
+
+@router.post("/ui/projects/{name}/batch/jobs/{job_id}/cancel", response_class=HTMLResponse)
+def ui_batch_cancel(name: str, job_id: str, request: Request) -> HTMLResponse:
+    """Cooperatively cancel a volume batch job, then render its current state."""
+    job = _jobs(request).get_batch(job_id)
+    if job is None or job.project_name != name:
+        raise HTTPException(status_code=404, detail=f"Batch job '{job_id}' not found for '{name}'.")
+    job.request_cancel()
+    return _render_batch_job(request, name, job_id)
+
+
+@router.get("/ui/projects/{name}/tree", response_class=HTMLResponse)
+def ui_project_tree(name: str, request: Request) -> HTMLResponse:
+    """Render the project tree fragment (used to refresh progress after a batch run)."""
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    if dp is None:
+        raise HTTPException(status_code=404, detail=f"No project named {name!r}.")
+    if dp.error:
+        return _import_error(request, dp.error)
+    tree = project_tree(dp.project_toml, cwd=base, jobs=_jobs(request))
+    return templates.TemplateResponse(request, "partials/_tree.html", {"tree": tree})

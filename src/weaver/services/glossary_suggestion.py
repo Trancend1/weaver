@@ -16,8 +16,10 @@ import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from weaver.core.config import load_project_config
+from weaver.core.task_types import TaskType
 from weaver.errors import ConfigError, GlossarySuggestionError
 from weaver.providers import LLMProvider, build_provider
 from weaver.providers.prompts import (
@@ -26,13 +28,17 @@ from weaver.providers.prompts import (
 )
 from weaver.services.glossary_review import _segment_examples
 from weaver.services.project_paths import resolve_database_path
+from weaver.services.routing import resolve_consumer_config
 from weaver.storage.db import connect_readonly_database
 from weaver.storage.glossary import get_glossary_candidate
 from weaver.storage.projects import ProjectRecord, get_project
 
 EXAMPLE_LIMIT = 3
 MAX_TARGET_CHARS = 80
-MAX_OUTPUT_TOKENS = 120
+# Generous so a "thinking"/reasoning model has room to finish its reasoning AND
+# still emit the small JSON object — a tight budget truncated the answer, which
+# surfaced as a spurious "not valid JSON".
+MAX_OUTPUT_TOKENS = 512
 _SENTENCE_END = ".!?。！？"
 
 __all__ = ["GlossarySuggestion", "suggest_glossary_target", "GLOSSARY_SUGGEST_PROMPT_VERSION"]
@@ -65,7 +71,7 @@ def suggest_glossary_target(
     """
 
     data = load_project_config(project_toml)
-    provider_config = data["provider"]
+    provider_config = resolve_consumer_config(project_toml, TaskType.glossary_suggest, data=data)
     configured_model = str(provider_config.get("model", ""))
     db_path = resolve_database_path(project_toml, cwd=cwd)
 
@@ -105,12 +111,63 @@ def suggest_glossary_target(
                 close()
 
 
-def _parse_target(text: str) -> str:
+def _load_json_object(text: str) -> dict[str, Any] | None:
+    """Parse the answer JSON object, tolerating markdown fences / prose / reasoning.
+
+    Real models wrap the object in a ```json fence, a sentence, or (for
+    "thinking" models) a ``<think>`` block whose stray ``{`` braces would defeat a
+    greedy first-to-last match. So: try a direct parse, then scan every balanced
+    top-level ``{...}`` candidate and return the first that is an object carrying
+    ``target`` (falling back to the first object). Mirrors the intent of the
+    translate parser but is reasoning-safe.
+    """
+
+    direct = _as_dict(text)
+    if direct is not None:
+        return direct
+    fallback: dict[str, Any] | None = None
+    for candidate in _brace_candidates(text or ""):
+        obj = _as_dict(candidate)
+        if obj is None:
+            continue
+        if "target" in obj:
+            return obj
+        if fallback is None:
+            fallback = obj
+    return fallback
+
+
+def _as_dict(text: str) -> dict[str, Any] | None:
     try:
-        data = json.loads(text)
-    except (json.JSONDecodeError, TypeError) as exc:
-        raise _unusable("the AI response was not valid JSON") from exc
-    if not isinstance(data, dict) or "target" not in data or not isinstance(data["target"], str):
+        value = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _brace_candidates(text: str) -> list[str]:
+    """Return each balanced top-level ``{...}`` substring (depth-tracked scan)."""
+    spans: list[str] = []
+    depth = 0
+    start = -1
+    for index, char in enumerate(text):
+        if char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}" and depth > 0:
+            depth -= 1
+            if depth == 0 and start >= 0:
+                spans.append(text[start : index + 1])
+                start = -1
+    return spans
+
+
+def _parse_target(text: str) -> str:
+    data = _load_json_object(text)
+    if data is None:
+        raise _unusable("the AI response was not valid JSON")
+    if "target" not in data or not isinstance(data["target"], str):
         raise _unusable("the AI response had no `target` string")
     target = data["target"].strip()
     if not target:

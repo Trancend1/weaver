@@ -16,6 +16,7 @@ triggered by a render).
 
 from __future__ import annotations
 
+from html import escape
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -25,7 +26,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from weaver.api.templating import templates
 from weaver.api.ui_context import ws_hub_layout
 from weaver.errors import SecretNotFoundError, WeaverError
+from weaver.services import connections as connections_service
 from weaver.services import provider_config as config_service
+from weaver.services.config_writer import set_routing
 from weaver.services.project import inspect_project
 from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.workspace_providers import build_workspace_providers
@@ -63,7 +66,7 @@ def legacy_config_page(project: str | None = None) -> RedirectResponse:
     project_name = _opt(project)
     if project_name:
         target = f"{target}?{urlencode({'project': project_name})}"
-    return RedirectResponse(f"{target}#config-editor", status_code=307)
+    return RedirectResponse(f"{target}#connections", status_code=307)
 
 
 @router.get("/ui/providers", response_class=HTMLResponse)
@@ -81,10 +84,51 @@ def providers_page(request: Request, project: str | None = None) -> HTMLResponse
         request,
         "providers_hub.html",
         {
-            **ws_hub_layout("providers"),
+            **ws_hub_layout("connections"),
             "providers": providers,
             "books_dir": str(base),
+            "connections": connections_service.list_connection_views(),
             **config_ctx,
+        },
+    )
+
+
+def _project_summary(base: Path, name: str) -> object | None:
+    """Find one project's read-only summary (rebuilds the workspace view)."""
+    for summary in build_workspace_providers(base).projects:
+        if summary.project_name == name:
+            return summary
+    return None
+
+
+@router.post("/ui/providers/{name}/switch", response_class=HTMLResponse)
+def provider_switch(
+    name: str,
+    request: Request,
+    connection: str = Form(...),
+    model: str | None = Form(None),
+) -> HTMLResponse:
+    """Switch a project's translate AI from the workspace table, then re-render its row."""
+    base = _base_dir(request)
+    dp = find_project(base, name)
+    toml = getattr(dp, "project_toml", None) if dp is not None else None
+    if dp is None or dp.error or not isinstance(toml, Path):
+        msg = f"No project named {escape(name)!r}."
+        return HTMLResponse(
+            f"<tr><td colspan='6'><span class='error' role='alert'>{msg}</span></td></tr>"
+        )
+    error: str | None = None
+    try:
+        set_routing(toml, task="translate", connection=connection, model=_opt(model))
+    except WeaverError as exc:
+        error = str(exc)
+    return templates.TemplateResponse(
+        request,
+        "partials/_project_ai_row.html",
+        {
+            "p": _project_summary(base, name),
+            "connections": connections_service.list_connection_views(),
+            "switch_error": error,
         },
     )
 
@@ -102,7 +146,7 @@ def provider_healthcheck(name: str, request: Request) -> HTMLResponse:
         message = dp.error if dp else f"No project named {name!r}."
         return templates.TemplateResponse(
             request,
-            "partials/_provider_status.html",
+            "partials/_project_status.html",
             {"name": name, "status": None, "error": message},
         )
     try:
@@ -111,47 +155,14 @@ def provider_healthcheck(name: str, request: Request) -> HTMLResponse:
     except WeaverError as exc:
         return templates.TemplateResponse(
             request,
-            "partials/_provider_status.html",
+            "partials/_project_status.html",
             {"name": name, "status": None, "error": str(exc)},
         )
     return templates.TemplateResponse(
         request,
-        "partials/_provider_status.html",
+        "partials/_project_status.html",
         {"name": name, "status": status, "error": None},
     )
-
-
-@router.post("/ui/providers/config", response_class=HTMLResponse)
-def config_save(
-    request: Request,
-    scope: str = Form("project"),
-    project: str | None = Form(None),
-    provider_type: str | None = Form(None),
-    protocol: str | None = Form(None),
-    model: str | None = Form(None),
-    base_url: str | None = Form(None),
-    api_key_env: str | None = Form(None),
-) -> HTMLResponse:
-    """Persist provider/model config (no key value accepted), then re-render the form."""
-    base = _base_dir(request)
-    error: str | None = None
-    try:
-        config_service.write_config(
-            base,
-            scope=scope,
-            project=_opt(project),
-            provider_type=_opt(provider_type),
-            protocol=_opt(protocol),
-            model=_opt(model),
-            base_url=_opt(base_url),
-            api_key_env=_opt(api_key_env),
-        )
-    except WeaverError as exc:
-        error = str(exc)
-    ctx = _config_ctx(request, project)
-    ctx["error"] = error
-    ctx["saved"] = error is None
-    return templates.TemplateResponse(request, "partials/_config_form.html", ctx)
 
 
 @router.post("/ui/providers/secrets", response_class=HTMLResponse)
@@ -186,3 +197,85 @@ def config_secret_delete(
     ctx = _config_ctx(request, project)
     ctx["secret_error"] = error
     return templates.TemplateResponse(request, "partials/_secrets.html", ctx)
+
+
+def _connections_panel(request: Request, **extra: object) -> HTMLResponse:
+    """Re-render the Connections panel (TOML read only — Gate-B1 safe)."""
+    ctx: dict[str, object] = {"connections": connections_service.list_connection_views()}
+    ctx.update(extra)
+    return templates.TemplateResponse(request, "partials/_connections.html", ctx)
+
+
+def _probe_result(request: Request, result: object | None, error: str | None) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/_connection_test_result.html",
+        {"result": result, "error": error},
+    )
+
+
+@router.post("/ui/providers/connections/test", response_class=HTMLResponse)
+def connection_test(
+    request: Request,
+    name: str = Form(""),
+    base_url: str = Form(""),
+    api_key: str | None = Form(None),
+    api_key_env: str | None = Form(None),
+    use_shell_env: str | None = Form(None),
+) -> HTMLResponse:
+    """Probe a not-yet-saved endpoint with form values (explicit POST, never on render)."""
+    try:
+        result = connections_service.probe_connection(
+            base_url=base_url,
+            api_key=_opt(api_key),
+            api_key_env=_opt(api_key_env),
+            use_shell_env=bool(use_shell_env),
+            name=name,
+        )
+    except WeaverError as exc:
+        return _probe_result(request, None, str(exc))
+    return _probe_result(request, result, None)
+
+
+@router.post("/ui/providers/connections", response_class=HTMLResponse)
+def connection_add(
+    request: Request,
+    name: str = Form(...),
+    base_url: str = Form(...),
+    api_key: str | None = Form(None),
+    api_key_env: str | None = Form(None),
+    use_shell_env: str | None = Form(None),
+    keyless: str | None = Form(None),
+    default_model: str | None = Form(None),
+) -> HTMLResponse:
+    """Register a connection (key value stored in secrets.toml, never echoed back)."""
+    try:
+        connections_service.add_connection(
+            name=name,
+            base_url=base_url,
+            api_key=_opt(api_key),
+            api_key_env=_opt(api_key_env),
+            use_shell_env=bool(use_shell_env),
+            default_model=_opt(default_model) or "",
+            requires_key=not bool(keyless),
+        )
+    except WeaverError as exc:
+        return _connections_panel(request, add_error=str(exc))
+    return _connections_panel(request, add_saved=True)
+
+
+@router.post("/ui/providers/connections/{name}/delete", response_class=HTMLResponse)
+def connection_delete(name: str, request: Request) -> HTMLResponse:
+    """Remove a connection (its stored secret is left in place)."""
+    connections_service.remove_connection(name)
+    return _connections_panel(request)
+
+
+@router.post("/ui/providers/connections/{name}/test", response_class=HTMLResponse)
+def connection_saved_test(name: str, request: Request) -> HTMLResponse:
+    """Probe an already-saved connection (stored/shell key) and refresh its cache."""
+    try:
+        result = connections_service.refresh_models(name)
+    except WeaverError as exc:
+        return _probe_result(request, None, str(exc))
+    return _probe_result(request, result, None)

@@ -1,0 +1,24 @@
+<div class="connection-card" id="connection-{{ c.name }}">
+  <div class="connection-card__head">
+    <strong>{{ c.name }}</strong>
+    {% if c.requires_key and not c.secret_present %}
+      <span class="badge bad" title="No stored or shell key for {{ c.api_key_env }}">key missing</span>
+    {% else %}
+      <span class="badge ok">ready</span>
+    {% endif %}
+  </div>
+  <p class="meta">{{ c.base_url }}{% if c.default_model %} · {{ c.default_model }}{% endif %}</p>
+  <div class="form-row">
+    <button type="button" class="btn btn--small"
+            hx-post="/ui/providers/connections/{{ c.name }}/test"
+            hx-target="#connection-test-{{ c.name }}"
+            hx-swap="innerHTML"
+            hx-disabled-elt="this">Test</button>
+    <button type="button" class="link-btn"
+            hx-post="/ui/providers/connections/{{ c.name }}/delete"
+            hx-target="#connections"
+            hx-swap="outerHTML"
+            hx-confirm="Delete the connection '{{ c.name }}'? Projects pointing at it will need a new connection.">Delete</button>
+  </div>
+  <div id="connection-test-{{ c.name }}" aria-live="polite"></div>
+</div>

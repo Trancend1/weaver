@@ -20,9 +20,11 @@ from typing import Any
 
 from weaver.core.config import load_project_config
 from weaver.core.secret_store import list_secret_names
+from weaver.core.task_types import TaskType
 from weaver.errors import WeaverError
 from weaver.providers.registry import normalize_provider_config
 from weaver.services.project_discovery import discover_projects
+from weaver.services.routing import resolve_active_ai
 from weaver.storage.db import connect_readonly_database
 
 _RECENT_FAILURES_PER_PROJECT = 5
@@ -54,6 +56,11 @@ class ProjectProviderSummary:
     output_tokens: int
     failed_job_count: int
     recent_failures: list[ProviderFailure]
+    # Active AI for the translate task (resolved from routing; Gate-B1 read only).
+    active_model: str = "—"
+    active_connection: str | None = None
+    active_source: str = "unset"  # routing | provider | unset
+    connection_exists: bool = True
 
 
 @dataclass(frozen=True)
@@ -153,6 +160,9 @@ def _providers_for_project(
         api_key_env = _resolve_key_env(provider_cfg)
         if protocol:
             provider_type = f"{provider_type} / {protocol}"
+        # Active AI for the translate task — routing → connection, else legacy
+        # [provider]. TOML + registry read only (no provider call; Gate B1).
+        active = resolve_active_ai(project_toml, TaskType.translate, data=config)
     except WeaverError as exc:
         return _degraded(name, uuid, "error", str(exc))
 
@@ -183,16 +193,24 @@ def _providers_for_project(
             output_tokens=tokens[1],
             failed_job_count=failed_count,
             recent_failures=recent,
+            active_model=active.model,
+            active_connection=active.connection_name,
+            active_source=active.source,
+            connection_exists=active.connection_exists,
         ),
         degraded=None,
     )
 
 
 def _resolve_key_env(provider_cfg: dict[str, Any]) -> str | None:
-    """Return the env-var NAME the provider expects, or None for keyless protocols."""
+    """Return the env-var NAME the provider expects, or None for keyless providers.
+
+    ``openai_chat`` is keyless when ``api_key_env`` is empty (e.g. local Ollama
+    on :11434/v1). The legacy ``fake`` engine does not need a key.
+    """
 
     protocol = str(provider_cfg.get("protocol", "")).strip()
-    if protocol in {"ollama_generate", "fake"}:
+    if protocol == "fake":
         return None
     env = str(provider_cfg.get("api_key_env", "")).strip()
     return env or None

@@ -1,0 +1,16 @@
+<section id="connections" class="panel c-panel">
+  <h2 class="panel__title">Connections</h2>
+  <p class="meta">Key values are stored in <code>~/.weaver/secrets.toml</code> and never shown. Health and model counts are checked only when you press Test.</p>
+  {% if add_saved %}<p class="saved-note" role="status">Saved ✓</p>{% endif %}
+  {% if connections %}
+  <div class="connection-list">
+    {% for c in connections %}{% include "partials/_connection_card.html" %}{% endfor %}
+  </div>
+  {% else %}
+  <p class="empty hint">No AI connected yet. Add your first endpoint below to start translating.</p>
+  {% endif %}
+  <details class="connection-add"{% if not connections %} open{% endif %}>
+    <summary>+ Add Connection</summary>
+    {% include "partials/_connection_form.html" %}
+  </details>
+</section>

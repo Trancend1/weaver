@@ -1,0 +1,11 @@
+{% if error %}
+<p class="error" role="alert">{{ error }}</p>
+{% elif result is not none %}
+<p class="saved-note" role="status">✓ Connected · {{ result.count }} model{{ "" if result.count == 1 else "s" }} available</p>
+{% endif %}
+{% if result is not none %}
+{# Out-of-band: fill the Default Model suggestions on the form with the probed models. #}
+<datalist id="connection-model-options" hx-swap-oob="true">
+  {% for m in result.models %}<option value="{{ m }}">{% endfor %}
+</datalist>
+{% endif %}

@@ -1,6 +1,14 @@
 <policy>
 honorifics: {{ honorific_policy }}
 </policy>
+{% if profile and profile.has_style %}
+<profile>
+{% if profile.tone %}tone: {{ profile.tone }}
+{% endif %}{% if profile.dialog_style %}dialogue: {{ profile.dialog_style }}
+{% endif %}{% if profile.name_rendering %}names: {{ profile.name_rendering }}
+{% endif %}{% if profile.tense %}tense: {{ profile.tense }}
+{% endif %}</profile>
+{% endif %}
 {% if glossary_terms %}
 <glossary>
 {% for term in glossary_terms -%}

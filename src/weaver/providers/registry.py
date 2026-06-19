@@ -1,9 +1,14 @@
 """Provider registry and factory.
 
 ``build_provider()`` is the single entry point CLI/services use to instantiate
-an ``LLMProvider`` from the parsed ``[provider]`` block. New config prefers a
-free-form ``type`` label plus an explicit transport ``protocol``; legacy
-built-in types are normalized for backward compatibility.
+an ``LLMProvider`` from the parsed ``[provider]`` block (ADR 018 D1).
+
+There is **one real transport** in Weaver: ``openai_chat``, the OpenAI-compatible
+``/chat/completions`` client in :mod:`weaver.providers.openai_chat`. The
+``fake`` engine exists for tests. The legacy brand ``type`` labels
+(``deepseek``, ``gemini``, ``ollama``) survive only as a migration shim that
+maps a pre-0.7.2 ``[provider]`` block onto the protocol-first config (D6). No
+new project uses those labels — new configs speak in protocol + connection.
 """
 
 from __future__ import annotations
@@ -14,77 +19,47 @@ from typing import Any
 from weaver.errors import ConfigError
 from weaver.providers.base import LLMProvider
 from weaver.providers.config_values import read_float, read_int
-from weaver.providers.deepseek import (
-    DEFAULT_BASE_URL as DEEPSEEK_BASE_URL,
-)
-from weaver.providers.deepseek import (
-    DEFAULT_MODEL as DEEPSEEK_MODEL,
-)
-from weaver.providers.deepseek import (
-    ENV_API_KEY as DEEPSEEK_ENV,
-)
-from weaver.providers.deepseek import (
-    DeepSeekConfig,
-    DeepSeekProvider,
-)
 from weaver.providers.fake import FakeProvider
-from weaver.providers.gemini import (
-    DEFAULT_MODEL as GEMINI_MODEL,
-)
-from weaver.providers.gemini import (
-    ENV_API_KEY as GEMINI_ENV,
-)
-from weaver.providers.gemini import (
-    GeminiConfig,
-    GeminiProvider,
-)
-from weaver.providers.ollama import (
-    DEFAULT_BASE_URL as OLLAMA_BASE_URL,
-)
-from weaver.providers.ollama import (
-    DEFAULT_MODEL as OLLAMA_MODEL,
-)
-from weaver.providers.ollama import (
-    OllamaConfig,
-    OllamaProvider,
+from weaver.providers.openai_chat import (
+    OpenAIChatConfig,
+    OpenAIChatProvider,
 )
 
 ProviderFactory = Callable[[Mapping[str, Any]], LLMProvider]
 
 PROTOCOL_OPENAI_CHAT = "openai_chat"
-PROTOCOL_GEMINI_GENERATE = "gemini_generate"
-PROTOCOL_OLLAMA_GENERATE = "ollama_generate"
 PROTOCOL_FAKE = "fake"
 
-_REGISTRY: dict[str, ProviderFactory] = {}
-
-
+# Legacy brand `type` → openai_chat defaults (ADR 018 D6). ``gemini`` and
+# ``ollama`` are routed through their OpenAI-compatible endpoints (see ADR 018
+# §5.3); the native ``google-generativeai`` / ``/api/generate`` clients are
+# gone. No new project uses these labels.
 _LEGACY_DEFAULTS: dict[str, dict[str, str]] = {
     "deepseek": {
-        "type": "custom",
         "protocol": PROTOCOL_OPENAI_CHAT,
-        "model": DEEPSEEK_MODEL,
-        "base_url": DEEPSEEK_BASE_URL,
-        "api_key_env": DEEPSEEK_ENV,
+        "model": "deepseek-chat",
+        "base_url": "https://api.deepseek.com",
+        "api_key_env": "DEEPSEEK_API_KEY",
     },
     "gemini": {
-        "type": "custom",
-        "protocol": PROTOCOL_GEMINI_GENERATE,
-        "model": GEMINI_MODEL,
-        "api_key_env": GEMINI_ENV,
+        "protocol": PROTOCOL_OPENAI_CHAT,
+        "model": "gemini-1.5-flash",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+        "api_key_env": "GEMINI_API_KEY",
     },
     "ollama": {
-        "type": "custom",
-        "protocol": PROTOCOL_OLLAMA_GENERATE,
-        "model": OLLAMA_MODEL,
-        "base_url": OLLAMA_BASE_URL,
+        "protocol": PROTOCOL_OPENAI_CHAT,
+        "model": "qwen3:14b",
+        "base_url": "http://localhost:11434/v1",
+        "api_key_env": "",
     },
     "fake": {
-        "type": "custom",
         "protocol": PROTOCOL_FAKE,
         "model": "fake-1",
     },
 }
+
+_REGISTRY: dict[str, ProviderFactory] = {}
 
 
 def register_provider(name: str, factory: ProviderFactory) -> None:
@@ -94,22 +69,29 @@ def register_provider(name: str, factory: ProviderFactory) -> None:
 
 
 def known_provider_types() -> list[str]:
-    """Return legacy/runtime provider type names, sorted."""
+    """Return the set of brand ``type`` names the registry accepts.
 
-    return sorted(_REGISTRY)
+    Includes the legacy brand aliases (so existing ``[provider] type = ...``
+    rows still render in the cockpit) plus the modern engine names. The
+    underlying transport is always ``openai_chat`` for non-fake projects.
+    """
+
+    return sorted(set(_REGISTRY) | set(_LEGACY_DEFAULTS) | {"custom"})
 
 
 def known_protocols() -> list[str]:
     """Return supported provider transport protocol ids."""
 
-    return [PROTOCOL_OPENAI_CHAT, PROTOCOL_GEMINI_GENERATE, PROTOCOL_OLLAMA_GENERATE, PROTOCOL_FAKE]
+    return [PROTOCOL_OPENAI_CHAT, PROTOCOL_FAKE]
 
 
 def normalize_provider_config(config: Mapping[str, Any]) -> dict[str, Any]:
     """Return config normalized to free-form ``type`` + explicit ``protocol``.
 
-    Legacy built-in provider types are projected to ``type = custom`` with a
-    protocol and defaults. User-supplied fields always win over defaults.
+    Legacy built-in provider types are projected to ``openai_chat`` with
+    their default endpoint/model/key-env. User-supplied fields always win
+    over defaults. The original ``type`` is preserved alongside ``type`` for
+    the engine name (ADR 018 D6).
     """
 
     provider_type = _clean(config.get("type"))
@@ -144,10 +126,6 @@ def build_provider(config: Mapping[str, Any]) -> LLMProvider:
 
     if protocol == PROTOCOL_OPENAI_CHAT:
         return _build_openai_chat(normalized)
-    if protocol == PROTOCOL_GEMINI_GENERATE:
-        return _build_gemini(normalized)
-    if protocol == PROTOCOL_OLLAMA_GENERATE:
-        return _build_ollama(normalized)
     if protocol == PROTOCOL_FAKE:
         return _build_fake(normalized)
 
@@ -170,51 +148,26 @@ def _build_fake(config: Mapping[str, Any]) -> LLMProvider:
     )
 
 
-def _build_deepseek(config: Mapping[str, Any]) -> LLMProvider:
-    legacy = normalize_provider_config({**config, "type": "deepseek"})
-    return _build_openai_chat(legacy)
-
-
 def _build_openai_chat(config: Mapping[str, Any]) -> LLMProvider:
     base_url = _required(config, "base_url", protocol=PROTOCOL_OPENAI_CHAT)
-    api_key_env = _required(config, "api_key_env", protocol=PROTOCOL_OPENAI_CHAT)
     model = _required(config, "model", protocol=PROTOCOL_OPENAI_CHAT)
-    return DeepSeekProvider(
-        config=DeepSeekConfig(
+    # ``api_key_env`` is optional — empty string means the endpoint is keyless
+    # (e.g. local Ollama on :11434/v1). A non-empty name still requires a
+    # value to be set in the shell env / secret store, which the provider
+    # itself enforces at __init__ time.
+    api_key_env = _clean(config.get("api_key_env")) or ""
+    return OpenAIChatProvider(
+        config=OpenAIChatConfig(
             model=model,
             base_url=base_url,
-            temperature=read_float(config, "temperature", DeepSeekConfig.temperature, minimum=0.0),
+            temperature=read_float(
+                config, "temperature", OpenAIChatConfig.temperature, minimum=0.0
+            ),
             timeout_seconds=read_float(
-                config, "timeout_seconds", DeepSeekConfig.timeout_seconds, exclusive_minimum=0.0
+                config, "timeout_seconds", OpenAIChatConfig.timeout_seconds, exclusive_minimum=0.0
             ),
             api_key_env=api_key_env,
-            name=_clean(config.get("type")) or "custom",
-        )
-    )
-
-
-def _build_gemini(config: Mapping[str, Any]) -> LLMProvider:
-    return GeminiProvider(
-        config=GeminiConfig(
-            model=str(config.get("model") or GeminiConfig.model),
-            temperature=read_float(config, "temperature", GeminiConfig.temperature, minimum=0.0),
-            timeout_seconds=read_float(
-                config, "timeout_seconds", GeminiConfig.timeout_seconds, exclusive_minimum=0.0
-            ),
-        )
-    )
-
-
-def _build_ollama(config: Mapping[str, Any]) -> LLMProvider:
-    return OllamaProvider(
-        config=OllamaConfig(
-            model=str(config.get("model") or OllamaConfig.model),
-            base_url=str(config.get("base_url") or OllamaConfig.base_url),
-            temperature=read_float(config, "temperature", OllamaConfig.temperature, minimum=0.0),
-            top_p=read_float(config, "top_p", OllamaConfig.top_p, minimum=0.0, maximum=1.0),
-            timeout_seconds=read_float(
-                config, "timeout_seconds", OllamaConfig.timeout_seconds, exclusive_minimum=0.0
-            ),
+            name=_clean(config.get("type")) or "openai_chat",
         )
     )
 
@@ -245,7 +198,4 @@ def _clean(value: object) -> str | None:
 
 
 register_provider("fake", _build_fake)
-register_provider("deepseek", _build_deepseek)
-register_provider("gemini", _build_gemini)
-register_provider("ollama", _build_ollama)
 register_provider("custom", _build_custom)

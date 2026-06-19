@@ -1,0 +1,77 @@
+<tr class="project-ai-row" id="project-row-{{ p.project_name }}">
+  <td><a href="/ui/projects/{{ p.project_name }}">{{ p.project_name }}</a></td>
+  <td class="active-ai-cell col-active">
+    {% if switch_error %}<p class="error" role="alert">{{ switch_error }}</p>{% endif %}
+    <strong>{{ p.active_model }}</strong>
+    {% if p.active_connection %}
+      <span class="meta">via {{ p.active_connection }}</span>
+      {% if not p.connection_exists %}<span class="badge bad">missing</span>{% endif %}
+    {% elif p.active_source == "provider" %}
+      <span class="meta">older settings</span>
+    {% else %}
+      <span class="badge warn">not set</span>
+    {% endif %}
+    <details class="row-switch">
+      <summary>Switch AI</summary>
+      {% if connections %}
+      <form class="inline-form form-row">
+        <select name="connection" aria-label="Connection">
+          {% for c in connections %}
+          <option value="{{ c.name }}"{% if c.name == p.active_connection %} selected{% endif %}>{{ c.name }}</option>
+          {% endfor %}
+        </select>
+        <input name="model" placeholder="model (optional)" aria-label="Model id">
+        <button type="button"
+                hx-post="/ui/providers/{{ p.project_name }}/switch"
+                hx-target="#project-row-{{ p.project_name }}"
+                hx-swap="outerHTML"
+                hx-disabled-elt="this">Use</button>
+      </form>
+      {% else %}
+      <span class="meta">No connections yet — <a href="#connections">add one</a> first.</span>
+      {% endif %}
+    </details>
+  </td>
+  <td class="col-fit">
+    {% if not p.requires_key %}
+      <span class="meta">No key needed</span>
+    {% elif p.secret_present %}
+      <span class="badge good" title="{{ p.api_key_env }} is set (value never shown)">Key set ✓</span>
+    {% else %}
+      <a href="#secrets" class="badge bad"
+         title="{{ p.api_key_env }} is not set — add it under API keys below">Key missing</a>
+    {% endif %}
+  </td>
+  <td class="meta col-num">
+    {% if p.input_tokens or p.output_tokens %}
+      {{ "{:,}".format(p.input_tokens) }} / {{ "{:,}".format(p.output_tokens) }}
+    {% else %}—{% endif %}
+  </td>
+  <td class="col-fit">
+    {% if p.failed_job_count > 0 %}
+      <details class="recent-failures">
+        <summary><span class="badge bad">{{ p.failed_job_count }}</span></summary>
+        <ul class="recent-failures__list">
+          {% for f in p.recent_failures %}
+          <li>
+            <span class="meta">{{ f.kind }}</span>
+            {% if f.error_summary %}<span class="recent-failures__msg">{{ f.error_summary }}</span>{% endif %}
+            {% if f.finished_at %}<span class="meta">· {{ f.finished_at[:19] | replace("T", " ") }}</span>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </details>
+    {% else %}
+      <span class="meta">none</span>
+    {% endif %}
+  </td>
+  <td class="col-fit">
+    <div id="project-health-{{ p.project_name }}">
+      <button type="button" class="btn btn--small"
+              hx-post="/ui/providers/{{ p.project_name }}/healthcheck"
+              hx-target="#project-health-{{ p.project_name }}"
+              hx-swap="innerHTML"
+              hx-disabled-elt="this">Check</button>
+    </div>
+  </td>
+</tr>

@@ -1,4 +1,4 @@
-"""DeepSeekProvider unit tests with a mocked OpenAI-compatible client."""
+"""OpenAIChatProvider unit tests with a mocked OpenAI-compatible client."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from weaver.errors import (
     ProviderTimeout,
     ProviderUnavailable,
 )
-from weaver.providers.deepseek import DeepSeekConfig, DeepSeekProvider
+from weaver.providers.openai_chat import OpenAIChatConfig, OpenAIChatProvider
 from weaver.providers.types import (
     Completion,
     TranslationContext,
@@ -67,7 +67,7 @@ def test_deepseek_translate_happy_path_returns_translation_and_tokens() -> None:
     completions = _StubChatCompletions(
         [_completion('{"translation": "Test", "notes": [], "uncertain_terms": []}')]
     )
-    provider = DeepSeekProvider(client=_StubClient(completions))
+    provider = OpenAIChatProvider(client=_StubClient(completions))
 
     response = provider.translate(_request())
 
@@ -85,7 +85,7 @@ def test_deepseek_translate_issues_repair_on_invalid_json() -> None:
             _completion('{"translation": "Test", "notes": [], "uncertain_terms": []}'),
         ]
     )
-    provider = DeepSeekProvider(client=_StubClient(completions))
+    provider = OpenAIChatProvider(client=_StubClient(completions))
 
     response = provider.translate(_request())
 
@@ -97,7 +97,7 @@ def test_deepseek_translate_propagates_parse_error_after_repair() -> None:
     from weaver.errors import ParserError
 
     completions = _StubChatCompletions([_completion("not json"), _completion("still not json")])
-    provider = DeepSeekProvider(client=_StubClient(completions))
+    provider = OpenAIChatProvider(client=_StubClient(completions))
 
     with pytest.raises(ParserError):
         provider.translate(_request())
@@ -108,7 +108,7 @@ def test_deepseek_translate_maps_timeout_error() -> None:
         pass
 
     completions = _StubChatCompletions([APITimeoutError("upstream slow")])
-    provider = DeepSeekProvider(client=_StubClient(completions))
+    provider = OpenAIChatProvider(client=_StubClient(completions))
 
     with pytest.raises(ProviderTimeout):
         provider.translate(_request())
@@ -118,7 +118,7 @@ def test_deepseek_complete_returns_text_and_usage() -> None:
     completions = _StubChatCompletions(
         [_completion('{"target": "Demon King"}', prompt_tokens=11, completion_tokens=3)]
     )
-    provider = DeepSeekProvider(client=_StubClient(completions))
+    provider = OpenAIChatProvider(client=_StubClient(completions))
 
     out = provider.complete("return json target", system="sys", max_output_tokens=64)
 
@@ -140,7 +140,7 @@ def test_deepseek_complete_jsonmode_rejection_is_visible_not_silent() -> None:
         pass
 
     completions = _StubChatCompletions([BadRequestError("response_format json_object unsupported")])
-    provider = DeepSeekProvider(client=_StubClient(completions))
+    provider = OpenAIChatProvider(client=_StubClient(completions))
 
     with pytest.raises(ProviderResponseError):
         provider.complete("p mentioning json", max_output_tokens=8)
@@ -151,7 +151,7 @@ def test_deepseek_translate_maps_auth_error_to_unavailable() -> None:
         pass
 
     completions = _StubChatCompletions([AuthenticationError("invalid key")])
-    provider = DeepSeekProvider(client=_StubClient(completions))
+    provider = OpenAIChatProvider(client=_StubClient(completions))
 
     with pytest.raises(ProviderUnavailable):
         provider.translate(_request())
@@ -162,7 +162,7 @@ def test_deepseek_translate_maps_generic_error_to_response_error() -> None:
         pass
 
     completions = _StubChatCompletions([RuntimeOops("boom")])
-    provider = DeepSeekProvider(client=_StubClient(completions))
+    provider = OpenAIChatProvider(client=_StubClient(completions))
 
     with pytest.raises(ProviderResponseError):
         provider.translate(_request())
@@ -170,12 +170,12 @@ def test_deepseek_translate_maps_generic_error_to_response_error() -> None:
 
 def test_deepseek_healthcheck_returns_healthy_status() -> None:
     completions = _StubChatCompletions([_completion('{"translation": "ok"}')])
-    provider = DeepSeekProvider(client=_StubClient(completions))
+    provider = OpenAIChatProvider(client=_StubClient(completions))
 
     status = provider.healthcheck()
 
     assert status.healthy is True
-    assert status.provider_name == "deepseek"
+    assert status.provider_name == "openai_chat"
     assert status.latency_ms is not None
 
 
@@ -184,7 +184,7 @@ def test_deepseek_healthcheck_probe_mentions_json_for_json_mode() -> None:
     # OpenAI-compatible endpoints (e.g. Groq) reject prompts lacking the word
     # "json", so the healthcheck probe must include it.
     completions = _StubChatCompletions([_completion('{"status": "ok"}')])
-    provider = DeepSeekProvider(client=_StubClient(completions))
+    provider = OpenAIChatProvider(client=_StubClient(completions))
 
     provider.healthcheck()
 
@@ -200,7 +200,7 @@ def test_deepseek_healthcheck_reports_unhealthy_on_auth_failure() -> None:
         pass
 
     completions = _StubChatCompletions([AuthenticationError("invalid key")])
-    provider = DeepSeekProvider(client=_StubClient(completions))
+    provider = OpenAIChatProvider(client=_StubClient(completions))
 
     status = provider.healthcheck()
 
@@ -208,11 +208,11 @@ def test_deepseek_healthcheck_reports_unhealthy_on_auth_failure() -> None:
     assert status.message is not None
 
 
-def test_deepseek_constructor_without_client_or_env_raises(monkeypatch) -> None:
+def test_deepseek_constructor_without_client_or_missing_env_raises(monkeypatch) -> None:
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 
     with pytest.raises(ProviderUnavailable):
-        DeepSeekProvider(config=DeepSeekConfig())
+        OpenAIChatProvider(config=OpenAIChatConfig(api_key_env="DEEPSEEK_API_KEY"))
 
 
 def test_deepseek_maps_model_not_found_to_clear_error() -> None:
@@ -220,7 +220,7 @@ def test_deepseek_maps_model_not_found_to_clear_error() -> None:
         pass
 
     completions = _StubChatCompletions([NotFoundError("model 'wrong-model' does not exist")])
-    provider = DeepSeekProvider(client=_StubClient(completions))
+    provider = OpenAIChatProvider(client=_StubClient(completions))
 
     with pytest.raises(ProviderResponseError, match="model not found"):
         provider.translate(_request())
@@ -232,8 +232,8 @@ def test_deepseek_error_never_leaks_api_key() -> None:
 
     secret = "sk-SUPER-SECRET-DO-NOT-LEAK"
     completions = _StubChatCompletions([AuthenticationError("invalid api key")])
-    provider = DeepSeekProvider(
-        config=DeepSeekConfig(), api_key=secret, client=_StubClient(completions)
+    provider = OpenAIChatProvider(
+        config=OpenAIChatConfig(), api_key=secret, client=_StubClient(completions)
     )
 
     status = provider.healthcheck()

@@ -44,6 +44,10 @@ The user message is assembled per-segment from the following template. All `{var
 honorifics: {honorific_policy}
 </policy>
 
+<profile>
+{profile_block}
+</profile>
+
 <glossary>
 {glossary_block}
 </glossary>
@@ -74,6 +78,21 @@ hybrid     — preserve relationship-defining honorifics (様, 殿), localize ca
 ```
 
 All three values are user-configurable via `[translation] honorifics` in `project.toml`. The template outputs the value verbatim; the LLM interprets the policy string from the definitions above.
+
+#### `{profile_block}` (ADR 019 E3)
+
+Optional project-level **style contract** from the `[translation_profile]` table in `project.toml`. Only the fields the user set are emitted, one `key: value` line each:
+
+```
+tone: literary
+dialogue: natural
+names: first_full_then_short
+tense: past
+```
+
+Source fields (all optional, free-form — no enum): `tone`, `dialog_style` (emitted as `dialogue`), `name_rendering` (emitted as `names`), `tense`. Parsed by `build_translation_profile()` into a `TranslationProfile` carried on `TranslationContext.profile`.
+
+**Emission rule:** the `<profile>` block is emitted only when at least one *style* field is set (`TranslationProfile.has_style`). If the section is absent, or carries only `banned_phrases` (a gate-only concern, see Enforcement Loop), the block is omitted entirely — prompt output is byte-for-byte unchanged from a project with no profile.
 
 #### `{glossary_block}`
 
@@ -172,7 +191,7 @@ Field rules:
 
 `notes` is for translator observations (e.g., "Japanese pun does not translate directly"). Stored in `translations.raw_response` for review. Not surfaced in EPUB output.
 
-`uncertain_terms` is for terms the model flagged as ambiguous. Stored; surfaced in `weaver validate` as informational warnings.
+`uncertain_terms` is for terms the model flagged as ambiguous. Since ADR 019 (E4) each entry is also recorded as a **discovered** glossary candidate for review (`storage.record_uncertain_glossary_candidate`) — see Enforcement Loop §4.
 
 ---
 
@@ -216,6 +235,53 @@ No markdown. No explanation. JSON only.
 ```
 
 If the repair also fails: segment is marked `failed`. Raw response is stored in `translations.raw_response` for debug. No further retries. The orchestrator moves to the next segment.
+
+> **Two distinct repair paths.** The flow above is the **JSON-validity** repair, internal to the provider transport (`providers/openai_chat.py`) — it fixes malformed output. It is *not* the enforcement repair below, which is a domain-level service concern (ADR 014 boundary). A successful translation can still violate glossary/character/anti-slop constraints; that is what the Enforcement Loop handles.
+
+---
+
+## Enforcement Loop (ADR 019)
+
+Makes the glossary/character database **binding** instead of advisory. Runs in `services/translation.py::translate_one_segment` after a successful (JSON-valid) translation and **before commit**. Pure service logic (`services/enforcement.py`); the provider stays domain-agnostic.
+
+### 1. Detection (E1 — free, always-on)
+
+`evaluate_translation()` deterministically checks the fresh translation, reusing the QA primitives so the translate-time gate and the advisory QA report agree:
+
+- **glossary target present** (`check_glossary_mismatch`) — a matched term's target must appear,
+- **character EN-name present** (`check_character_name_missing`),
+- **no untranslated-Japanese residue** (`check_untranslated_japanese`, 4+ contiguous JP chars),
+- **not catastrophically truncated** — a *loose* floor (target empty or < 0.15× source length). This is **not** `[qa] minimum_length_ratio`: forcing length makes the model pad with filler, which is itself slop.
+- **no banned-slop phrase** (E3) — optional, soft.
+
+Detection costs **zero tokens** and runs on every segment regardless of the repair switch, so a violation is always recorded/visible even when repair is off.
+
+### 2. Targeted repair (E2 — bounded 1-pass, switchable)
+
+On violation, and when `[translation] enforce_repair` is true (default), one repair re-ask is issued via the provider's `complete()` primitive, enumerating the specific violations:
+
+```
+Revise this ja to en translation.
+The previous translation broke the constraints listed below. Produce a
+corrected translation that fixes every listed problem and changes nothing
+else ...
+Constraints that were violated:
+- Glossary term '李晨' -> 'Li Chen' matched source but target is absent ...
+Source (ja): ...
+Previous translation (fix only what the constraints require): ...
+```
+
+The reply is re-parsed and re-validated **once**. The repaired attempt is committed **only if it is not strictly worse** than the original (a fix that regressed is discarded). Bounded to one pass — no loop, no circuit breaker (ADR 018 D9). Repair tokens are counted into the segment's usage.
+
+**Never blocks, never substitutes.** Any repair failure (provider error, unparseable output, or a provider that does not implement `complete()`) keeps the good primary translation; residual violations remain visible in the QA report. Translate-time only (Gate B1).
+
+### 3. Style contract + anti-slop (E3)
+
+`[translation_profile]` drives both the `<profile>` prompt block (above) *and* a deterministic `banned_phrases` check. A banned-phrase hit is a **soft** trigger (asks the model to reconsider the phrasing) that feeds the same E2 repair — never a hard block, since a flagged phrase can be legitimate. The shipped seed (`core/slop_seed.py`) applies only when `[translation_profile]` is declared; `banned_phrases = []` disables it, a custom array replaces it.
+
+### 4. Free entity discovery (E4)
+
+After commit, each `uncertain_terms` entry the model self-reported is recorded as a **discovered** glossary candidate (`storage.record_uncertain_glossary_candidate`): idempotent (skips already-approved terms, bumps an existing *pending* candidate's frequency, never resurrects a handled one). No extra model call — it recovers a signal the response already carries. The user reviews discoveries in the existing candidates page.
 
 ---
 
@@ -303,6 +369,8 @@ These budgets exist to control cost and latency, not to work around context limi
 ---
 
 ## Model-Specific Notes
+
+> **Historical (pre-ADR 018).** Since v0.7.2 there is **one** transport — `openai_chat` (+ `fake`) — and a project routes to a registered **connection** + free-form model id (`[routing.<task>]`, ADR 018). The native Gemini/Ollama clients and `google-generativeai` were removed; Gemini/Ollama are reached as OpenAI-compatible connections. The per-model tuning notes below are kept for reference; they no longer map to distinct provider classes.
 
 ### Ollama / qwen3:14b
 

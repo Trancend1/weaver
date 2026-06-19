@@ -32,20 +32,25 @@ from typing import Any
 
 from weaver.core.config import load_project_config
 from weaver.core.segment import normalize_japanese_text
+from weaver.core.task_types import TaskType
 from weaver.errors import (
     ChapterNotFoundError,
     ConfigError,
+    ProviderError,
     ProviderUnavailable,
     SegmentNotFoundError,
 )
 from weaver.providers import GlossaryTerm, LLMProvider, build_provider
 from weaver.providers.registry import normalize_provider_config
-from weaver.providers.types import CharacterContext
+from weaver.providers.types import CharacterContext, TranslationProfile
 from weaver.services.glossary import raise_on_glossary_conflicts
 from weaver.services.project_paths import resolve_database_path
+from weaver.services.routing import Candidate, resolve_chain
 from weaver.services.translation import (
     VALID_HONORIFIC_POLICIES,
     ProgressCallback,
+    build_translation_profile,
+    enforce_repair_enabled,
     load_character_contexts,
     raw_response_logging_enabled,
     translate_one_segment,
@@ -85,6 +90,12 @@ class TranslationPlan:
     requested_count: int
     use_translation_memory: bool
     persist_raw_response: bool
+    enforce_repair: bool = True
+    profile: TranslationProfile | None = None
+    # Ordered per-task fallback engines (ADR 018 D4); the run tries each in turn
+    # after the primary fails a segment. Empty when no `[routing.<task>].fallback`
+    # is configured or none could be built.
+    fallback_engines: tuple[tuple[LLMProvider, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -157,8 +168,8 @@ def prepare_chapter_translation(
         )
 
     data = load_project_config(project_toml)
-    provider_config, provider_model, honorific_policy = validate_provider_config(
-        data, provider_override
+    provider_config, provider_model, honorific_policy, fallback_engines = (
+        resolve_translation_engines(project_toml, data, provider_override)
     )
 
     db_path = resolve_database_path(project_toml, cwd=cwd)
@@ -199,11 +210,14 @@ def prepare_chapter_translation(
         characters=characters,
         target_segment_ids=tuple(segment.id for segment in targets),
         requested_count=requested_count,
+        fallback_engines=fallback_engines,
         # Reuse memory only on the normal translate path. Explicit retranslate
         # (retranslate_non_manual / force_selected) must hit the provider so it is
         # not a silent no-op; the memory is still refreshed on success.
         use_translation_memory=(mode == "skip_existing"),
         persist_raw_response=raw_response_logging_enabled(data),
+        enforce_repair=enforce_repair_enabled(data),
+        profile=build_translation_profile(data),
     )
 
 
@@ -235,6 +249,9 @@ def run_translation(
     input_tokens = 0
     output_tokens = 0
     cancelled = False
+    # Per-run cold-mark shared across this plan's segments (ADR 018 D4): a failed
+    # engine is skipped for a short window, never circuit-broken.
+    run_cold: dict[str, float] = {}
 
     with closing(connect_database(plan.db_path)) as connection:
         for index, segment_id in enumerate(plan.target_segment_ids, start=1):
@@ -258,6 +275,10 @@ def run_translation(
                 characters=plan.characters,
                 use_translation_memory=plan.use_translation_memory,
                 persist_raw_response=plan.persist_raw_response,
+                fallbacks=plan.fallback_engines,
+                cold=run_cold,
+                enforce_repair=plan.enforce_repair,
+                profile=plan.profile,
             )
             if ok:
                 translated += 1
@@ -290,29 +311,38 @@ def run_translation(
     )
 
 
-def validate_provider_config(
-    data: dict[str, Any], provider_override: dict[str, Any] | None
-) -> tuple[dict[str, Any], str, str]:
-    """Validate provider/translation config and resolve the effective provider.
+def resolve_translation_engines(
+    project_toml: Path, data: dict[str, Any], provider_override: dict[str, Any] | None
+) -> tuple[dict[str, Any], str, str, tuple[tuple[LLMProvider, str], ...]]:
+    """Resolve the routing chain for the translate task, then validate it.
 
-    Merges ``provider_override`` onto the project's ``[provider]`` block, then
-    checks the honorific policy and provider model. Shared by the chapter and
-    batch translation planners.
+    Routing-aware (ADR 018): the primary engine and its ordered fallbacks come
+    from :func:`resolve_chain` (``[routing.<task>]`` → legacy ``[provider]`` →
+    workspace ``[defaults]``), not the raw ``[provider]`` block — so an Active AI
+    configured in the cockpit drives the cockpit's own chapter/batch translate
+    path, matching ``translate_project`` (the CLI). ``provider_override`` is
+    merged onto the primary so one run can retarget the provider/model without
+    editing project.toml. Shared by the chapter and batch translation planners.
 
     Args:
+        project_toml: Path to the project's ``project.toml`` (resolves connections).
         data: Parsed project.toml mapping.
         provider_override: Optional ``{"type": ..., "model": ...}`` overrides
             (``None`` values dropped).
 
     Returns:
-        ``(provider_config, provider_model, honorific_policy)``.
+        ``(provider_config, provider_model, honorific_policy, fallback_engines)``.
+        ``fallback_engines`` are built (not healthchecked); any that fail to build
+        are skipped so a broken fallback never aborts the run.
 
     Raises:
-        ConfigError: If the honorific policy or provider model is invalid.
+        ConfigError: If the honorific policy or resolved provider model is invalid,
+            or a named connection in the routing chain is not registered.
     """
 
+    engine_chain = resolve_chain(project_toml, TaskType.translate, data=data)
     provider_config = normalize_provider_config(
-        _merge_provider_config(data["provider"], provider_override)
+        _merge_provider_config(engine_chain[0].provider_config, provider_override)
     )
     honorific_policy = str(data["translation"].get("honorifics", "preserve"))
     if honorific_policy not in VALID_HONORIFIC_POLICIES:
@@ -325,12 +355,33 @@ def validate_provider_config(
     provider_model = str(provider_config.get("model", "")).strip()
     if not provider_model:
         raise ConfigError(
-            "Provider configuration is missing `provider.model`. "
-            "Likely cause: project.toml [provider] has no model, or the request "
-            "override cleared it. "
-            "Next command: set `[provider] model` in project.toml or send a model."
+            "No AI model is configured for translation. "
+            "Likely cause: no Active AI is set and project.toml [provider] has no "
+            "model (or the request override cleared it). "
+            "Next command: open Connections and pick a model under Active AI, or "
+            "set `[provider] model` in project.toml."
         )
-    return provider_config, provider_model, honorific_policy
+    return provider_config, provider_model, honorific_policy, _build_fallback_engines(engine_chain)
+
+
+def _build_fallback_engines(
+    engine_chain: list[Candidate],
+) -> tuple[tuple[LLMProvider, str], ...]:
+    """Build the chain's fallback engines (skip any that cannot be built).
+
+    A missing-key or misconfigured fallback must never abort the run — the
+    primary still translates — so build failures are swallowed. Mirrors the
+    fallback-build step in ``translate_project``. The fallbacks are *not*
+    healthchecked here; a per-segment failure cold-marks and advances them.
+    """
+
+    engines: list[tuple[LLMProvider, str]] = []
+    for candidate in engine_chain[1:]:
+        try:
+            engines.append((build_provider(candidate.provider_config), candidate.model))
+        except (ConfigError, ProviderError):
+            continue
+    return tuple(engines)
 
 
 def load_translation_context(

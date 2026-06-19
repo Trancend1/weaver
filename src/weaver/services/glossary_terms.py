@@ -26,6 +26,7 @@ from weaver.storage.glossary import (
     delete_glossary_term,
     get_glossary_term,
     list_glossary_terms,
+    return_glossary_term_to_review,
     upsert_glossary_term,
 )
 from weaver.storage.projects import ProjectRecord, get_project
@@ -183,6 +184,27 @@ def delete_term(project_toml: Path, *, source: str, cwd: Path | None = None) -> 
         with transaction(connection):
             if not delete_glossary_term(connection, project_id=project.id, source=source):
                 raise _not_found(source)
+
+
+def return_term_to_review(project_toml: Path, *, source: str, cwd: Path | None = None) -> None:
+    """Un-approve a term, sending its source back to Candidate review.
+
+    Drops the approved term and flips its originating candidate back to
+    ``pending`` (or creates a pending candidate when the term was added
+    manually). See ``storage.return_glossary_term_to_review``.
+
+    Raises:
+        GlossaryTermNotFoundError: If no term with that source exists.
+    """
+
+    db_path = resolve_database_path(project_toml, cwd=cwd)
+    with closing(connect_database(db_path)) as connection:
+        project = _load_single_project(connection)
+        with transaction(connection):
+            try:
+                return_glossary_term_to_review(connection, project_id=project.id, source=source)
+            except LookupError as exc:
+                raise _not_found(source) from exc
 
 
 def _require(value: str, field: str) -> None:

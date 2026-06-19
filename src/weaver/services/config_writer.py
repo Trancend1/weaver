@@ -23,11 +23,12 @@ import os
 import re
 import tempfile
 import tomllib
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 from weaver.core.global_config import default_global_config_path
+from weaver.core.task_types import TaskType
 from weaver.errors import ConfigError
 from weaver.providers.registry import (
     PROTOCOL_OPENAI_CHAT,
@@ -37,7 +38,7 @@ from weaver.providers.registry import (
 )
 
 _PROTOCOL_REQUIRED_FIELDS = {
-    PROTOCOL_OPENAI_CHAT: ("base_url", "api_key_env", "model"),
+    PROTOCOL_OPENAI_CHAT: ("base_url", "model"),
 }
 
 
@@ -120,6 +121,115 @@ def set_provider(
     _atomic_write(target, new_text)
 
 
+def set_routing(
+    project_toml: Path,
+    *,
+    task: str,
+    connection: str,
+    model: str | None = None,
+    fallbacks: Sequence[tuple[str, str]] | None = None,
+) -> None:
+    """Write the machine-managed ``[routing.<task>]`` section to a project.toml.
+
+    Records ``connection`` + optional ``model`` and an optional ``fallback`` array
+    of ``{connection, model}`` inline tables. The whole section is rewritten (it is
+    Weaver-owned), but every other section + its comments is preserved. ``model``
+    empty is omitted (the connection's ``default_model`` applies). ``fallbacks``:
+    ``None`` keeps any existing ``fallback`` array; a list sets it; ``[]`` clears
+    it. Connection names are recorded as-is; registry resolution happens at run
+    time in ``services/routing``.
+
+    Raises:
+        ConfigError: unknown task, missing project file, or empty connection.
+    """
+
+    valid_tasks = {t.value for t in TaskType}
+    if task not in valid_tasks:
+        raise ConfigError(
+            f"Unknown routing task `{task}`. "
+            f"Likely cause: task must be one of: {', '.join(sorted(valid_tasks))}. "
+            "Next command: switch AI for a supported task."
+        )
+    if not project_toml.is_file():
+        raise ConfigError(
+            f"Project config not found: {project_toml}. "
+            "Likely cause: project not initialized or wrong path. "
+            "Next command: open the project, then switch AI again."
+        )
+    if not connection.strip():
+        raise ConfigError(
+            "Switching AI needs a connection. "
+            "Likely cause: no connection was selected. "
+            "Next command: pick a registered connection, then save."
+        )
+
+    existing = project_toml.read_text(encoding="utf-8")
+    effective_fallbacks = _resolve_fallbacks(existing, task, fallbacks)
+    section = _render_routing_section(task, connection.strip(), model, effective_fallbacks)
+    new_text = _replace_or_append_section(existing, f"routing.{task}", section)
+    project_toml.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(project_toml, new_text)
+
+
+def _resolve_fallbacks(
+    existing: str, task: str, fallbacks: Sequence[tuple[str, str]] | None
+) -> list[tuple[str, str]]:
+    """Use the given fallbacks, or preserve the existing ``fallback`` array."""
+
+    if fallbacks is not None:
+        return [(str(c).strip(), str(m).strip()) for c, m in fallbacks if str(c).strip()]
+    parsed = _parse_toml(existing, Path("project.toml")) if existing.strip() else {}
+    routing = parsed.get("routing", {})
+    entry = routing.get(task, {}) if isinstance(routing, dict) else {}
+    raw = entry.get("fallback", []) if isinstance(entry, dict) else []
+    out: list[tuple[str, str]] = []
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict) and _clean(item.get("connection")):
+                out.append((str(item["connection"]).strip(), str(item.get("model", "")).strip()))
+    return out
+
+
+def _render_routing_section(
+    task: str, connection: str, model: str | None, fallbacks: Sequence[tuple[str, str]]
+) -> str:
+    lines = [f"[routing.{task}]", f'connection = "{_escape(connection)}"']
+    if model and model.strip():
+        lines.append(f'model = "{_escape(model.strip())}"')
+    if fallbacks:
+        items = []
+        for conn, mdl in fallbacks:
+            inner = f'connection = "{_escape(conn)}"'
+            if mdl:
+                inner += f', model = "{_escape(mdl)}"'
+            items.append("{ " + inner + " }")
+        lines.append("fallback = [" + ", ".join(items) + "]")
+    return "\n".join(lines) + "\n"
+
+
+def _replace_or_append_section(text: str, section: str, body: str) -> str:
+    """Replace the ``[section]`` block (header → next header) with ``body``."""
+
+    lines = text.splitlines()
+    header = f"[{section}]"
+    header_index = _find_header(lines, header)
+    if header_index is None:
+        return _append_section_block(text, body)
+    section_end = _section_end(lines, header_index)
+    new_lines = lines[:header_index] + body.rstrip("\n").split("\n") + lines[section_end:]
+    trailing_newline = "\n" if text.endswith("\n") or not text else ""
+    return "\n".join(new_lines) + trailing_newline
+
+
+def _append_section_block(text: str, body: str) -> str:
+    prefix = text
+    if prefix and not prefix.endswith("\n"):
+        prefix += "\n"
+    if prefix and not prefix.endswith("\n\n"):
+        prefix += "\n"
+    return f"{prefix}{body}"
+
+
 def _drop_none(**fields: str | None) -> dict[str, str]:
     return {key: value for key, value in fields.items() if value is not None}
 
@@ -183,10 +293,11 @@ def _validate_provider_shape(config: Mapping[str, Any]) -> None:
         return
     raise ConfigError(
         "Provider configuration is incomplete. "
-        "Likely cause: provider type has no registered adapter and no supported "
-        "protocol with required endpoint/model/key fields. "
-        "Next command: use a legacy alias (deepseek, gemini, ollama, fake), or "
-        "set protocol plus the fields required by that protocol."
+        "Likely cause: no supported protocol with the required endpoint/model/key "
+        "fields was set. "
+        "Next command: set an explicit protocol (openai_chat or fake) plus the "
+        "fields it requires (openai_chat needs base_url and model; api_key_env is "
+        "optional for keyless endpoints)."
     )
 
 

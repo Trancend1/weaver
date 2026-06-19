@@ -1,8 +1,6 @@
 {# Swappable edit-form slot for one candidate. Rendered inline in the candidates
-   table (no suggestion yet) and as the POST .../suggest response (target pre-filled
-   + cost line, or an error). The Save & approve form is unchanged — only its input
-   value and an optional meta line differ. Vars: candidate_id, name, current_target,
-   suggestion, error. #}
+   table and as the POST .../suggest response (target pre-filled, or an error).
+   Vars: candidate_id, name, current_target, suggestion, error. #}
 <div id="cand-edit-{{ candidate_id }}">
   {% if error %}<p class="cand-error error" role="alert">⚠ {{ error }}</p>{% endif %}
   <form class="row-form" hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ candidate_id }}/edit"
@@ -11,14 +9,9 @@
            value="{{ suggestion.target if suggestion else (current_target or '') }}"
            placeholder="target (EN)" aria-label="Target (English)">
     <button type="submit" data-gc-action="edit">Save &amp; approve</button>
+    <button type="button" class="link-btn" data-gc-suggest
+            hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ candidate_id }}/suggest"
+            hx-target="#cand-edit-{{ candidate_id }}" hx-swap="innerHTML" hx-disabled-elt="this"
+            aria-label="Suggest a target for this term">Suggest</button>
   </form>
-  <button type="button" class="link-btn"
-          hx-post="/ui/projects/{{ name }}/glossary/candidates/{{ candidate_id }}/suggest"
-          hx-target="#cand-edit-{{ candidate_id }}" hx-swap="innerHTML" hx-disabled-elt="this"
-          aria-label="Suggest a target with AI for this term">Suggest with AI <span class="hint">(LLM call)</span></button>
-  {% if suggestion %}
-  <p class="meta" aria-live="polite">via {{ suggestion.provider }} · {{ suggestion.model }} ·
-    ~{{ (suggestion.input_tokens or 0) + (suggestion.output_tokens or 0) }} tokens</p>
-  {% endif %}
-  <p class="hint">Fills the editable target. You still Save &amp; approve.</p>
 </div>

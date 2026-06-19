@@ -124,6 +124,30 @@ def _candidates_fragment(
     return templates.TemplateResponse(request, "partials/_glossary_candidates.html", ctx)
 
 
+def _terms_with_candidates_oob(
+    request: Request, name: str, *, offset: int = 0, find: str | None = None
+) -> HTMLResponse:
+    """Approved-terms fragment + an out-of-band Candidate-review refresh.
+
+    Returning a term to review changes both panels (the term leaves Approved,
+    its source reappears in Candidate review). HTMX swaps the terms table into
+    ``#glossary-terms`` and the ``hx-swap-oob`` candidates block updates
+    ``#glossary-candidates`` in the same response so both render live.
+    """
+
+    terms_ctx = _glossary_terms_ctx(request, name, offset=offset, find=find)
+    terms_ctx["error"] = None
+    terms_html = templates.get_template("partials/_glossary_terms.html").render(
+        {**terms_ctx, "request": request}
+    )
+    cand_ctx = _candidates_ctx(request, name)
+    cand_ctx["oob"] = True
+    cand_html = templates.get_template("partials/_glossary_candidates.html").render(
+        {**cand_ctx, "request": request}
+    )
+    return HTMLResponse(terms_html + cand_html)
+
+
 @router.get("/ui/projects/{name}/glossary", response_class=HTMLResponse)
 def glossary_page(name: str, request: Request) -> HTMLResponse:
     """Glossary admin: term CRUD, candidate review, conflicts, coverage diff."""
@@ -247,20 +271,28 @@ def glossary_update_by_source(
 
 
 @router.post("/ui/projects/{name}/glossary/term/delete", response_class=HTMLResponse)
-def glossary_delete_by_source(
+def glossary_return_to_review(
     name: str,
     request: Request,
     source: str = Form(...),
     offset: int = Form(0),
     find: str | None = Form(None),
 ) -> HTMLResponse:
-    """Delete one glossary term by source in form body (safe for '/' keys)."""
+    """Un-approve a term by source: send it back to Candidate review.
+
+    Drops the approved term and returns its source to the pending candidate
+    queue (re-review path). Both panels refresh: the Approved-terms table plus
+    an out-of-band Candidate-review block. Hard delete now lives only behind
+    Candidate review's Reject (owner workflow, 2026-06-16).
+    """
     base = _base_dir(request)
     try:
-        glossary_service.delete_term(_project_toml(request, name), source=source, cwd=base)
+        glossary_service.return_term_to_review(
+            _project_toml(request, name), source=source, cwd=base
+        )
     except GlossaryTermNotFoundError as exc:
         return _terms_fragment(request, name, offset=offset, find=find, error=str(exc))
-    return _terms_fragment(request, name, offset=offset, find=find)
+    return _terms_with_candidates_oob(request, name, offset=offset, find=find)
 
 
 @router.get("/ui/projects/{name}/glossary/candidates", response_class=HTMLResponse)

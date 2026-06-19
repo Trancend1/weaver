@@ -22,8 +22,9 @@ class ProviderStatus:
 class LLMProvider(ABC):
     """Translation provider contract.
 
-    All concrete providers must subclass this and set `name` to the
-    canonical provider identifier (`fake`, `deepseek`, `gemini`, `ollama`).
+    All concrete providers must subclass this and set `name` to their
+    transport/connection identifier (e.g. `openai_chat`, `fake`, or a
+    user-given connection name).
     Implementations may raise any subclass of `weaver.errors.ProviderError`
     from `translate()`; `healthcheck()` must not raise — failures are
     reported via `ProviderStatus(healthy=False, message=...)`.

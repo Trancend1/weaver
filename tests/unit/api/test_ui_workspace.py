@@ -72,7 +72,7 @@ def test_workspace_renders_workflow_toolbar_and_progress(ws_client: TestClient) 
     assert 'class="ws-stat' in page
     assert "workspace-progress" in page
     assert "Translate untranslated / empty segments" in page
-    assert "Manual source of truth" in page or "Needs translation" in page
+    assert "Your manual edit" in page or "Needs translation" in page
 
 
 def test_workspace_navigation_stays_project_scoped(ws_client: TestClient) -> None:
@@ -97,7 +97,7 @@ def test_workspace_segment_actions_are_contextual(ws_client: TestClient) -> None
     # Review candidates link removed — sidebar Candidates covers navigation
     assert "History" in page
     assert "Context" in page
-    assert "Generate candidate" in page
+    assert "Suggest another translation" in page
 
 
 def test_workspace_has_no_duplicate_ids(ws_client: TestClient) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from functools import cache
 from pathlib import Path
 
@@ -54,6 +55,7 @@ def render_user_message(context: TranslationContext, *, source_text: str) -> str
         glossary_terms=context.glossary_terms,
         characters=context.characters,
         previous_segments=context.previous_segments,
+        profile=context.profile,
         source_text=source_text,
     )
 
@@ -88,4 +90,52 @@ def render_glossary_suggestion_prompt(
     if examples:
         lines.append("Example sentences (for context):")
         lines.extend(f"- {example}" for example in examples)
+    return "\n".join(lines)
+
+
+ENFORCEMENT_REPAIR_PROMPT_VERSION = "enforcement-repair-1.0"
+
+ENFORCEMENT_REPAIR_SYSTEM = (
+    "You are a professional literary translator revising your own translation to "
+    "satisfy specific glossary, character-name, and quality constraints. "
+    "Respond ONLY with a valid JSON object. No explanation, no markdown, no prose "
+    "outside the JSON."
+)
+
+
+def render_enforcement_repair_prompt(
+    *,
+    source_text: str,
+    previous_translation: str,
+    violations: Sequence[str],
+    source_language: str,
+    target_language: str,
+) -> str:
+    """Build the targeted enforcement-repair message (ADR 019 E2; domain content).
+
+    Enumerates the deterministic violations and asks for a corrected translation
+    that fixes every one and changes nothing else. The provider sees an opaque
+    string (ADR 014). The literal word "json" is present so OpenAI-compatible
+    json-mode endpoints accept the request.
+    """
+
+    lines = [
+        f"Revise this {source_language} to {target_language} translation.",
+        "The previous translation broke the constraints listed below. Produce a "
+        "corrected translation that fixes every listed problem and changes nothing "
+        "else (do not paraphrase unaffected text).",
+        "Respond ONLY with a strict JSON object of the form "
+        '{"translation": "...", "notes": [], "uncertain_terms": []} and nothing else.',
+        "",
+        "Constraints that were violated:",
+    ]
+    lines.extend(f"- {violation}" for violation in violations)
+    lines += [
+        "",
+        f"Source ({source_language}):",
+        source_text,
+        "",
+        "Previous translation (fix only what the constraints require):",
+        previous_translation,
+    ]
     return "\n".join(lines)

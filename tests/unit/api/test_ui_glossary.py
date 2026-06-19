@@ -164,6 +164,40 @@ def test_term_delete_keeps_search_context(gloss_client: TestClient) -> None:
     assert "魔法" not in r.text
 
 
+def test_term_delete_button_returns_term_to_candidate_review(gloss_client: TestClient) -> None:
+    """Approved-terms 'Return to review' un-approves: term leaves, source goes pending."""
+    name = _name(gloss_client)
+    _add_term(gloss_client, name, source="魔王", target="Demon King")
+
+    r = gloss_client.post(
+        f"/ui/projects/{name}/glossary/term/delete",
+        data={"source": "魔王", "offset": "0", "find": ""},
+    )
+    assert r.status_code == 200
+    # both panels come back: the terms table (term gone) + an OOB candidate refresh
+    assert 'id="glossary-terms"' in r.text
+    assert 'id="glossary-candidates"' in r.text
+    assert 'hx-swap-oob="true"' in r.text
+
+    # the term is no longer approved...
+    terms = gloss_client.get(f"/ui/projects/{name}/glossary/terms").text
+    assert "Demon King" not in terms
+    # ...and is back in Candidate review as a pending row.
+    page = gloss_client.get(f"/projects/{name}/glossary/candidates").json()
+    returned = [c for c in page["candidates"] if c["source"] == "魔王"]
+    assert returned and returned[0]["status"] == "pending"
+
+
+def test_term_delete_button_missing_source_is_visible_error(gloss_client: TestClient) -> None:
+    name = _name(gloss_client)
+    r = gloss_client.post(
+        f"/ui/projects/{name}/glossary/term/delete",
+        data={"source": "未登録XYZ", "offset": "0", "find": ""},
+    )
+    assert r.status_code == 200  # fragment swap; error shown in-place, not a 5xx
+    assert "was not found" in r.text
+
+
 def test_term_search_needle_with_quote_is_safe(gloss_client: TestClient) -> None:
     """A needle containing a double quote must not break the threaded find context."""
     name = _name(gloss_client)
@@ -215,7 +249,8 @@ def test_examples_fragment_unknown_source_is_empty_not_error(gloss_client: TestC
 def test_candidate_row_has_suggest_button_and_edit_slot(gloss_client: TestClient) -> None:
     name = _name(gloss_client)
     page = gloss_client.get(f"/ui/projects/{name}/glossary").text
-    assert "Suggest with AI" in page
-    assert "(LLM call)" in page  # cost visible BEFORE click (gate 6a)
+    assert "data-gc-suggest" in page  # per-row Suggest button
+    assert "data-gc-suggest-all" in page  # bulk "Suggest targets" CTA
+    assert "Suggest targets" in page
     assert 'id="cand-edit-' in page  # swappable edit slot
     assert "/glossary/candidates/" in page and "/suggest" in page

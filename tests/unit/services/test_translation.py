@@ -1,15 +1,24 @@
-"""Tests for `build_context()`."""
+"""Tests for `build_context()` and `translate_one_segment()`."""
 
 from __future__ import annotations
 
+import sqlite3
+from pathlib import Path
+
 import pytest
 
+from weaver.core.segment import compute_source_hash
+from weaver.providers.fake import FakeProvider
 from weaver.providers.types import GlossaryTerm
 from weaver.services.translation import (
     MAX_CONTEXT_SEGMENTS,
     MAX_GLOSSARY_TERMS_PER_SEGMENT,
     build_context,
+    translate_one_segment,
 )
+from weaver.storage.db import initialize_database
+from weaver.storage.projects import ProjectRecord
+from weaver.storage.segments import SegmentRecord
 
 
 def test_build_context_filters_glossary_to_matching_terms() -> None:
@@ -118,3 +127,189 @@ def test_build_context_drops_window_segments_when_over_token_budget() -> None:
     )
 
     assert len(ctx.previous_segments) < MAX_CONTEXT_SEGMENTS
+
+
+# --- translate_one_segment fallback tests ---------------------------------
+
+
+def _db_with_segment(path: Path) -> tuple[sqlite3.Connection, SegmentRecord, ProjectRecord]:
+    """Create a minimal DB with a single pending segment. Returns (conn, seg, project)."""
+    conn = initialize_database(path)
+    conn.execute(
+        "INSERT INTO projects "
+        "(name, source_path, source_lang, target_lang, created_at, schema_version) "
+        "VALUES (?, ?, ?, ?, datetime('now'), 12)",
+        ("test", "/f.epub", "ja", "en"),
+    )
+    (project_id,) = conn.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
+    conn.execute(
+        "INSERT INTO volumes "
+        "(project_id, title, source_path, source_format, volume_order, created_at) "
+        "VALUES (?, ?, ?, 'epub', 0, datetime('now'))",
+        (project_id, "v1", "/f.epub"),
+    )
+    (volume_id,) = conn.execute("SELECT id FROM volumes ORDER BY id LIMIT 1").fetchone()
+    conn.execute(
+        "INSERT INTO chapters "
+        "(id, project_id, volume_id, title, spine_order) VALUES (?, ?, ?, ?, 0)",
+        ("ch1", project_id, volume_id, "Ch1"),
+    )
+    seg_id = "seg1"
+    src_hash = compute_source_hash("hello")
+    conn.execute(
+        "INSERT INTO segments "
+        "(id, chapter_id, block_order, kind, source_text, source_hash, status) "
+        "VALUES (?, ?, 0, 'text', ?, ?, 'pending')",
+        (seg_id, "ch1", "hello", src_hash),
+    )
+    conn.commit()
+    seg = SegmentRecord(
+        id=seg_id,
+        chapter_id="ch1",
+        block_order=0,
+        kind="text",
+        source_text="hello",
+        source_hash=src_hash,
+        status="pending",
+    )
+    proj = ProjectRecord(
+        id=project_id,
+        name="test",
+        source_path="/f.epub",
+        source_lang="ja",
+        target_lang="en",
+        schema_version=12,
+    )
+    return conn, seg, proj
+
+
+def test_fallback_rescues_segment_when_primary_fails(tmp_path: Path) -> None:
+    conn, seg, proj = _db_with_segment(tmp_path / "test.db")
+    primary = FakeProvider(fail_rate=1.0, seed=1)
+    fallback = FakeProvider(fail_rate=0.0, seed=2)
+    cold: dict[str, float] = {}
+
+    translated, reused, inp, out = translate_one_segment(
+        connection=conn,
+        segment=seg,
+        source_text="hello",
+        normalized_source_text="hello",
+        project=proj,
+        glossary_terms=(),
+        honorific_policy="preserve",
+        provider=primary,
+        provider_model="failer",
+        fallbacks=[(fallback, "saver")],
+        cold=cold,
+        enforce_repair=False,
+    )
+
+    assert translated, "fallback should have rescued the segment"
+    assert not reused, "should not be a TM reuse"
+    row = conn.execute(
+        "SELECT status, provider, model FROM segments s "
+        "JOIN translations t ON t.segment_id = s.id "
+        "WHERE s.id = ? ORDER BY t.attempt DESC LIMIT 1",
+        (seg.id,),
+    ).fetchone()
+    assert row is not None
+    assert row["status"] == "translated"
+    assert row["provider"] == "fake"
+    assert row["model"] == "saver"
+    conn.close()
+
+
+def test_fallback_cold_mark_prevents_reuse_within_window(tmp_path: Path) -> None:
+    conn, seg, proj = _db_with_segment(tmp_path / "test.db")
+    primary = FakeProvider(fail_rate=1.0, seed=1)
+    fallback = FakeProvider(fail_rate=0.0, seed=2)
+    cold: dict[str, float] = {}
+
+    translated, _, _, _ = translate_one_segment(
+        connection=conn,
+        segment=seg,
+        source_text="hello",
+        normalized_source_text="hello",
+        project=proj,
+        glossary_terms=(),
+        honorific_policy="preserve",
+        provider=primary,
+        provider_model="failer",
+        fallbacks=[(fallback, "saver")],
+        cold=cold,
+        enforce_repair=False,
+    )
+
+    assert translated
+    assert cold.get("fake", 0.0) > 0.0, "fallback should be cold-marked"
+    conn.close()
+
+
+def test_all_candidates_fail_marks_segment_failed(tmp_path: Path) -> None:
+    conn, seg, proj = _db_with_segment(tmp_path / "test.db")
+    primary = FakeProvider(fail_rate=1.0, seed=1)
+    fallback = FakeProvider(fail_rate=1.0, seed=2)
+
+    translated, reused, inp, out = translate_one_segment(
+        connection=conn,
+        segment=seg,
+        source_text="hello",
+        normalized_source_text="hello",
+        project=proj,
+        glossary_terms=(),
+        honorific_policy="preserve",
+        provider=primary,
+        provider_model="failer",
+        fallbacks=[(fallback, "also-failer")],
+        enforce_repair=False,
+    )
+
+    assert not translated
+    assert not reused
+    status = conn.execute("SELECT status FROM segments WHERE id = ?", (seg.id,)).fetchone()[
+        "status"
+    ]
+    assert status == "failed"
+    conn.close()
+
+
+def test_tm_short_circuit_stays_ahead_of_fallback(tmp_path: Path) -> None:
+    conn, seg, proj = _db_with_segment(tmp_path / "test.db")
+    conn.execute(
+        "INSERT INTO translation_memory "
+        "(project_id, source_text, source_hash, target_text, "
+        " provider, model, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, 'tm', 'tm', datetime('now'), datetime('now'))",
+        (proj.id, "hello", seg.source_hash, "TM CACHED"),
+    )
+    conn.commit()
+
+    primary = FakeProvider(fail_rate=1.0, seed=1)
+    fallback = FakeProvider(fail_rate=0.0, seed=2)
+
+    translated, reused, inp, out = translate_one_segment(
+        connection=conn,
+        segment=seg,
+        source_text="hello",
+        normalized_source_text="hello",
+        project=proj,
+        glossary_terms=(),
+        honorific_policy="preserve",
+        provider=primary,
+        provider_model="failer",
+        fallbacks=[(fallback, "saver")],
+        enforce_repair=False,
+        cold={},
+    )
+
+    assert translated, "TM hit should return translated"
+    assert reused, "TM reuse — no provider call"
+    assert inp is None, "no input tokens when reused from TM"
+    assert out is None, "no output tokens when reused from TM"
+    row = conn.execute(
+        "SELECT provider, model FROM translations "
+        "WHERE segment_id = ? ORDER BY attempt DESC LIMIT 1",
+        (seg.id,),
+    ).fetchone()
+    assert row["provider"] == "memory"
+    conn.close()

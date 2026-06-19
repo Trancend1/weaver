@@ -2,13 +2,13 @@
   <div class="job-head">
     <strong>Pre-export quality check</strong>
     {% if report is not none %}<span class="badge c-badge {{ badge_class }}">{{ badge_label }}</span>{% endif %}
-    <span class="meta">target: {{ target }}{% if bundle %} · bundle ZIP{% endif %}</span>
+    <span class="meta">format: {{ target }}{% if bundle %} · one ZIP{% endif %}</span>
   </div>
-  <p class="meta export-confidence">Fidelity confidence comes from EPUB snapshot status plus QA advisories. Export only writes after this explicit confirmation.</p>
+  <p class="meta export-confidence">This check looks at how faithfully your EPUB is preserved and any quality warnings. Nothing is saved until you confirm below.</p>
 
   {% if snapshot_advisories %}
   <div class="snapshot-advisories">
-    <p class="hint">EPUB preservation snapshot advisories:</p>
+    <p class="hint">Notes about preserving your EPUB's original formatting:</p>
     <ul class="plain-list">
       {% for adv in snapshot_advisories %}
       <li>
@@ -25,13 +25,13 @@
   {% elif report.total_issues == 0 %}
   <p>No quality issues found — ready to export.</p>
   {% else %}
-  <p class="hint">Advisory only — export is allowed. Segments without a usable translation
-    are written as source fallback.</p>
+  <p class="hint">These are suggestions — you can still export. Lines without a finished
+    translation are exported in their original language.</p>
   <ul class="qa-advisories plain-list">
-    {% if advisories.critical %}<li><span class="badge c-badge bad">Errors</span> {{ advisories.critical }} critical issue(s)</li>{% endif %}
-    {% if advisories.failed_stale %}<li>{{ advisories.failed_stale }} failed / stale segment(s)</li>{% endif %}
-    {% if advisories.untranslated_fallback %}<li>{{ advisories.untranslated_fallback }} untranslated / fallback-heavy finding(s)</li>{% endif %}
-    {% if advisories.glossary %}<li>{{ advisories.glossary }} glossary violation(s)</li>{% endif %}
+    {% if advisories.critical %}<li><span class="badge c-badge bad">Errors</span> {{ advisories.critical }} serious issue(s)</li>{% endif %}
+    {% if advisories.failed_stale %}<li>{{ advisories.failed_stale }} failed or outdated line(s)</li>{% endif %}
+    {% if advisories.untranslated_fallback %}<li>{{ advisories.untranslated_fallback }} untranslated line(s)</li>{% endif %}
+    {% if advisories.glossary %}<li>{{ advisories.glossary }} glossary mismatch(es)</li>{% endif %}
     {% if advisories.character %}<li>{{ advisories.character }} character-name issue(s)</li>{% endif %}
   </ul>
   <p class="meta">{{ report.critical_count }} errors · {{ report.warning_count }} warnings · {{ report.info_count }} info</p>
@@ -60,7 +60,7 @@
       <input type="hidden" name="target" value="{{ target }}">
       <input type="hidden" name="bundle" value="{{ 'true' if bundle else 'false' }}">
       <input type="hidden" name="kind" value="draft">
-      <button type="submit">{% if report is not none and report.total_issues == 0 %}Export Draft (clean){% else %}Export Draft (advisory){% endif %}</button>
+      <button type="submit">{% if report is not none and report.total_issues == 0 %}Export Draft{% else %}Export Draft anyway{% endif %}</button>
       <span class="htmx-indicator calm-loader calm-loader--small" role="status">Writing export</span>
     </form>
 
@@ -71,11 +71,11 @@
       <input type="hidden" name="kind" value="final">
       <label class="check-inline">
         <input type="checkbox" name="require_clean" value="true" checked>
-        Require clean validation (block on critical issues)
+        Only export if there are no Errors
       </label>
       <button type="submit" class="btn btn--secondary">Export Final</button>
     </form>
   </div>
-  <p class="meta">Draft is advisory and always allowed. Final with "require clean" refuses
-    while unresolved critical issues exist (your Draft escape hatch stays available).</p>
+  <p class="meta">A Draft export always works. A Final export will stop if Errors remain —
+    but you can always use Draft instead.</p>
 </div>

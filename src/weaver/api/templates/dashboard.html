@@ -9,10 +9,10 @@
 
   {% if identity_conflicts %}
   <div class="alert bad" role="alert">
-    <strong>Identity conflict:</strong>
-    {{ identity_conflicts|length }} project{{ "" if identity_conflicts|length == 1 else "s" }} share a duplicate UUID —
+    <strong>Duplicate project ID:</strong>
+    {{ identity_conflicts|length }} project{{ "" if identity_conflicts|length == 1 else "s" }} share the same internal ID, which can mix up their data —
     {% for e in identity_conflicts %}<code>{{ e.name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
-    Run <code>weaver inspect &lt;project.toml&gt;</code> on each to investigate.
+    Open each project to rename or re-import it.
   </div>
   {% endif %}
 
@@ -26,7 +26,7 @@
   {% if entries and rollup.segment_total > 0 %}
   <div class="panel c-panel dash-rollup" aria-label="Workspace analytics">
     <h2 class="panel__title">Workspace at a glance</h2>
-    <p class="meta">Current state across {{ rollup.project_count }} project{{ "" if rollup.project_count == 1 else "s" }} — read from stored data, not a time series.</p>
+    <p class="meta">Current totals across {{ rollup.project_count }} project{{ "" if rollup.project_count == 1 else "s" }}.</p>
     <ul class="dash-rollup__stats plain-list">
       <li><b>{{ "{:,}".format(rollup.translated_total) }}</b><span>translated of {{ "{:,}".format(rollup.segment_total) }} segments</span></li>
       <li><b>{{ "{:,}".format(rollup.pending_total) }}</b><span>pending</span></li>
@@ -50,15 +50,15 @@
         <span class="project-card__name">{{ e.name }}</span>
         <span class="badge bad">{{ e.state | replace("_", " ") }}</span>
       </div>
-      <p class="project-card__error error">{{ e.error or "Unknown error — run weaver inspect." }}</p>
+      <p class="project-card__error error">{{ e.error or "Something went wrong loading this project. Try re-importing it." }}</p>
     </div>
     {% elif e.state == "needs_upgrade" %}
     <div class="project-card project-card--warn">
       <div class="project-card__head">
         <span class="project-card__name">{{ e.name }}</span>
-        <span class="badge warn">needs upgrade</span>
+        <span class="badge warn">Needs update</span>
       </div>
-      <p class="project-card__sub">Run <code>weaver init &lt;source&gt;</code> in the project directory to upgrade.</p>
+      <p class="project-card__sub">This project was made by an older version. Re-import its source file to update it.</p>
     </div>
     {% else %}
     <a class="project-card" href="/ui/projects/{{ e.name }}">
@@ -91,8 +91,8 @@
     {% endfor %}
   </div>
   {% else %}
-  {% set empty_title = "No projects found" %}
-  {% set empty_hint = 'Import a source (TXT, EPUB, or HTML) with <a href="/ui/new">+ New project</a> above, or run <code>weaver init &lt;source&gt;</code> from the CLI.' %}
+  {% set empty_title = "No projects yet" %}
+  {% set empty_hint = 'Add your first book (TXT, EPUB, or HTML) with <a href="/ui/new">+ New project</a> above.' %}
   {% include "partials/_empty_state.html" %}
   {% endif %}
 </section>

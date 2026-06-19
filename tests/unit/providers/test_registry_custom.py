@@ -1,17 +1,19 @@
-"""Tests for the generic custom OpenAI-compatible provider (ADR ``0020``)."""
+"""Tests for the generic custom OpenAI-compatible provider (ADR 018 D1/D6)."""
 
 from __future__ import annotations
 
 import pytest
 
-from weaver.errors import ConfigError
+from weaver.errors import ConfigError, ProviderUnavailable
 from weaver.providers.registry import build_provider, known_protocols, known_provider_types
 
 
 def test_known_provider_types_and_protocols_include_compatibility_values() -> None:
     types = known_provider_types()
     assert {"deepseek", "gemini", "ollama", "fake", "custom"} <= set(types)
-    assert {"openai_chat", "gemini_generate", "ollama_generate", "fake"} <= set(known_protocols())
+    # One real transport + the test engine; the native protocols are gone
+    # (ADR 018 D1). Legacy brand names survive as type aliases only.
+    assert set(known_protocols()) == {"openai_chat", "fake"}
 
 
 def test_build_custom_success(monkeypatch) -> None:
@@ -39,14 +41,10 @@ def test_build_custom_requires_model(monkeypatch) -> None:
         build_provider({"type": "custom", "base_url": "https://x", "api_key_env": "MY_CUSTOM_KEY"})
 
 
-def test_build_custom_requires_api_key_env() -> None:
-    with pytest.raises(ConfigError):
-        build_provider({"type": "custom", "base_url": "https://x", "model": "m"})
-
-
-def test_build_custom_missing_key_value_is_unavailable(monkeypatch) -> None:
-    from weaver.errors import ProviderUnavailable
-
+def test_build_custom_with_named_but_missing_key_value_is_unavailable(monkeypatch) -> None:
+    # ``api_key_env`` is now optional (keyless endpoints). When the user does
+    # name an env var, a missing value must still surface as a clear provider
+    # error at __init__ time, never as a silent success.
     monkeypatch.delenv("ABSENT_KEY", raising=False)
     with pytest.raises(ProviderUnavailable):
         build_provider(
@@ -57,3 +55,19 @@ def test_build_custom_missing_key_value_is_unavailable(monkeypatch) -> None:
                 "api_key_env": "ABSENT_KEY",
             }
         )
+
+
+def test_legacy_gemini_type_routes_through_openai_chat(monkeypatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "sk-gemini")
+    provider = build_provider({"type": "gemini"})
+    # Transport is the unified openai_chat; the normalized type is "custom".
+    assert provider.name == "custom"
+
+
+def test_legacy_ollama_type_routes_to_local_keyless_openai_chat(monkeypatch) -> None:
+    # Local Ollama has no key — the shim must pass an empty ``api_key_env``
+    # and not raise at __init__ time. The OpenAI client is fed a dummy key
+    # internally; the upstream is expected to ignore it.
+    monkeypatch.delenv("WEAVER_TEST_OLLAMA_KEY", raising=False)
+    provider = build_provider({"type": "ollama"})
+    assert provider.name == "custom"

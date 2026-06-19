@@ -75,6 +75,14 @@ def test_find_project_missing_returns_none(tmp_path: Path) -> None:
     assert find_project(tmp_path, "does_not_exist") is None
 
 
+def test_find_project_rejects_traversal_names(tmp_path: Path) -> None:
+    # A crafted route param must not escape the `.weaver` root. Backslash matters
+    # on Windows (the desktop target), where it is a path separator.
+    initialize_project(FIXTURE_EPUB, cwd=tmp_path)
+    for evil in ("..", ".", "..\\..\\x", "../../x", "a/b", "a\\b"):
+        assert find_project(tmp_path, evil) is None
+
+
 def test_find_project_by_uuid(tmp_path: Path) -> None:
     initialize_project(FIXTURE_EPUB, cwd=tmp_path, project_name="uuid_test")
 

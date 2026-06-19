@@ -148,6 +148,11 @@ def _open_database(path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA journal_mode = WAL")
+    # Wait up to 10s for a contended write lock instead of failing immediately.
+    # Background jobs (translate/batch) and a concurrent import/request can briefly
+    # contend for the single WAL writer; without this a transient overlap raises
+    # "database is locked" and bubbles up as a 500. (See import-volume regression.)
+    connection.execute("PRAGMA busy_timeout = 10000")
     connection.execute("PRAGMA foreign_keys = ON")
     return connection
 

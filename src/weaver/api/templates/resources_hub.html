@@ -6,10 +6,10 @@
   {% set total_glossary = resources.projects | sum(attribute="glossary_term_count") %}
   {% set total_chars = resources.projects | sum(attribute="character_count") %}
   {% set total_memory = resources.projects | sum(attribute="memory_entry_count") %}
-  {% set page_meta = resources.degraded | length ~ " degraded · " ~ resources.projects | length ~ " projects · " ~ total_glossary ~ " glossary terms · " ~ total_chars ~ " characters · " ~ total_memory ~ " TM entries" %}
+  {% set page_meta = resources.degraded | length ~ " with problems · " ~ resources.projects | length ~ " projects · " ~ total_glossary ~ " glossary terms · " ~ total_chars ~ " characters · " ~ total_memory ~ " translation-memory entries" %}
   {% set page_crumbs = [{"label": "Dashboard", "href": "/ui"}, {"label": "Resources"}] %}
   {% set page_actions %}
-    <span class="hint">Read-only cross-project resource view.</span>
+    <span class="hint">An overview of glossaries, characters, and translation memory across all your projects.</span>
   {% endset %}
   {% include "partials/_page_header.html" %}
 

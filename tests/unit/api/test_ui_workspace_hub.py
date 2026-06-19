@@ -82,7 +82,7 @@ def test_dashboard_has_workspace_sidebar(hub_client: TestClient) -> None:
 
 def test_workspace_sidebar_has_six_entries(hub_client: TestClient) -> None:
     html = hub_client.get("/ui").text
-    for label in ("Projects", "Queue", "Resources", "Providers", "Exports", "Settings"):
+    for label in ("Projects", "Queue", "Resources", "Connections", "Exports", "Settings"):
         assert label in html, f"Sidebar entry '{label}' missing from dashboard"
 
 
@@ -93,7 +93,7 @@ def test_workspace_sidebar_projects_entry_is_active(hub_client: TestClient) -> N
 
 def test_workspace_sidebar_disabled_entries_have_no_links(hub_client: TestClient) -> None:
     html = hub_client.get("/ui").text
-    # Providers (Q6) + Exports (Q7) are now active hubs; Settings remains disabled.
+    # Connections (Q6) + Exports (Q7) are now active hubs; Settings remains disabled.
     for disabled in ("Settings",):
         # Disabled entries render as <span> not <a href=...>
         # Quick check: no href pointing to missing hub routes
@@ -134,7 +134,7 @@ def test_dashboard_shows_ws_grid(hub_client: TestClient) -> None:
 
 def test_dashboard_empty_state_when_no_projects(empty_hub_client: TestClient) -> None:
     html = empty_hub_client.get("/ui").text
-    assert "No projects found" in html
+    assert "No projects yet" in html
 
 
 def test_dashboard_shows_books_dir_in_meta(hub_client: TestClient) -> None:
@@ -174,7 +174,7 @@ def test_needs_upgrade_project_renders_warn_card(
     client = TestClient(create_api_app(tmp_path))
     resp = client.get("/ui")
     assert resp.status_code == 200
-    assert "needs upgrade" in resp.text
+    assert "Needs update" in resp.text
     assert "project-card--warn" in resp.text
 
 

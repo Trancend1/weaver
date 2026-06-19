@@ -236,11 +236,15 @@ def test_glossary_add_update_delete_with_slash_in_source(admin_client: TestClien
     )
     assert edit.status_code == 200 and "Updated Slash" in edit.text
 
+    # 'Delete' is now 'Return to review' (owner workflow): the term leaves Approved
+    # terms and its '/'-bearing source round-trips back to Candidate review.
     delete = admin_client.post(
         f"/ui/projects/{name}/glossary/term/delete",
         data={"source": "A/B"},
     )
-    assert delete.status_code == 200 and "Updated Slash" not in delete.text
+    assert delete.status_code == 200
+    terms = admin_client.get(f"/ui/projects/{name}/glossary/terms")
+    assert "Updated Slash" not in terms.text  # no longer an approved term
 
 
 # --- slash-safe character mutation ------------------------------------------
@@ -314,4 +318,4 @@ def test_candidate_search_param_is_echoed(admin_client: TestClient) -> None:
 def test_new_project_uses_freeform_provider_config(admin_client: TestClient) -> None:
     new = admin_client.get("/ui/new").text
     assert '<select name="provider"' not in new
-    assert "Provider settings start empty" in new
+    assert "connect an AI service after creating the project" in new

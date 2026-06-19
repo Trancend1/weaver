@@ -15,9 +15,9 @@ TRANSLATION_LABELS: dict[str, str] = {
     "pending": "Untranslated",
     "in_progress": "Translating",
     "translated": "Translated",
-    "manual": "Manual",
+    "manual": "Manual edit",
     "failed": "Failed",
-    "stale": "Stale",
+    "stale": "Outdated",
     "skipped": "Skipped",
 }
 

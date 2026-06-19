@@ -95,7 +95,7 @@ def test_preflight_review_advisory_when_unreviewed(client: TestClient) -> None:
     assert "still need human attention" in body
     assert "does not block" in body
     # the export actions remain available regardless of review state
-    assert "Export Draft (advisory)" in body
+    assert "Export Draft anyway" in body
     assert "Export Final" in body
 
 
@@ -116,7 +116,7 @@ def test_preflight_clean_state(client: TestClient) -> None:
     # the action still posts to the real export route
     assert 'hx-post="/ui/projects/clean/export"' in body
     # Q7: Draft is the default action; a Final form with require-clean exists too.
-    assert "Export Draft (clean)" in body
+    assert "Export Draft" in body
     assert "Export Final" in body
     assert 'name="require_clean"' in body
 
@@ -126,11 +126,11 @@ def test_preflight_warning_state(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.text
     assert ">Errors<" in body  # badge
-    assert "critical issue" in body
-    assert "failed / stale" in body
+    assert "serious issue" in body
+    assert "failed or outdated" in body
     assert "Review the quality report" in body
     assert "/ui/projects/issues/qa" in body
-    assert "Export Draft (advisory)" in body
+    assert "Export Draft anyway" in body
     assert 'hx-post="/ui/projects/issues/export"' in body
 
 
@@ -157,7 +157,7 @@ def test_preflight_forwards_bundle_choice(client: TestClient) -> None:
     # final POST carries it.
     with_bundle = client.get("/ui/projects/clean/export/preflight?target=docx&bundle=true").text
     assert 'name="bundle" value="true"' in with_bundle
-    assert "bundle ZIP" in with_bundle
+    assert "one ZIP" in with_bundle
 
     without = client.get("/ui/projects/clean/export/preflight?target=docx").text
     assert 'name="bundle" value="false"' in without

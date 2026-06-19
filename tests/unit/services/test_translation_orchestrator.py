@@ -7,11 +7,13 @@ from pathlib import Path
 
 import pytest
 
+from weaver.core.slop_seed import DEFAULT_BANNED_PHRASES
 from weaver.errors import GlossaryConflictError, ProviderResponseError
 from weaver.providers.base import LLMProvider, ProviderStatus
+from weaver.providers.fake import FakeProvider
 from weaver.providers.types import TranslationRequest, TranslationResponse
 from weaver.services.project import initialize_project
-from weaver.services.translation import translate_project
+from weaver.services.translation import build_translation_profile, translate_project
 from weaver.storage.db import connect_database, transaction
 from weaver.storage.glossary import approve_glossary_candidate, insert_glossary_candidate
 from weaver.storage.segments import update_segment_status
@@ -99,6 +101,155 @@ def test_translate_project_injects_approved_glossary_terms_into_matching_prompt(
     assert [(term.source, term.target) for term in first_request_terms] == [
         (term_source, "Pinned Term")
     ]
+
+
+def _approve_pinned_term(db_path: Path, *, source: str, target: str) -> None:
+    with connect_database(db_path) as connection, transaction(connection):
+        project_id = connection.execute("SELECT id FROM projects LIMIT 1").fetchone()["id"]
+        candidate_id = insert_glossary_candidate(
+            connection,
+            project_id=project_id,
+            source=source,
+            target=target,
+            category="fallback",
+            notes=None,
+            status="pending",
+            frequency=1,
+        )
+        approve_glossary_candidate(connection, candidate_id=candidate_id)
+
+
+def test_enforcement_repairs_missing_glossary_target(tmp_path, monkeypatch) -> None:
+    # ADR 019 E1+E2: the model dropped a glossary target -> one bounded repair re-ask
+    # supplies it, and the repaired text is committed in place.
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    term_source = _first_segment_text(init.database_path)[:2]
+    _approve_pinned_term(init.database_path, source=term_source, target="PinnedTarget")
+
+    # Primary translation omits the target; the repair completion supplies it.
+    provider = FakeProvider(
+        pattern="A clean english line without the term.",
+        completion='{"translation": "A line containing PinnedTarget exactly.",'
+        ' "notes": [], "uncertain_terms": []}',
+    )
+    translate_project(init.project_toml, provider=provider)
+
+    with sqlite3.connect(init.database_path) as connection:
+        repaired = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM translations WHERE text LIKE '%PinnedTarget%'"
+            ).fetchone()[0]
+        )
+    assert repaired >= 1  # the matching segment was repaired in place
+
+
+def test_translate_project_keeps_primary_when_repair_unparseable(tmp_path, monkeypatch) -> None:
+    # A repair whose output cannot be parsed must keep the good primary translation
+    # (never blocked, never substituted).
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    term_source = _first_segment_text(init.database_path)[:2]
+    _approve_pinned_term(init.database_path, source=term_source, target="PinnedTarget")
+
+    provider = FakeProvider(pattern="No target here.", completion="not valid json")
+    summary = translate_project(init.project_toml, provider=provider)
+
+    assert summary.translated_segments == 6  # all committed despite the repair parse-fail
+    with sqlite3.connect(init.database_path) as connection:
+        repaired = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM translations WHERE text LIKE '%PinnedTarget%'"
+            ).fetchone()[0]
+        )
+    assert repaired == 0  # nothing fabricated; original primary kept
+
+
+class _UncertainProvider(LLMProvider):
+    name = "fake"
+
+    def translate(self, request: TranslationRequest) -> TranslationResponse:
+        return TranslationResponse(
+            translation="A clean english line.",
+            notes=(),
+            uncertain_terms=("ナルトX", "新世界Y"),
+            raw_response="{}",
+            input_tokens=1,
+            output_tokens=1,
+        )
+
+    def complete(self, prompt, *, system=None, max_output_tokens):  # pragma: no cover
+        raise NotImplementedError
+
+    def healthcheck(self) -> ProviderStatus:
+        return ProviderStatus(
+            healthy=True, provider_name=self.name, model="u", message=None, latency_ms=0
+        )
+
+
+def test_enforcement_records_uncertain_terms_as_candidates(tmp_path, monkeypatch) -> None:
+    # ADR 019 E4: the model's self-reported uncertain terms become discovered
+    # glossary candidates (deduped across segments, no extra model call).
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+
+    translate_project(init.project_toml, provider=_UncertainProvider())
+
+    with sqlite3.connect(init.database_path) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            "SELECT source, status, frequency, category FROM glossary_candidates "
+            "WHERE source IN ('ナルトX', '新世界Y') ORDER BY source"
+        ).fetchall()
+    assert len(rows) == 2  # one row per term, deduped across the 6 segments
+    assert all(r["status"] == "pending" and r["category"] == "discovered" for r in rows)
+    assert all(r["frequency"] == 6 for r in rows)  # bumped once per translated segment
+
+
+def test_uncertain_term_already_approved_is_not_recorded(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    _approve_pinned_term(init.database_path, source="ナルトX", target="Naruto")
+
+    translate_project(init.project_toml, provider=_UncertainProvider())
+
+    with sqlite3.connect(init.database_path) as connection:
+        discovered = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM glossary_candidates "
+                "WHERE source = 'ナルトX' AND category = 'discovered'"
+            ).fetchone()[0]
+        )
+    assert discovered == 0  # already handled -> never re-proposed as a discovery
+
+
+def test_build_translation_profile_absent_is_none() -> None:
+    assert build_translation_profile({"translation": {}}) is None
+
+
+def test_build_translation_profile_applies_seed_and_style() -> None:
+    profile = build_translation_profile(
+        {"translation_profile": {"tone": "formal", "tense": "past"}}
+    )
+    assert profile is not None
+    assert profile.tone == "formal"
+    assert profile.has_style
+    assert profile.banned_phrases == DEFAULT_BANNED_PHRASES  # seed applies once declared
+
+
+def test_build_translation_profile_empty_banned_disables_seed() -> None:
+    profile = build_translation_profile({"translation_profile": {"banned_phrases": []}})
+    assert profile is not None
+    assert profile.banned_phrases == ()
+    assert not profile.has_style
+
+
+def test_build_translation_profile_custom_banned_replaces_seed() -> None:
+    profile = build_translation_profile(
+        {"translation_profile": {"banned_phrases": ["very unique slop"]}}
+    )
+    assert profile is not None
+    assert profile.banned_phrases == ("very unique slop",)
 
 
 def test_translate_project_resets_interrupted_segment_and_resumes(tmp_path, monkeypatch) -> None:
@@ -314,6 +465,52 @@ def test_translate_project_persists_raw_response_when_enabled(tmp_path, monkeypa
     translate_project(init.project_toml, provider=provider)
 
     assert _count_persisted_raw_responses(init.database_path) == 6
+
+
+def test_translate_project_fallback_rescues_primary_failure(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("WEAVER_CONNECTIONS_PATH", str(tmp_path / "connections.toml"))
+    from weaver.core.connection_registry import Connection, register_connection
+    from weaver.providers.fake import FakeProvider
+
+    init = initialize_project(FIXTURE_EPUB)
+    register_connection(Connection(name="primary", base_url="https://p/v1", api_key_env="P_KEY"))
+    register_connection(Connection(name="backup", base_url="https://b/v1", api_key_env="B_KEY"))
+
+    text = init.project_toml.read_text(encoding="utf-8")
+    text += (
+        "\n[routing.translate]\n"
+        'connection = "primary"\n'
+        'model = "pm"\n'
+        'fallback = [{ connection = "backup", model = "bm" }]\n'
+    )
+    init.project_toml.write_text(text, encoding="utf-8")
+
+    calls = {"primary": 0, "backup": 0}
+
+    class _CountingFake(FakeProvider):
+        def __init__(self, who: str, fail_rate: float) -> None:
+            super().__init__(fail_rate=fail_rate)
+            self.name = who
+
+        def translate(self, request: TranslationRequest) -> TranslationResponse:
+            calls[self.name] += 1
+            return super().translate(request)
+
+    def _fake_build(cfg: dict[str, object]) -> FakeProvider:
+        who = str(cfg.get("type") or "x")
+        return _CountingFake(who, 1.0 if who == "primary" else 0.0)
+
+    monkeypatch.setattr("weaver.services.translation.build_provider", _fake_build)
+
+    summary = translate_project(init.project_toml)
+
+    # The primary fails every call; the backup rescues every segment.
+    assert summary.translated_segments == 6
+    assert summary.failed_segments == 0
+    # Primary fails segment 1, is cold-marked, then skipped — backup carries the rest.
+    assert calls["primary"] == 1
+    assert calls["backup"] == 6
 
 
 def _first_segment_id(db_path: Path) -> str:

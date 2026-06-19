@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from collections.abc import Callable, Iterable, Sequence
 from contextlib import closing
 from dataclasses import dataclass
@@ -11,19 +12,25 @@ from typing import Any
 
 from weaver.core.config import load_project_config
 from weaver.core.ir import BlockIR, DocumentIR, scope_document_to_volume
-from weaver.errors import ConfigError, ProviderError, ProviderUnavailable
+from weaver.core.slop_seed import DEFAULT_BANNED_PHRASES
+from weaver.core.task_types import TaskType
+from weaver.errors import ConfigError, ParserError, ProviderError, ProviderUnavailable
 from weaver.providers import LLMProvider, build_provider
 from weaver.providers.types import (
     CharacterContext,
     GlossaryTerm,
     TranslationContext,
+    TranslationProfile,
     TranslationRequest,
+    TranslationResponse,
 )
 from weaver.readers import read_source
+from weaver.services.enforcement import evaluate_translation, repair_translation
 from weaver.services.glossary import raise_on_glossary_conflicts
+from weaver.services.routing import resolve_chain
 from weaver.storage.characters import list_characters
 from weaver.storage.db import connect_database, transaction
-from weaver.storage.glossary import list_glossary_terms
+from weaver.storage.glossary import list_glossary_terms, record_uncertain_glossary_candidate
 from weaver.storage.projects import ProjectRecord, get_project
 from weaver.storage.segments import (
     SegmentRecord,
@@ -55,6 +62,10 @@ MEMORY_MODEL = "memory"
 
 VALID_HONORIFIC_POLICIES = frozenset({"preserve", "localize", "hybrid"})
 
+# How long a connection stays cold-marked after a per-segment failure within one
+# run (ADR 018 D4 — a simple try-next window, not a circuit breaker).
+_FALLBACK_COLD_SECONDS = 30.0
+
 ProgressCallback = Callable[[int, int, SegmentRecord, bool, int | None, int | None], None]
 
 
@@ -80,6 +91,7 @@ def build_context(
     previous_segments: Sequence[tuple[str, str]],
     honorific_policy: str = "preserve",
     characters: Iterable[CharacterContext] = (),
+    profile: TranslationProfile | None = None,
 ) -> TranslationContext:
     """Assemble a `TranslationContext` for one segment.
 
@@ -119,6 +131,7 @@ def build_context(
         glossary_terms=filtered_glossary,
         honorific_policy=honorific_policy,
         characters=filtered_characters,
+        profile=profile,
     )
 
 
@@ -232,9 +245,12 @@ def translate_project(
     base_dir = cwd or Path.cwd()
     data = load_project_config(project_toml)
     project_config = data["project"]
-    provider_config = _merge_provider_config(data["provider"], provider_override)
+    engine_chain = resolve_chain(project_toml, TaskType.translate, data=data)
+    provider_config = _merge_provider_config(engine_chain[0].provider_config, provider_override)
     translation_config = data["translation"]
     persist_raw_response = raw_response_logging_enabled(data)
+    enforce_repair = enforce_repair_enabled(data)
+    profile = build_translation_profile(data)
     db_path = _resolve_path(str(project_config["database_path"]), base_dir, project_toml.parent)
     source_path = _resolve_path(str(project_config["source_file"]), base_dir, project_toml.parent)
 
@@ -278,6 +294,20 @@ def translate_project(
             f"Likely cause: project.toml [translation] honorifics must be one of: {valid}. "
             "Next command: edit project.toml and correct the value."
         )
+
+    # Build the fallback engines once per run (skip any that cannot be built — a
+    # missing-key fallback must not abort the run; the primary still translates).
+    # Skipped when a provider is injected directly (test path).
+    fallback_engines: list[tuple[LLMProvider, str]] = []
+    run_cold: dict[str, float] = {}
+    if provider is None:
+        for candidate in engine_chain[1:]:
+            try:
+                fallback_engines.append(
+                    (build_provider(candidate.provider_config), candidate.model)
+                )
+            except (ConfigError, ProviderError):
+                continue
 
     translated_count = 0
     reused_count = 0
@@ -327,6 +357,10 @@ def translate_project(
                     provider_model=provider_model,
                     characters=characters,
                     persist_raw_response=persist_raw_response,
+                    fallbacks=fallback_engines,
+                    cold=run_cold,
+                    enforce_repair=enforce_repair,
+                    profile=profile,
                 )
             )
             if translated:
@@ -420,6 +454,10 @@ def translate_one_segment(
     characters: Iterable[CharacterContext] = (),
     use_translation_memory: bool = True,
     persist_raw_response: bool = False,
+    fallbacks: Sequence[tuple[LLMProvider, str]] = (),
+    cold: dict[str, float] | None = None,
+    enforce_repair: bool = True,
+    profile: TranslationProfile | None = None,
 ) -> tuple[bool, bool, int | None, int | None]:
     """Translate one segment in a single transaction.
 
@@ -494,45 +532,185 @@ def translate_one_segment(
             previous_segments=previous_segments,
             honorific_policy=honorific_policy,
             characters=characters,
+            profile=profile,
         )
-        request = TranslationRequest(
-            segment_id=segment.id,
-            source_text=source_text,
-            normalized_source_text=normalized_source_text,
-            source_language=project.source_lang,
-            target_language=project.target_lang,
-            context=context,
-            provider_model=provider_model,
-        )
-        try:
-            response = provider.translate(request)
-        except ProviderError:
-            update_segment_status(connection, segment_id=segment.id, status="failed")
-            return False, False, None, None
+        banned_phrases = profile.banned_phrases if profile is not None else ()
+        # Primary + ordered fallbacks (ADR 018 D4). Try each in turn; on a
+        # provider failure, cold-mark that engine for a short window and advance.
+        # No circuit breaker (D9) — just a simple try-next. If every candidate is
+        # currently cold, try them anyway rather than failing the segment blind.
+        candidates: list[tuple[LLMProvider, str]] = [(provider, provider_model), *fallbacks]
+        now = time.monotonic()
+        warm = [c for c in candidates if cold is None or cold.get(c[0].name, 0.0) <= now]
+        for cand_provider, cand_model in warm or candidates:
+            request = TranslationRequest(
+                segment_id=segment.id,
+                source_text=source_text,
+                normalized_source_text=normalized_source_text,
+                source_language=project.source_lang,
+                target_language=project.target_lang,
+                context=context,
+                provider_model=cand_model,
+            )
+            try:
+                response = cand_provider.translate(request)
+            except ProviderError:
+                if cold is not None:
+                    cold[cand_provider.name] = now + _FALLBACK_COLD_SECONDS
+                continue
 
-        record_translation(
-            connection,
-            segment_id=segment.id,
-            text=response.translation,
-            source_hash=segment.source_hash,
-            provider=provider.name,
-            model=provider_model,
-            raw_response=response.raw_response if persist_raw_response else None,
-            input_tokens=response.input_tokens,
-            output_tokens=response.output_tokens,
+            # Enforcement gate (ADR 019 E1+E2): glossary/character/anti-slop must
+            # bind. Detection is free; on violation, one bounded repair re-ask (E2)
+            # when enforce_repair is on. Never blocks — the committed text is the
+            # best attempt and any residual violation stays visible in the QA report.
+            final = response
+            spent_input = response.input_tokens or 0
+            spent_output = response.output_tokens or 0
+            if enforce_repair:
+                verdict = evaluate_translation(
+                    segment_id=segment.id,
+                    source_text=source_text,
+                    normalized_source_text=normalized_source_text,
+                    translation_text=response.translation,
+                    glossary_terms=glossary_terms,
+                    characters=characters,
+                    banned_phrases=banned_phrases,
+                )
+                if not verdict.ok:
+                    repaired = _try_repair(
+                        cand_provider,
+                        source_text=source_text,
+                        previous_translation=response.translation,
+                        violations=verdict.violations,
+                        source_language=project.source_lang,
+                        target_language=project.target_lang,
+                    )
+                    if repaired is not None:
+                        # The repair was spent regardless; count its tokens.
+                        spent_input += repaired.input_tokens or 0
+                        spent_output += repaired.output_tokens or 0
+                        recheck = evaluate_translation(
+                            segment_id=segment.id,
+                            source_text=source_text,
+                            normalized_source_text=normalized_source_text,
+                            translation_text=repaired.translation,
+                            glossary_terms=glossary_terms,
+                            characters=characters,
+                            banned_phrases=banned_phrases,
+                        )
+                        # Keep the repaired attempt unless it is strictly worse than
+                        # the original (a targeted fix that regressed is discarded).
+                        if len(recheck.violations) <= len(verdict.violations):
+                            final = repaired
+
+            record_translation(
+                connection,
+                segment_id=segment.id,
+                text=final.translation,
+                source_hash=segment.source_hash,
+                provider=cand_provider.name,
+                model=cand_model,
+                raw_response=final.raw_response if persist_raw_response else None,
+                input_tokens=final.input_tokens,
+                output_tokens=final.output_tokens,
+            )
+            save_translation_memory(
+                connection,
+                project_id=project.id,
+                source_text=normalized_source_text,
+                source_hash=segment.source_hash,
+                target_text=final.translation,
+                provider=cand_provider.name,
+                model=cand_model,
+                protect_manual=True,
+            )
+            # Recover the model's self-reported uncertain terms as discovered
+            # glossary candidates (ADR 019 E4) — free entity discovery, no extra
+            # model call. Idempotent + non-intrusive; the user reviews them later.
+            for uncertain_term in final.uncertain_terms:
+                record_uncertain_glossary_candidate(
+                    connection, project_id=project.id, source=uncertain_term
+                )
+            update_segment_status(connection, segment_id=segment.id, status="translated")
+            return True, False, spent_input, spent_output
+
+        update_segment_status(connection, segment_id=segment.id, status="failed")
+        return False, False, None, None
+
+
+def _try_repair(
+    provider: LLMProvider,
+    *,
+    source_text: str,
+    previous_translation: str,
+    violations: tuple[str, ...],
+    source_language: str,
+    target_language: str,
+) -> TranslationResponse | None:
+    """One bounded enforcement-repair re-ask; None when it fails (keep the original).
+
+    The repair is best-effort on an already-successful translation: any failure —
+    a provider error, unparseable output, or a provider that does not implement the
+    ``complete()`` primitive (``NotImplementedError``) — must never lose the good
+    primary translation. The caller commits the original attempt and the residual
+    violation stays visible in the QA report (never blocked, never substituted).
+    """
+
+    try:
+        return repair_translation(
+            provider,
+            source_text=source_text,
+            previous_translation=previous_translation,
+            violations=violations,
+            source_language=source_language,
+            target_language=target_language,
         )
-        save_translation_memory(
-            connection,
-            project_id=project.id,
-            source_text=normalized_source_text,
-            source_hash=segment.source_hash,
-            target_text=response.translation,
-            provider=provider.name,
-            model=provider_model,
-            protect_manual=True,
-        )
-        update_segment_status(connection, segment_id=segment.id, status="translated")
-        return True, False, response.input_tokens, response.output_tokens
+    except (ProviderError, ParserError, NotImplementedError):
+        return None
+
+
+def enforce_repair_enabled(config: dict[str, Any]) -> bool:
+    """Read ``[translation] enforce_repair`` (default True — ADR 019 §6).
+
+    Detection always runs; this flag only gates the token-costing repair re-ask.
+    """
+    translation_config = config.get("translation", {})
+    if not isinstance(translation_config, dict):
+        return True
+    return bool(translation_config.get("enforce_repair", True))
+
+
+def build_translation_profile(config: dict[str, Any]) -> TranslationProfile | None:
+    """Build the project's ``[translation_profile]`` style contract (ADR 019 E3).
+
+    Returns ``None`` when the section is absent (no behavior change). When present,
+    ``banned_phrases`` defaults to the shipped seed; ``[]`` disables it and a custom
+    array replaces it (the seed only applies once a profile is declared).
+    """
+    raw = config.get("translation_profile")
+    if not isinstance(raw, dict):
+        return None
+    banned = raw.get("banned_phrases")
+    if banned is None:
+        banned_phrases = DEFAULT_BANNED_PHRASES
+    elif isinstance(banned, list):
+        banned_phrases = tuple(str(phrase) for phrase in banned)
+    else:
+        banned_phrases = ()
+    return TranslationProfile(
+        tone=_clean_profile_field(raw.get("tone")),
+        dialog_style=_clean_profile_field(raw.get("dialog_style")),
+        name_rendering=_clean_profile_field(raw.get("name_rendering")),
+        tense=_clean_profile_field(raw.get("tense")),
+        banned_phrases=banned_phrases,
+    )
+
+
+def _clean_profile_field(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def raw_response_logging_enabled(config: dict[str, Any]) -> bool:
