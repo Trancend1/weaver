@@ -406,7 +406,7 @@ Follow the current engineering ADR/source-of-truth listed in §1.
 - **Naming:** Forbidden filenames: `utils.py`, `helpers.py`, `manager.py`. Avoid class names ending `Manager`/`Helper`/`Handler` unless they truly are that pattern. Name modules for purpose.
 - **Public APIs:** No `**kwargs` in public APIs. No bare `except:` or `except Exception:` outside CLI/web boundaries. Never use `except: pass`.
 - **Errors:** All domain errors go through the `WeaverError` hierarchy. User-facing errors must state what failed, likely cause, and next action.
-- **State discipline:** State writes go through services. CLI/web must not touch SQLite directly. One segment translation = one transaction. Status transitions live in the same transaction as the data they describe.
+- **State discipline:** State writes go through services. CLI/web must not touch SQLite directly. One segment result = one atomic commit (translation row + memory + status together); provider network calls never run inside an open transaction. Status transitions live in the same transaction as the data they describe.
 - **Layer boundaries:** Shared/core code is framework-agnostic. No web `Request`/`Response`, DI wiring, template output, or CLI formatting in core services. Pydantic belongs at the web/API boundary. UI templates/routes carry no business logic.
 - **API keys:** Env vars or local secrets file only. Never store keys in config, logs, rendered HTML, SSE events, tests, or fixtures. Shell env wins.
 - **Value types:** Use `@dataclass(frozen=True)` for value objects. Use `pathlib.Path` for paths. Use atomic writes for valuable state.

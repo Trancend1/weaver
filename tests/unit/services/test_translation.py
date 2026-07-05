@@ -313,3 +313,69 @@ def test_tm_short_circuit_stays_ahead_of_fallback(tmp_path: Path) -> None:
     ).fetchone()
     assert row["provider"] == "memory"
     conn.close()
+
+
+def test_provider_call_runs_outside_write_transaction(tmp_path: Path) -> None:
+    # The provider network call can take minutes (timeout x chain x repair).
+    # Holding the WAL write lock across it starves every other writer into
+    # "database is locked" (v0.7.2 audit finding H3) — so no transaction may
+    # be open while the provider runs.
+    conn, seg, proj = _db_with_segment(tmp_path / "test.db")
+    in_txn_during_call: list[bool] = []
+
+    class TxnProbeProvider(FakeProvider):
+        def translate(self, request):  # noqa: ANN001, ANN201 — test double
+            in_txn_during_call.append(conn.in_transaction)
+            return super().translate(request)
+
+    translated, reused, _, _ = translate_one_segment(
+        connection=conn,
+        segment=seg,
+        source_text="hello",
+        normalized_source_text="hello",
+        project=proj,
+        glossary_terms=(),
+        honorific_policy="preserve",
+        provider=TxnProbeProvider(),
+        provider_model="m",
+        enforce_repair=False,
+    )
+
+    assert translated and not reused
+    assert in_txn_during_call == [False], "provider ran while holding the write lock"
+    status = conn.execute("SELECT status FROM segments WHERE id = ?", (seg.id,)).fetchone()[
+        "status"
+    ]
+    assert status == "translated"
+    conn.close()
+
+
+def test_unexpected_provider_exception_restores_prior_status(tmp_path: Path) -> None:
+    # A non-ProviderError (e.g. ParserError) escapes the fallback loop. The
+    # segment must not stay stranded ``in_progress``: its pre-run status is
+    # restored before the exception propagates.
+    conn, seg, proj = _db_with_segment(tmp_path / "test.db")
+
+    class ExplodingProvider(FakeProvider):
+        def translate(self, request):  # noqa: ANN001, ANN201 — test double
+            raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        translate_one_segment(
+            connection=conn,
+            segment=seg,
+            source_text="hello",
+            normalized_source_text="hello",
+            project=proj,
+            glossary_terms=(),
+            honorific_policy="preserve",
+            provider=ExplodingProvider(),
+            provider_model="m",
+            enforce_repair=False,
+        )
+
+    status = conn.execute("SELECT status FROM segments WHERE id = ?", (seg.id,)).fetchone()[
+        "status"
+    ]
+    assert status == "pending", "segment must return to its pre-run status"
+    conn.close()
