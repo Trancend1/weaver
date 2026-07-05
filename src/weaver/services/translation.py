@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
 import time
 from collections.abc import Callable, Iterable, Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from weaver.core.config import load_project_config
 from weaver.core.ir import BlockIR, DocumentIR, scope_document_to_volume
@@ -34,6 +35,7 @@ from weaver.storage.glossary import list_glossary_terms, record_uncertain_glossa
 from weaver.storage.projects import ProjectRecord, get_project
 from weaver.storage.segments import (
     SegmentRecord,
+    SegmentStatus,
     list_segments_for_translation,
     reset_in_progress_segments,
     sync_document_segments,
@@ -459,19 +461,30 @@ def translate_one_segment(
     enforce_repair: bool = True,
     profile: TranslationProfile | None = None,
 ) -> tuple[bool, bool, int | None, int | None]:
-    """Translate one segment in a single transaction.
+    """Translate one segment; commit its result and status atomically.
 
-    Sets the segment to ``in_progress``. When ``use_translation_memory`` is True,
-    first looks up the segment's ``source_hash`` in the project's translation
-    memory; on an exact match it records the stored target as a new attempt
-    (provider/model ``"memory"``), marks the segment ``translated``, and returns
-    **without calling the provider**. On a miss it assembles context (rolling
-    window + filtered glossary/characters), calls the provider, records the
-    result, and saves the successful translation back into memory (never
-    overwriting a ``manual`` entry). On ``ProviderError`` the status becomes
-    ``failed``, no attempt is recorded, and nothing is written to memory. Source
-    text is never mutated. The translation-memory key is always the stored
-    ``segment.source_hash``; it is never recomputed here.
+    Sets the segment to ``in_progress`` (its own short transaction). When
+    ``use_translation_memory`` is True, first looks up the segment's
+    ``source_hash`` in the project's translation memory; on an exact match it
+    records the stored target as a new attempt (provider/model ``"memory"``),
+    marks the segment ``translated``, and returns **without calling the
+    provider**. On a miss it assembles context (rolling window + filtered
+    glossary/characters), calls the provider, records the result, and saves the
+    successful translation back into memory (never overwriting a ``manual``
+    entry). On ``ProviderError`` the status becomes ``failed``, no attempt is
+    recorded, and nothing is written to memory. Source text is never mutated.
+    The translation-memory key is always the stored ``segment.source_hash``; it
+    is never recomputed here.
+
+    Transaction shape: the provider network call (up to minutes with fallbacks
+    and the repair re-ask) runs **outside** any transaction — holding the WAL
+    write lock across it starves every other writer (cockpit edits, imports)
+    into "database is locked". The invariant that matters is preserved: the
+    translation row, memory write, discovered candidates, and the ``translated``
+    status commit together in one transaction. If the process dies between the
+    ``in_progress`` marker and the result commit, ``reset_in_progress_segments``
+    reclaims the segment on the next run; an unexpected in-flight exception
+    restores the segment's prior status before propagating.
 
     Args:
         connection: Open writable SQLite connection.
@@ -504,20 +517,24 @@ def translate_one_segment(
     with transaction(connection):
         update_segment_status(connection, segment_id=segment.id, status="in_progress")
 
+    settled = False
+    try:
         if use_translation_memory:
             remembered = lookup_translation_memory(
                 connection, project_id=project.id, source_hash=segment.source_hash
             )
             if remembered is not None:
-                record_translation(
-                    connection,
-                    segment_id=segment.id,
-                    text=remembered.target_text,
-                    source_hash=segment.source_hash,
-                    provider=MEMORY_PROVIDER,
-                    model=MEMORY_MODEL,
-                )
-                update_segment_status(connection, segment_id=segment.id, status="translated")
+                with transaction(connection):
+                    record_translation(
+                        connection,
+                        segment_id=segment.id,
+                        text=remembered.target_text,
+                        source_hash=segment.source_hash,
+                        provider=MEMORY_PROVIDER,
+                        model=MEMORY_MODEL,
+                    )
+                    update_segment_status(connection, segment_id=segment.id, status="translated")
+                settled = True
                 return True, True, None, None
 
         previous_segments = list_previous_translated_segments(
@@ -603,39 +620,58 @@ def translate_one_segment(
                         if len(recheck.violations) <= len(verdict.violations):
                             final = repaired
 
-            record_translation(
-                connection,
-                segment_id=segment.id,
-                text=final.translation,
-                source_hash=segment.source_hash,
-                provider=cand_provider.name,
-                model=cand_model,
-                raw_response=final.raw_response if persist_raw_response else None,
-                input_tokens=final.input_tokens,
-                output_tokens=final.output_tokens,
-            )
-            save_translation_memory(
-                connection,
-                project_id=project.id,
-                source_text=normalized_source_text,
-                source_hash=segment.source_hash,
-                target_text=final.translation,
-                provider=cand_provider.name,
-                model=cand_model,
-                protect_manual=True,
-            )
-            # Recover the model's self-reported uncertain terms as discovered
-            # glossary candidates (ADR 019 E4) — free entity discovery, no extra
-            # model call. Idempotent + non-intrusive; the user reviews them later.
-            for uncertain_term in final.uncertain_terms:
-                record_uncertain_glossary_candidate(
-                    connection, project_id=project.id, source=uncertain_term
+            # Result + memory + candidates + status commit atomically.
+            with transaction(connection):
+                record_translation(
+                    connection,
+                    segment_id=segment.id,
+                    text=final.translation,
+                    source_hash=segment.source_hash,
+                    provider=cand_provider.name,
+                    model=cand_model,
+                    raw_response=final.raw_response if persist_raw_response else None,
+                    input_tokens=final.input_tokens,
+                    output_tokens=final.output_tokens,
                 )
-            update_segment_status(connection, segment_id=segment.id, status="translated")
+                save_translation_memory(
+                    connection,
+                    project_id=project.id,
+                    source_text=normalized_source_text,
+                    source_hash=segment.source_hash,
+                    target_text=final.translation,
+                    provider=cand_provider.name,
+                    model=cand_model,
+                    protect_manual=True,
+                )
+                # Recover the model's self-reported uncertain terms as discovered
+                # glossary candidates (ADR 019 E4) — free entity discovery, no extra
+                # model call. Idempotent + non-intrusive; the user reviews them later.
+                for uncertain_term in final.uncertain_terms:
+                    record_uncertain_glossary_candidate(
+                        connection, project_id=project.id, source=uncertain_term
+                    )
+                update_segment_status(connection, segment_id=segment.id, status="translated")
+            settled = True
             return True, False, spent_input, spent_output
 
-        update_segment_status(connection, segment_id=segment.id, status="failed")
+        with transaction(connection):
+            update_segment_status(connection, segment_id=segment.id, status="failed")
+        settled = True
         return False, False, None, None
+    finally:
+        if not settled:
+            # An unexpected exception (e.g. ParserError) is propagating: put the
+            # segment back to its pre-run status so it is not stranded
+            # ``in_progress``. Best-effort — if this write itself cannot commit,
+            # ``reset_in_progress_segments`` reclaims the segment on the next run.
+            with contextlib.suppress(sqlite3.Error), transaction(connection):
+                update_segment_status(
+                    connection,
+                    segment_id=segment.id,
+                    # The record's status came from the DB and its CHECK
+                    # constraint, so the narrowing is safe.
+                    status=cast(SegmentStatus, segment.status),
+                )
 
 
 def _try_repair(

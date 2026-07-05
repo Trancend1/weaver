@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from weaver.core.secret_store import set_secret
 from weaver.errors import ConfigError, ProviderUnavailable
-from weaver.providers.registry import build_provider, known_protocols, known_provider_types
+from weaver.providers.openai_chat import OpenAIChatProvider
+from weaver.providers.registry import (
+    build_provider,
+    known_protocols,
+    known_provider_types,
+    normalize_provider_config,
+)
 
 
 def test_known_provider_types_and_protocols_include_compatibility_values() -> None:
@@ -62,6 +71,53 @@ def test_legacy_gemini_type_routes_through_openai_chat(monkeypatch) -> None:
     provider = build_provider({"type": "gemini"})
     # Transport is the unified openai_chat; the normalized type is "custom".
     assert provider.name == "custom"
+
+
+def test_legacy_gemini_shim_targets_openai_compatible_endpoint() -> None:
+    # Google's OpenAI-compatible surface is /v1beta/openai (ADR 018 §5.3) —
+    # bare /v1beta has no /chat/completions route, so the D6 shim must not
+    # point there (v0.7.2 audit finding H2).
+    normalized = normalize_provider_config({"type": "gemini"})
+    assert normalized["base_url"] == "https://generativelanguage.googleapis.com/v1beta/openai"
+
+
+def test_key_saved_only_in_secret_store_is_found_at_build_time(monkeypatch, tmp_path: Path) -> None:
+    # A key saved from a *running* cockpit lands in secrets.toml but not in
+    # os.environ (apply_secrets_to_env runs only at startup). The factory must
+    # fall back to the store so the very next translate works without a
+    # restart (v0.7.2 audit finding H1).
+    monkeypatch.delenv("WEAVER_CONN_STOREONLY", raising=False)
+    monkeypatch.setenv("WEAVER_SECRETS_PATH", str(tmp_path / "secrets.toml"))
+    set_secret("WEAVER_CONN_STOREONLY", "sk-stored")
+
+    provider = build_provider(
+        {
+            "type": "custom",
+            "base_url": "https://api.example.com/v1",
+            "model": "m",
+            "api_key_env": "WEAVER_CONN_STOREONLY",
+        }
+    )
+
+    assert provider.name == "custom"  # built — no ProviderUnavailable
+
+
+def test_shell_env_wins_over_secret_store_at_build_time(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("WEAVER_SECRETS_PATH", str(tmp_path / "secrets.toml"))
+    set_secret("WEAVER_CONN_BOTH", "sk-stored")
+    monkeypatch.setenv("WEAVER_CONN_BOTH", "sk-shell")
+
+    provider = build_provider(
+        {
+            "type": "custom",
+            "base_url": "https://api.example.com/v1",
+            "model": "m",
+            "api_key_env": "WEAVER_CONN_BOTH",
+        }
+    )
+
+    assert isinstance(provider, OpenAIChatProvider)
+    assert provider._client.api_key == "sk-shell"  # noqa: SLF001 — asserting key precedence
 
 
 def test_legacy_ollama_type_routes_to_local_keyless_openai_chat(monkeypatch) -> None:

@@ -1,10 +1,11 @@
 # Execution Plan — Translation Enforcement Loop (ADR 019, P0)
 
-**Status:** Active — **ADR 019 accepted (2026-06-16).** Folded into **v0.7.2**.
+**Status:** ✅ Complete — **released in tag `v0.7.2`.** ADR 019 accepted 2026-06-16.
 **E1+E2 shipped** (commit `992d533`, full suite 1564 passed) — together (a detection-only gate
 would be a zero-caller module, §4.2/§4.3). **E3+E4 shipped** (`[translation_profile]` `<profile>`
-block + banned-slop soft check; `uncertain_terms` → discovered glossary candidates). **P0 done —
-next: tag v0.7.2.**
+block + banned-slop soft check; `uncertain_terms` → discovered glossary candidates). Still open
+(carried into v0.7.3 planning, CLAUDE.md §2.3): owner-visible E2 repair token-cost delta on a
+live run; persisting/surfacing enforcement violations + repair outcomes.
 **Governs:** the P0 core of ADR 019 (make glossary/character binding + anti-slop real).
 **Branch target:** `feat/connection-first-routing` (owner direction: complete everything in
 v0.7.2, no PR).

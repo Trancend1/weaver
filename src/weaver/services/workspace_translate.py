@@ -227,7 +227,11 @@ def run_translation(
     should_cancel: Callable[[], bool] | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> ChapterTranslationResult:
-    """Translate a plan's segments, one transaction each.
+    """Translate a plan's segments, committing each result atomically.
+
+    The provider call itself runs outside any transaction (see
+    :func:`weaver.services.translation.translate_one_segment`), so other
+    writers are never blocked while a segment is in flight.
 
     Args:
         plan: A :class:`TranslationPlan` from :func:`prepare_chapter_translation`.

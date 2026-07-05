@@ -58,7 +58,7 @@ manual edits: status=manual and survive retry-failed
 - Read paths must not migrate, reset `in_progress`, call providers, run QA scans, or hash source files.
 
 ## Maintenance / Safety Rules
-- State writes go through services; one segment translation = one transaction.
+- State writes go through services; one segment result = one atomic commit (provider calls run outside the transaction).
 - Migrations must be forward + idempotency tested; no silent data loss.
 - Valuable state writes use atomic patterns; path handling uses `pathlib.Path`.
 - Malformed project/source input must fail visibly without crashing the cockpit.

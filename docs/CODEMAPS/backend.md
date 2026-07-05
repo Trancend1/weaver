@@ -86,8 +86,8 @@ approved glossary + characters + TM + prompt templates
 ## Service Mapping
 - Routers call services; services own workflow decisions and writes.
 - `api/jobs.py` + `services/job_store.py` implement SQLite-backed in-process persistent jobs (ADR `010`). No external queue.
-- Provider config UI writes flow through `services/provider_config.py`; the JSON `/config` API remains available for redacted config reads/writes.
-- Provider calls flow through `providers/registry.py`; legacy aliases (`deepseek`, `gemini`, `ollama`, `fake`) remain supported; prompts/parsers live in services (ADR `014`).
+- Connection/routing writes flow through `services/connections.py` (registry + hybrid key) and `services/config_writer.set_routing` (`[routing.<task>]`); the JSON `/config` API + `services/provider_config.py` remain for redacted legacy config reads/writes.
+- Provider calls flow through `providers/registry.py` — one real transport `openai_chat` + `fake` (ADR 018); legacy brand aliases (`deepseek`, `gemini`, `ollama`) normalize through the D6 shim; the engine chain is resolved by `services/routing.py` (`[routing.<task>]` → legacy `[provider]` → workspace defaults); prompts/parsers live in services (ADR `014`).
 - Templates consume service DTOs; templates carry no business logic.
 - `services/export_book.py` is canonical for UI/API export; `services/export.py` is CLI-only legacy.
 

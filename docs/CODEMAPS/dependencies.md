@@ -1,4 +1,4 @@
-<!-- Generated: 2026-06-14 | Files scanned: pyproject.toml, src/weaver/providers/*.py, desktop/src/*.rs, remote origin/main:docs/{PROVIDER_AND_MODEL_CONFIG,SECURITY_AND_PERFORMANCE,INSTALL_DESKTOP,PROMPT_DESIGN}.md | Token estimate: ~900 -->
+<!-- Generated: 2026-06-14 | Updated: 2026-07-05 (ADR 018 connection-first routing) | Files scanned: pyproject.toml, src/weaver/providers/*.py, desktop/src/*.rs | Token estimate: ~900 -->
 # Dependencies
 
 ## Runtime (`pyproject.toml`)
@@ -7,8 +7,7 @@
 - `ebooklib>=0.20` -> EPUB read/write.
 - `jinja2>=3.1` -> server-rendered cockpit.
 - `httpx>=0.27` -> HTTP client for providers/services.
-- `openai>=1.40` -> DeepSeek + `custom` OpenAI-compatible providers.
-- `google-generativeai>=0.7` -> Gemini provider.
+- `openai>=1.40` -> the single `openai_chat` transport: any OpenAI-compatible endpoint (DeepSeek, OpenRouter, Groq, Gemini/Ollama compat endpoints, local servers). `google-generativeai` was removed in v0.7.2 (ADR 018).
 - stdlib: `sqlite3`, `tomllib`, `asyncio` (FastAPI layer only), `zipfile`, `tempfile`, `pathlib`.
 
 ## Optional Extras
@@ -18,31 +17,30 @@
 - `weaver[dev]`: `pytest>=8`, `ruff>=0.6`, `pyright>=1.1`.
 - `weaver[all]` -> `tui,wizard,web`.
 
-## Provider Adapters (`src/weaver/providers/`)
-Registry-driven: `known_provider_types()` from `providers/registry.py` is the single source of truth.
-Legacy aliases `deepseek`, `gemini`, `ollama`, and `fake` remain supported and normalize through the registry for compatibility.
+## Provider Engines (`src/weaver/providers/`)
+One real transport since v0.7.2 (ADR 018): `openai_chat` (OpenAI-compatible `/chat/completions`, `providers/openai_chat.py`) plus `fake` for dev/CI. Legacy `[provider] type` brand labels (`deepseek`, `gemini`, `ollama`) survive only as a migration shim (`_LEGACY_DEFAULTS` in `providers/registry.py`) that normalizes onto `openai_chat` endpoints (gemini → `…/v1beta/openai`, ollama → `:11434/v1` keyless).
 
-| Provider | Auth | Notes |
+| Engine | Auth | Notes |
 | --- | --- | --- |
-| `deepseek` | `DEEPSEEK_API_KEY` | Default cloud. OpenAI-compatible `/v1/chat/completions`; honors JSON response format. |
-| `gemini` | `GEMINI_API_KEY` | Free-tier cloud. Uses `google-generativeai`; honors JSON MIME + output cap. |
-| `ollama` | none | Local inference via `/api/generate`; no cloud traffic. |
-| `custom` | env-var per `api_key_env` | Any OpenAI-compatible endpoint; `base_url` from config. |
+| `openai_chat` | env var named by `api_key_env`; value resolved **shell env → `~/.weaver/secrets.toml`** at build time; keyless supported (empty `api_key_env`) | Any OpenAI-compatible endpoint; `base_url`/`model` per connection or `[provider]` block. |
 | `fake` | none | Dev/CI deterministic provider. Never use live LLMs in CI. |
 
-All transport providers implement `translate()` and domain-agnostic `complete(prompt, system, max_output_tokens) -> Completion` (ADR `014`). Feature prompts/parsing stay in services (`providers/prompts.py`, `services/glossary_suggestion.py`, translation services).
+Connections (ADR 018): registry `~/.weaver/connections.toml` (`core/connection_registry.py`, `WEAVER_CONNECTIONS_PATH`), model-discovery cache `~/.weaver/connection_models.json` (`core/connection_models.py`). The cockpit's hybrid key flow stores a typed key under `WEAVER_CONN_<NAME>` in the secret store.
+
+Transport providers implement `translate()` and domain-agnostic `complete(prompt, system, max_output_tokens) -> Completion` (ADR `014`). Feature prompts/parsing stay in services (`providers/prompts.py`, `services/glossary_suggestion.py`, translation services).
 
 ## Provider Config / Secrets
-- `/ui/providers` is the canonical provider config UI. `/ui/config` is a GET-only compatibility redirect to `/ui/providers#config-editor` and has no edit form or POST route.
-- `/config` remains the JSON provider/model + secrets API; it is separate from the provider hub UI and returns redacted config only.
-- Project config: `.weaver/<name>/project.toml` `[provider] type/model/base_url/api_key_env/allow_insecure` plus `[translation]`, `[glossary]`, `[qa]`.
+- `/ui/providers` is the canonical **Connections** UI (Add/Test/Delete + per-project Active AI / Switch AI). `/ui/config` is a GET-only compatibility redirect to `/ui/providers#connections`; the legacy per-project editor form was removed in v0.7.2.
+- `/config` remains the JSON provider/model + secrets API; it is separate from the hub UI and returns redacted config only.
+- Project config: `.weaver/<name>/project.toml` — `[routing.<task>]` (`connection`/`model` + `fallback` array, machine-managed via `config_writer.set_routing`) and/or legacy `[provider] type/model/base_url/api_key_env/allow_insecure`, plus `[translation]`, `[translation_profile]`, `[glossary]`, `[qa]`.
 - API keys: environment variables or `~/.weaver/secrets.toml` with restrictive mode; env wins.
 - Keys never appear in config responses, rendered HTML, logs, provider logs, or SSE events.
 - Web secrets endpoints accept POST/DELETE only; the provider hub and JSON secret API store values but only render/return secret names and presence.
 - Cloud HTTP must be HTTPS unless `allow_insecure=true` for debug/local testing.
 
 ## Config Precedence
-CLI flag › env var (`WEAVER_DEFAULT_PROVIDER` / `WEAVER_DEFAULT_MODEL` / `WEAVER_OUTPUT_DIR`) › `project.toml [provider]` › `~/.weaver/config.toml [defaults]` › built-in default.
+- Translate engine (ADR 018, `services/routing.py`): `[routing.<task>]` connection › legacy `[provider]` (when it carries a model) › workspace `[defaults].default_connection`.
+- Other config: CLI flag › env var (`WEAVER_DEFAULT_PROVIDER` / `WEAVER_DEFAULT_MODEL` / `WEAVER_OUTPUT_DIR`) › `project.toml` › `~/.weaver/config.toml [defaults]` › built-in default.
 
 ## CLI Secret Store Commands
 ```bash
@@ -51,13 +49,11 @@ weaver secrets set MY_KEY --value sk-...      # non-interactive
 weaver secrets list                           # names only — values never shown
 weaver secrets rm MY_KEY
 ```
-`apply_secrets_to_env()` at startup loads the store and sets keys **not already in env**. Override store path with `WEAVER_SECRETS_PATH`.
+`apply_secrets_to_env()` at startup loads the store and sets keys **not already in env**; the provider factory additionally falls back to the store at build time, so a key saved from a running cockpit works without a restart (shell env always wins). Override store path with `WEAVER_SECRETS_PATH`.
 
-## Adding a Provider Type
-1. Add adapter in `providers/` implementing the interface (`base.py`; OpenAI-compatible → reuse `custom` engine as model).
-2. Register in `providers/registry.py` → `known_provider_types()`.
-3. Resolve key from env var or `api_key_env` via secret-store — never hardcode in config.
-4. Unit tests using `FakeProvider` patterns; never call live LLMs in CI.
+## Adding an Endpoint / Provider
+- A new endpoint is **configuration, not code**: add a connection (cockpit Connections or `weaver connections add`) with name + base_url + key; pick a model via Switch AI or `weaver routing set`.
+- A new transport *protocol* (anything not OpenAI-compatible) requires a new ADR (ADR 018 D1 collapsed the registry to `openai_chat` + `fake`).
 
 ## Prompt / AI Contracts
 - Prompt design is data-flow-specific, not provider-specific. Provider adapters are transport; domain validation belongs in services.
@@ -66,7 +62,7 @@ weaver secrets rm MY_KEY
 - No hidden vendor default for AI suggestions; configured provider is used.
 
 ## External Services
-- DeepSeek, Gemini, Ollama, and custom OpenAI-compatible endpoints only when configured.
+- Only user-configured OpenAI-compatible endpoints (DeepSeek, OpenRouter, Gemini/Ollama compat endpoints, local servers, …) are ever contacted.
 - No telemetry, no hosted backend, no phone-home, no Sentry/OpenTelemetry.
 - EPUBCheck is optional external validation requiring Java + `epubcheck.jar`.
 
