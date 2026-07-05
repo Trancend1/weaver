@@ -1,6 +1,6 @@
 # ADR 018 — Connection-first routing: collapse providers to one real protocol
 
-**Status:** Proposed (2026-06-15)
+**Status:** Accepted (2026-06-15) — implemented and shipped in **v0.7.2** (2026-06-16; tagged on `main`). The legacy gemini shim endpoint was corrected to `…/v1beta/openai` in the 2026-07-05 post-release audit fix (`fix/v072-audit-blockers`).
 
 ## Context
 
