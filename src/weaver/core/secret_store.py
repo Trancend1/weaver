@@ -6,8 +6,10 @@ rendered output (CLAUDE.md §4.2, ADR ``0017``).
 
 The store maps an **env-var name → secret value** under a ``[keys]`` table. At
 startup :func:`apply_secrets_to_env` loads it and sets any name not already in
-``os.environ`` — a real shell env var always wins. Providers keep reading
-``os.environ`` and never learn the store exists.
+``os.environ`` — a real shell env var always wins. The provider *factory*
+(``providers/registry``) additionally reads the store as a fallback at build
+time, so a key saved from a running cockpit takes effect without a restart; the
+transport itself never learns the store exists.
 """
 
 from __future__ import annotations

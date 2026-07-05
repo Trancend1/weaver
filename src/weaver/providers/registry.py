@@ -13,9 +13,11 @@ new project uses those labels — new configs speak in protocol + connection.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from weaver.core.secret_store import load_secrets
 from weaver.errors import ConfigError
 from weaver.providers.base import LLMProvider
 from weaver.providers.config_values import read_float, read_int
@@ -44,7 +46,9 @@ _LEGACY_DEFAULTS: dict[str, dict[str, str]] = {
     "gemini": {
         "protocol": PROTOCOL_OPENAI_CHAT,
         "model": "gemini-1.5-flash",
-        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+        # Google's OpenAI-compatible surface lives under /v1beta/openai
+        # (ADR 018 §5.3); bare /v1beta has no /chat/completions route.
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
         "api_key_env": "GEMINI_API_KEY",
     },
     "ollama": {
@@ -168,8 +172,25 @@ def _build_openai_chat(config: Mapping[str, Any]) -> LLMProvider:
             ),
             api_key_env=api_key_env,
             name=_clean(config.get("type")) or "openai_chat",
-        )
+        ),
+        api_key=_resolve_key_value(api_key_env),
     )
+
+
+def _resolve_key_value(api_key_env: str) -> str | None:
+    """Resolve the key value for ``api_key_env``: shell env first, secret store second.
+
+    ``apply_secrets_to_env`` only runs at process startup, so a key saved to the
+    secret store from a running cockpit (Add connection / Secrets page) would be
+    invisible to ``os.environ`` until restart. Reading the store here — exactly like
+    the Test-connection probe does — makes a freshly saved or rotated key take
+    effect on the next provider build. Shell env always wins; ``None`` lets the
+    provider fall through to its own missing-key guard (clear error, never silent).
+    """
+
+    if not api_key_env:
+        return None
+    return os.environ.get(api_key_env) or load_secrets().get(api_key_env) or None
 
 
 def _build_custom(config: Mapping[str, Any]) -> LLMProvider:
