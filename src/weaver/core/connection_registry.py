@@ -90,7 +90,10 @@ def load_connections(path: Path | None = None) -> dict[str, Connection]:
 def list_connections(path: Path | None = None) -> list[Connection]:
     """Return all registered connections, sorted by name."""
 
-    return [load_connections(path)[name] for name in sorted(load_connections(path))]
+    # Parse the registry once; the previous form parsed connections.toml twice
+    # (once to sort, once to index) on every providers/routing render.
+    connections = load_connections(path)
+    return [connections[name] for name in sorted(connections)]
 
 
 def get_connection(name: str, *, path: Path | None = None) -> Connection | None:

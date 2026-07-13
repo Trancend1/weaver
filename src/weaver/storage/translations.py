@@ -169,12 +169,20 @@ def list_previous_translated_segments(
         `(source_text, translated_text)` pairs ordered oldest-first.
     """
 
+    # Scope the `latest` CTE to this chapter. Aggregating the whole
+    # `translations` table (unscoped GROUP BY) is O(rows-in-run) per call and,
+    # since this runs once per provider-bound segment, O(n²) across a run. A
+    # segment belongs to exactly one chapter, so MAX(attempt) per segment is
+    # identical whether computed globally or chapter-scoped — results are
+    # byte-identical, only the scan shrinks to the chapter (F2).
     rows = connection.execute(
         """
         WITH latest AS (
-          SELECT segment_id, MAX(attempt) AS attempt
-          FROM translations
-          GROUP BY segment_id
+          SELECT t.segment_id AS segment_id, MAX(t.attempt) AS attempt
+          FROM translations t
+          JOIN segments s ON s.id = t.segment_id
+          WHERE s.chapter_id = ?
+          GROUP BY t.segment_id
         )
         SELECT s.source_text, t.text
         FROM segments s
@@ -187,7 +195,7 @@ def list_previous_translated_segments(
         ORDER BY s.block_order DESC
         LIMIT ?
         """,
-        (chapter_id, before_block_order, limit),
+        (chapter_id, chapter_id, before_block_order, limit),
     ).fetchall()
     return [(str(row["source_text"]), str(row["text"])) for row in reversed(rows)]
 
@@ -226,12 +234,18 @@ def list_export_segment_states(
     if not ids:
         return []
     placeholders = ", ".join("?" for _ in ids)
+    # Scope the `latest` CTE to the exported chapters instead of aggregating the
+    # whole `translations` table (same O(n²)-on-large-DB shape as
+    # `list_previous_translated_segments`; a segment maps to one chapter so
+    # MAX(attempt) is unchanged — byte-identical results).
     rows = connection.execute(
         f"""
         WITH latest AS (
-          SELECT segment_id, MAX(attempt) AS attempt
-          FROM translations
-          GROUP BY segment_id
+          SELECT t.segment_id AS segment_id, MAX(t.attempt) AS attempt
+          FROM translations t
+          JOIN segments s ON s.id = t.segment_id
+          WHERE s.chapter_id IN ({placeholders})
+          GROUP BY t.segment_id
         )
         SELECT
           s.id AS id,
@@ -249,7 +263,7 @@ def list_export_segment_states(
         WHERE s.chapter_id IN ({placeholders})
         ORDER BY s.chapter_id, s.block_order
         """,
-        ids,
+        [*ids, *ids],
     ).fetchall()
     return [
         ExportSegmentState(

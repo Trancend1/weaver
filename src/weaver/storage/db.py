@@ -10,7 +10,7 @@ from pathlib import Path
 from weaver.errors import DatabaseError
 from weaver.storage.migrations import apply_migrations
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 
@@ -95,6 +95,12 @@ def connect_readonly_database(path: Path) -> sqlite3.Connection:
     try:
         connection = sqlite3.connect(uri, uri=True)
         connection.row_factory = sqlite3.Row
+        # Read-only workspace surfaces (index/queue polls) can race a WAL
+        # checkpoint from a live writer; without a busy_timeout the reader
+        # raises SQLITE_BUSY. A modest page cache keeps the repeated poll reads
+        # (COUNT/GROUP BY over segments/jobs) off disk.
+        connection.execute("PRAGMA busy_timeout = 10000")
+        connection.execute("PRAGMA cache_size = -8000")
         return connection
     except sqlite3.Error as exc:
         raise DatabaseError(
@@ -148,6 +154,12 @@ def _open_database(path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA journal_mode = WAL")
+    # NORMAL (vs the implicit FULL) skips the per-commit fsync; under WAL the
+    # only risk is losing the last transaction on an OS/power crash — never
+    # corruption. The translate hot path commits twice per segment, and
+    # `reset_interrupted_segments` is already the crash net for that exact
+    # window (any lost `in_progress`/result commit is reclaimed on next open).
+    connection.execute("PRAGMA synchronous = NORMAL")
     # Wait up to 10s for a contended write lock instead of failing immediately.
     # Background jobs (translate/batch) and a concurrent import/request can briefly
     # contend for the single WAL writer; without this a transient overlap raises

@@ -87,10 +87,13 @@ def build_workspace_index(
         bad project never blanks the index.
     """
 
-    discovered = discover_projects(books_dir)
     now = time.monotonic()
     entries: list[ProjectIndexEntry] = []
     working_cache: dict[str, Any] = cache if cache is not None else {}
+    # Fold discovery (one readonly DB open + toml parse per project) under the
+    # same shared cache + TTL as the per-project entries, so a repeated render
+    # within the TTL re-inspects nothing.
+    discovered = discover_projects(books_dir, cache=working_cache, ttl_seconds=ttl_seconds)
 
     for project in discovered:
         entry = _entry_for_project(

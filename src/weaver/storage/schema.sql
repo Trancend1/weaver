@@ -88,6 +88,12 @@ CREATE TABLE IF NOT EXISTS glossary_candidates (
   frequency INTEGER NOT NULL
 );
 
+-- Project-scoped lookup for `record_uncertain_glossary_candidate` (2 reads per
+-- uncertain term per segment inside the translate commit); without it those are
+-- full table scans that grow with the candidate table.
+CREATE INDEX IF NOT EXISTS idx_glossary_candidates_project
+  ON glossary_candidates(project_id, source);
+
 CREATE TABLE IF NOT EXISTS glossary_terms (
   id INTEGER PRIMARY KEY,
   project_id INTEGER REFERENCES projects(id),

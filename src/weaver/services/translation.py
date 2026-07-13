@@ -140,11 +140,14 @@ def build_context(
 def _filter_glossary(
     terms: Iterable[GlossaryTerm], normalized_source: str
 ) -> tuple[GlossaryTerm, ...]:
+    # Hoist the source casefold out of the per-term loop: it is invariant across
+    # terms, so folding it once per segment (not once per term) is O(1) vs O(n).
+    folded_source = normalized_source.casefold()
     matches: list[GlossaryTerm] = []
     for term in terms:
         if not term.source:
             continue
-        haystack = normalized_source if term.case_sensitive else normalized_source.casefold()
+        haystack = normalized_source if term.case_sensitive else folded_source
         needle = term.source if term.case_sensitive else term.source.casefold()
         if needle in haystack:
             matches.append(term)

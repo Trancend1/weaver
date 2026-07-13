@@ -180,7 +180,7 @@ def test_resume_scan_under_5s_at_10k_segments(seed_db_10k_segments):
 
 Minimal. The product is not latency-critical at MVP-0.
 
-- LRU cache on glossary term lookups during context building.
+- No caching of glossary term lookups: matching is a bounded substring scan (≤20 terms/segment, source casefold hoisted once per segment) — cheap enough that a cache would add invalidation cost without a measured win.
 - No caching of LLM responses (they should be deterministic-enough at temp=0 if the user wants caching).
 - No caching of EPUB parses (parsed once during init, stored in DB).
 

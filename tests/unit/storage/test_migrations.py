@@ -548,3 +548,93 @@ def test_apply_migrations_v12_refuses_to_drop_non_empty_qa_warnings(tmp_path) ->
     with pytest.raises(DatabaseError, match="non-empty"):
         apply_migrations(connection, target_version=SCHEMA_VERSION)
     connection.close()
+
+
+def _seed_v12_with_glossary_candidates(db_path) -> sqlite3.Connection:
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+    connection.executescript(
+        """
+        CREATE TABLE projects (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          source_path TEXT NOT NULL,
+          source_lang TEXT NOT NULL,
+          target_lang TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          schema_version INTEGER NOT NULL,
+          uuid TEXT
+        );
+        CREATE TABLE glossary_candidates (
+          id INTEGER PRIMARY KEY,
+          project_id INTEGER REFERENCES projects(id),
+          source TEXT NOT NULL,
+          target TEXT,
+          category TEXT,
+          notes TEXT,
+          status TEXT NOT NULL,
+          frequency INTEGER NOT NULL
+        );
+        """
+    )
+    connection.execute("PRAGMA user_version = 12")
+    connection.commit()
+    return connection
+
+
+def test_apply_migrations_v13_adds_glossary_candidates_index(tmp_path) -> None:
+    connection = _seed_v12_with_glossary_candidates(tmp_path / "legacy_v12.db")
+    connection.execute(
+        "INSERT INTO glossary_candidates (project_id, source, status, frequency) "
+        "VALUES (1, 'ソース', 'pending', 3)"
+    )
+    connection.commit()
+
+    apply_migrations(connection, target_version=SCHEMA_VERSION)
+
+    indexes = {
+        str(row["name"])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE type = 'index' AND tbl_name = 'glossary_candidates'"
+        ).fetchall()
+    }
+    count = connection.execute("SELECT COUNT(*) AS n FROM glossary_candidates").fetchone()["n"]
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    connection.close()
+
+    assert "idx_glossary_candidates_project" in indexes
+    assert count == 1  # existing data preserved
+    assert version == SCHEMA_VERSION
+
+
+def test_apply_migrations_v13_is_idempotent(tmp_path) -> None:
+    connection = _seed_v12_with_glossary_candidates(tmp_path / "legacy_v12.db")
+
+    apply_migrations(connection, target_version=SCHEMA_VERSION)
+    apply_migrations(connection, target_version=SCHEMA_VERSION)
+    indexes = {
+        str(row["name"])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE type = 'index' AND tbl_name = 'glossary_candidates'"
+        ).fetchall()
+    }
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    connection.close()
+
+    assert "idx_glossary_candidates_project" in indexes
+    assert version == SCHEMA_VERSION
+
+
+def test_fresh_database_includes_glossary_candidates_index(tmp_path) -> None:
+    with initialize_database(tmp_path / "fresh.db") as connection:
+        indexes = {
+            str(row["name"])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type = 'index' AND tbl_name = 'glossary_candidates'"
+            ).fetchall()
+        }
+
+    assert "idx_glossary_candidates_project" in indexes
