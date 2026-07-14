@@ -69,8 +69,20 @@ def test_build_custom_with_named_but_missing_key_value_is_unavailable(monkeypatc
 def test_legacy_gemini_type_routes_through_openai_chat(monkeypatch) -> None:
     monkeypatch.setenv("GEMINI_API_KEY", "sk-gemini")
     provider = build_provider({"type": "gemini"})
-    # Transport is the unified openai_chat; the normalized type is "custom".
-    assert provider.name == "custom"
+    # Transport is the unified openai_chat; the brand survives as the engine
+    # name so attempt history records the real provider (audit A3).
+    assert provider.name == "gemini"
+
+
+@pytest.mark.parametrize("brand", ["deepseek", "gemini"])
+def test_legacy_brand_is_preserved_as_engine_name(monkeypatch, brand: str) -> None:
+    # Audit A3: normalize_provider_config must not clobber the legacy brand to
+    # "custom" — new attempts on a legacy project record provider=<brand>.
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-x")
+    monkeypatch.setenv("GEMINI_API_KEY", "sk-x")
+    normalized = normalize_provider_config({"type": brand})
+    assert normalized["type"] == brand
+    assert build_provider({"type": brand}).name == brand
 
 
 def test_legacy_gemini_shim_targets_openai_compatible_endpoint() -> None:
@@ -126,4 +138,4 @@ def test_legacy_ollama_type_routes_to_local_keyless_openai_chat(monkeypatch) -> 
     # internally; the upstream is expected to ignore it.
     monkeypatch.delenv("WEAVER_TEST_OLLAMA_KEY", raising=False)
     provider = build_provider({"type": "ollama"})
-    assert provider.name == "custom"
+    assert provider.name == "ollama"

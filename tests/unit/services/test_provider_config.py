@@ -129,7 +129,9 @@ def test_write_project_preserves_legacy_aliases(tmp_path: Path, provider_type: s
         provider_type=provider_type,
     )
 
-    assert view.provider_type == "custom"
+    # Audit A3: the legacy brand survives normalization (engine name + attempt
+    # history record the real brand, not "custom").
+    assert view.provider_type == provider_type
     assert view.protocol is not None
 
 
