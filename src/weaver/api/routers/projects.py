@@ -60,7 +60,7 @@ from weaver.services.project_discovery import discover_projects, find_project
 from weaver.services.project_tree import project_tree
 from weaver.services.segment_history import segment_translation_history
 from weaver.services.source_browser import list_directory, resolve_source
-from weaver.services.source_intake import resolve_intake_source
+from weaver.services.source_intake import ensure_upload_within_limit, resolve_intake_source
 from weaver.services.volume import delete_volume_from_project
 from weaver.services.workspace_edit import save_segment_translation
 
@@ -93,10 +93,14 @@ async def preview_epub_endpoint(
     tmp_path: Path | None = None
     try:
         if file is not None:
+            # Same upload cap as create/import (audit N3): preview must not be
+            # an uncapped bypass for hostile oversized files.
+            data = await file.read()
+            ensure_upload_within_limit(file.filename or "preview.epub", data)
             suffix = Path(file.filename or "preview.epub").suffix or ".epub"
             with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
                 tmp_path = Path(tmp.name)
-                tmp.write(await file.read())
+                tmp.write(data)
             preview_path = tmp_path
         else:
             preview_path = resolve_source(base, source_path or "")

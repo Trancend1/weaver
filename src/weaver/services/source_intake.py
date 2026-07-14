@@ -46,16 +46,7 @@ def resolve_intake_source(
 
     if uploaded is not None:
         filename, data = uploaded
-        if len(data) > MAX_UPLOAD_BYTES:
-            limit_mib = MAX_UPLOAD_BYTES // (1024 * 1024)
-            actual_mib = len(data) / (1024 * 1024)
-            raise SourceTooLargeError(
-                f"Uploaded source {filename!r} is {actual_mib:.0f} MiB, over the "
-                f"{limit_mib} MiB limit. "
-                "Likely cause: the wrong file was selected, or the source bundles "
-                "large media. "
-                "Next command: upload a smaller EPUB, TXT, or HTML source."
-            )
+        ensure_upload_within_limit(filename, data)
         return store_uploaded_source(base_dir, filename, data)
     if source_path and source_path.strip():
         return resolve_source(base_dir, source_path.strip())
@@ -63,4 +54,27 @@ def resolve_intake_source(
         "No source selected. "
         "Likely cause: neither an uploaded file nor a browsed source path was given. "
         "Next command: upload or pick an EPUB, TXT, or HTML source."
+    )
+
+
+def ensure_upload_within_limit(filename: str, data: bytes) -> None:
+    """Reject uploaded bytes over :data:`MAX_UPLOAD_BYTES` (QF-08, audit N3).
+
+    Shared by create/import intake and the read-only ``/projects/epub-preview``
+    endpoint so every upload surface enforces the same cap.
+
+    Raises:
+        SourceTooLargeError: When ``data`` exceeds the cap.
+    """
+
+    if len(data) <= MAX_UPLOAD_BYTES:
+        return
+    limit_mib = MAX_UPLOAD_BYTES // (1024 * 1024)
+    actual_mib = len(data) / (1024 * 1024)
+    raise SourceTooLargeError(
+        f"Uploaded source {filename!r} is {actual_mib:.0f} MiB, over the "
+        f"{limit_mib} MiB limit. "
+        "Likely cause: the wrong file was selected, or the source bundles "
+        "large media. "
+        "Next command: upload a smaller EPUB, TXT, or HTML source."
     )
