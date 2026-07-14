@@ -40,12 +40,13 @@ from typing import Any
 
 from weaver.core.config import load_project_config
 from weaver.errors import ChapterNotFoundError, VolumeNotFoundError
+from weaver.providers import build_provider
 from weaver.services.project_paths import resolve_database_path
+from weaver.services.translation import preflight_provider_chain
 from weaver.services.workspace_translate import (
     TRANSLATE_MODES,
     ChapterTranslationResult,
     TranslationPlan,
-    build_healthy_provider,
     build_translation_profile,
     enforce_repair_enabled,
     load_single_project,
@@ -84,6 +85,9 @@ class BatchPlan:
     chapter_plans: tuple[TranslationPlan, ...]
     chapters_total: int
     segments_total: int
+    # Non-None when the primary failed its pre-flight healthcheck and a healthy
+    # fallback carries the run (audit A1); surfaced on the result.
+    preflight_warning: str | None = None
 
 
 @dataclass(frozen=True)
@@ -144,6 +148,7 @@ class BatchTranslationResult:
     finished_at: str
     duration_seconds: float
     chapters: tuple[BatchChapterOutcome, ...] = field(default_factory=tuple)
+    preflight_warning: str | None = None
 
 
 BatchProgressCallback = Callable[[BatchProgressSnapshot], None]
@@ -188,7 +193,8 @@ def prepare_batch_translation(
         VolumeNotFoundError: If a ``volume`` scope target does not exist.
         ConfigError: If the honorific policy or provider model is invalid.
         GlossaryConflictError: If approved glossary terms conflict.
-        ProviderUnavailable: If the configured/overridden provider is unhealthy.
+        ProviderUnavailable: If the configured/overridden provider is unhealthy
+            and no configured fallback passes its healthcheck (audit A1).
     """
 
     if scope not in BATCH_SCOPES:
@@ -235,7 +241,8 @@ def prepare_batch_translation(
                 (chapter_id, tuple(segment.id for segment in targets), requested_count)
             )
 
-    provider = build_healthy_provider(provider_config)
+    provider = build_provider(provider_config)
+    preflight_warning = preflight_provider_chain(provider, fallback_engines)
     use_translation_memory = mode == "skip_existing"
     persist_raw_response = raw_response_logging_enabled(data)
     enforce_repair = enforce_repair_enabled(data)
@@ -259,6 +266,7 @@ def prepare_batch_translation(
             enforce_repair=enforce_repair,
             profile=profile,
             fallback_engines=fallback_engines,
+            preflight_warning=preflight_warning,
         )
         for chapter_id, target_segment_ids, requested_count in collected
     )
@@ -275,6 +283,7 @@ def prepare_batch_translation(
         chapter_plans=chapter_plans,
         chapters_total=len(chapter_plans),
         segments_total=segments_total,
+        preflight_warning=preflight_warning,
     )
 
 
@@ -393,6 +402,7 @@ def run_batch_translation(
         finished_at=finished.isoformat(),
         duration_seconds=(finished - started).total_seconds(),
         chapters=tuple(outcomes),
+        preflight_warning=plan.preflight_warning,
     )
 
 

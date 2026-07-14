@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from weaver.core.connection_registry import Connection, register_connection
-from weaver.errors import ChapterNotFoundError, SegmentNotFoundError
+from weaver.errors import ChapterNotFoundError, ProviderUnavailable, SegmentNotFoundError
 from weaver.services.config_writer import set_routing
 from weaver.services.project import initialize_project
 from weaver.services.workspace_edit import save_segment_translation
@@ -42,6 +42,22 @@ def _register_fake_connection(name: str, model: str = "fake-1") -> None:
             default_model=model,
             protocol="fake",
             requires_key=False,
+        )
+    )
+
+
+def _register_dead_connection(name: str) -> None:
+    """Register a real-protocol connection to a closed local port (dead primary)."""
+
+    register_connection(
+        Connection(
+            name=name,
+            base_url="http://127.0.0.1:9/v1",
+            api_key_env="",
+            default_model="dead-1",
+            protocol="openai_chat",
+            requires_key=False,
+            timeout_seconds=1.0,
         )
     )
 
@@ -282,6 +298,51 @@ def test_connection_first_project_translates_via_routing(tmp_path, monkeypatch) 
     assert plan.provider_model == "fake-1"
     assert result.translated == len(segment_ids)
     assert result.failed == 0
+
+
+def test_dead_primary_with_healthy_fallback_completes_run(tmp_path, monkeypatch) -> None:
+    # Audit A1: a dead primary must not abort a run that has a healthy fallback —
+    # the per-segment try-next chain cold-marks the primary and carries the run.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("WEAVER_CONNECTIONS_PATH", str(tmp_path / "connections.toml"))
+    init = initialize_project(FIXTURE_EPUB)
+    _register_dead_connection("deadprimary")
+    _register_fake_connection("backup", model="fake-2")
+    set_routing(
+        init.project_toml,
+        task="translate",
+        connection="deadprimary",
+        model="dead-1",
+        fallbacks=[("backup", "fake-2")],
+    )
+    chapter_id = _first_chapter_id(init.database_path)
+    segment_ids = _chapter_segment_ids(init.database_path, chapter_id)
+
+    plan = prepare_chapter_translation(init.project_toml, chapter_id)
+
+    assert plan.preflight_warning is not None
+    assert "deadprimary" in plan.preflight_warning or "openai_chat" in plan.preflight_warning
+
+    result = run_translation(plan)
+
+    assert result.translated == len(segment_ids)
+    assert result.failed == 0
+    assert result.preflight_warning == plan.preflight_warning
+
+
+def test_dead_primary_without_fallback_still_aborts(tmp_path, monkeypatch) -> None:
+    # Audit A1 boundary: with no fallback configured, the pre-flight abort stands.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("WEAVER_CONNECTIONS_PATH", str(tmp_path / "connections.toml"))
+    init = initialize_project(FIXTURE_EPUB)
+    _register_dead_connection("deadprimary")
+    set_routing(init.project_toml, task="translate", connection="deadprimary", model="dead-1")
+    chapter_id = _first_chapter_id(init.database_path)
+
+    with pytest.raises(ProviderUnavailable) as exc_info:
+        prepare_chapter_translation(init.project_toml, chapter_id)
+
+    assert "is unavailable" in str(exc_info.value)
 
 
 def test_routing_fallback_chain_lands_on_the_plan(tmp_path, monkeypatch) -> None:

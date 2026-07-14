@@ -37,7 +37,6 @@ from weaver.errors import (
     ChapterNotFoundError,
     ConfigError,
     ProviderError,
-    ProviderUnavailable,
     SegmentNotFoundError,
 )
 from weaver.providers import GlossaryTerm, LLMProvider, build_provider
@@ -52,6 +51,7 @@ from weaver.services.translation import (
     build_translation_profile,
     enforce_repair_enabled,
     load_character_contexts,
+    preflight_provider_chain,
     raw_response_logging_enabled,
     translate_one_segment,
 )
@@ -96,6 +96,9 @@ class TranslationPlan:
     # after the primary fails a segment. Empty when no `[routing.<task>].fallback`
     # is configured or none could be built.
     fallback_engines: tuple[tuple[LLMProvider, str], ...] = ()
+    # Non-None when the primary failed its pre-flight healthcheck and a healthy
+    # fallback carries the run (audit A1); surfaced on the result.
+    preflight_warning: str | None = None
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,7 @@ class ChapterTranslationResult:
     input_tokens: int
     output_tokens: int
     cancelled: bool
+    preflight_warning: str | None = None
 
 
 def prepare_chapter_translation(
@@ -148,7 +152,8 @@ def prepare_chapter_translation(
         ValueError: If ``segment_ids`` is provided but empty, or ``mode`` is unknown.
         ConfigError: If the honorific policy or provider model is invalid.
         GlossaryConflictError: If approved glossary terms conflict.
-        ProviderUnavailable: If the configured/overridden provider is unhealthy.
+        ProviderUnavailable: If the configured/overridden provider is unhealthy
+            and no configured fallback passes its healthcheck (audit A1).
     """
 
     if mode not in TRANSLATE_MODES:
@@ -195,7 +200,8 @@ def prepare_chapter_translation(
 
         glossary_terms, characters = load_translation_context(connection, project_id=project.id)
 
-    provider = build_healthy_provider(provider_config)
+    provider = build_provider(provider_config)
+    preflight_warning = preflight_provider_chain(provider, fallback_engines)
 
     return TranslationPlan(
         project_toml=project_toml,
@@ -211,6 +217,7 @@ def prepare_chapter_translation(
         target_segment_ids=tuple(segment.id for segment in targets),
         requested_count=requested_count,
         fallback_engines=fallback_engines,
+        preflight_warning=preflight_warning,
         # Reuse memory only on the normal translate path. Explicit retranslate
         # (retranslate_non_manual / force_selected) must hit the provider so it is
         # not a silent no-op; the memory is still refreshed on success.
@@ -312,6 +319,7 @@ def run_translation(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         cancelled=cancelled,
+        preflight_warning=plan.preflight_warning,
     )
 
 
@@ -412,32 +420,6 @@ def load_translation_context(
     glossary_terms = tuple(list_glossary_terms(connection, project_id=project_id))
     characters = load_character_contexts(connection, project_id=project_id)
     return glossary_terms, characters
-
-
-def build_healthy_provider(provider_config: dict[str, Any]) -> LLMProvider:
-    """Build a provider from config and healthcheck it once.
-
-    Args:
-        provider_config: Effective ``[provider]`` config (after overrides).
-
-    Returns:
-        A healthy :class:`LLMProvider`.
-
-    Raises:
-        ProviderUnavailable: If the provider fails its healthcheck.
-    """
-
-    provider = build_provider(provider_config)
-    status = provider.healthcheck()
-    if not status.healthy:
-        detail = status.message or "no detail returned"
-        raise ProviderUnavailable(
-            f"Provider {provider.name} is unavailable: {detail}. "
-            "Likely cause: API key missing/invalid, network unreachable, or "
-            "local Ollama not running. "
-            "Next command: run `weaver inspect --healthcheck <project.toml>`."
-        )
-    return provider
 
 
 def select_chapter_targets(

@@ -598,6 +598,8 @@ def _translate_one_project(
         )
         return
 
+    if summary.preflight_warning:
+        typer.echo(f"Warning: {summary.preflight_warning}")
     typer.echo(f"Selected: {summary.selected_segments}")
     typer.echo(f"Translated: {summary.translated_segments}")
     typer.echo(f"Reused (memory): {summary.reused_from_memory}")
