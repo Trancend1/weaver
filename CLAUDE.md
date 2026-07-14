@@ -8,11 +8,11 @@ Offline-capable, glossary-aware **JP→EN light-novel translation workbench** wi
 >
 > **Current Orchestrator:** Repository Owner (Trancend1) + Claude acting as Lead Technical Orchestrator.
 >
-> **Current Phase:** **v0.7.3 — Performance & Reliability Release (planned, Gate A done).** v0.7.2 is tagged; the audit blocker fixes (H1–H3) are merged via PR #56. The v0.7.3 execution plan is written (2026-07-05): [`2026-07-05-v073-performance-execution-plan.md`](docs/superpowers/specs/2026-07-05-v073-performance-execution-plan.md) + [ADR 020 draft](docs/decisions/020-bounded-translate-concurrency.md) (Proposed).
+> **Current Phase:** **v0.7.3 — Performance & Reliability Release (in progress; M1 done).** v0.7.2 is tagged; audit blockers H1–H3 merged via PR #56. Sources of truth: [execution plan 2026-07-05](docs/superpowers/specs/2026-07-05-v073-performance-execution-plan.md) + [ADR 020 draft](docs/decisions/020-bounded-translate-concurrency.md) (Proposed) + **[measured audit 2026-07-13](audit_weaver_073.md)** (verifies F1–F8/A1–A8 against current code and adds findings **N1–N8** with real measurements — absorbed into the §2.3 milestones).
 >
-> **Status:** Gate A satisfied — scope (§2.3) + exit criteria (§2.4) defined; **no milestone implementation started**. Baseline gates green at plan time (ruff / format / pyright clean; **1614 passed**). ADR 020 must be Accepted before milestone M4 (concurrency) is implemented.
+> **Status:** **M1 complete** (branch `perf/v073-storage-quick-wins`, commits `ef3bbe3`/`fe4a1c2`/`eeb63ee`; **not yet merged/pushed**). N1 bench baseline restored; M1.1–M1.5 landed. Gates green 2026-07-13 (ruff / format / pyright clean; **full suite 1624 passed, 1 skipped**; bench all budgets PASS incl. rolling-window flat cost **1.009×**; acceptance gate AC-1…AC-9 PASS). Schema is now **v13** (`idx_glossary_candidates_project`). ADR 020 must be Accepted before M4 (concurrency). **Next milestone: M2** (`fix/v073-audit-carryforward`).
 
-> **Current Objective:** Execute the v0.7.3 milestones in order (M1 storage/algorithmic quick wins → M2 audit carry-forward → M3 enforcement provenance/cost → M4 bounded concurrency → M5 validation/release gate). One milestone = one branch = one PR.
+> **Current Objective:** Execute the v0.7.3 milestones in order (M1 bench-baseline + storage/algorithmic quick wins ✅ → **M2 reliability + input-safety carry-forward (next)** → M3 enforcement provenance + honest cost accounting → M4 bounded concurrency → M5 validation/release gate). One milestone = one branch = one PR.
 >
 > **Current Sprint:** v0.7.3 (§2.3). After v0.7.3: **Cross-Platform Desktop (macOS/Linux)** with a fresh plan + ADR (§2.1.1).
 
@@ -30,6 +30,7 @@ Docs are the spec. Code follows docs. If code contradicts docs, ask first.
 | Testing, regression, release, migration discipline           | [docs/MAINTENANCE.md](docs/MAINTENANCE.md)                                                                                                                                                                                   |
 | Architecture decisions (ADR `001`–`020`)                     | [docs/DECISIONS.md](docs/DECISIONS.md) · [docs/decisions/](docs/decisions/)                                                                                                                                                  |
 | Active reference specs                                       | [docs/PROMPT_DESIGN.md](docs/PROMPT_DESIGN.md) · [docs/SECURITY_AND_PERFORMANCE.md](docs/SECURITY_AND_PERFORMANCE.md)                                                                                                        |
+| Historical sprint archive (pre-v0.7.3; not authority)       | [docs/SPRINT_HISTORY.md](docs/SPRINT_HISTORY.md)                                                                                                                                                                             |
 | RTK shell tooling rule                                       | `C:\Users\transcend\.claude\RTK.md`                                                                                                                                                                                          |
 | Global workflow template (this file follows it)              | `C:\Users\transcend\.claude\WORKFLOW.md`                                                                                                                                                                                     |
 
@@ -45,17 +46,9 @@ Current status: **active phase defined in §2.3**.
 
 | Sprint                                                    | Status           | Hasil utama                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | --------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Audit Cleanup Sprint**                                  | ✅ Done          | Dead code kecil dihapus, bug audit utama dibereskan, full gate hijau                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| **Q2C — Runtime Edge-Case Hardening**                     | ✅ Done          | ParseJob cancellation consistency, EPUB import snapshot atomicity                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| **Q2D — Provider Config UX Consolidation**                | ✅ Done / merged | `/ui/providers` jadi canonical config surface, `/ui/config` jadi compatibility redirect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| **Q2E — Workspace Review & Export Confidence**            | ✅ Done / merged | Review/export/QA readiness UX lebih jelas                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| **Q2F — Tauri Sidecar Readiness Gate**                    | ✅ PASS          | Python/FastAPI contract + Rust compile verified; runtime smoke N1–N6 owner-confirmed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| **Sprint N — Desktop Runtime Validation**                 | ✅ Done          | `cargo tauri dev` smoke green — N1–N6 (window, transition, no-401, no-orphan, logs, crash screen)                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| **Sprint O — Desktop Packaging / Installer Alpha**        | ✅ PASS          | Packaged `weaver-desktop.exe` builds + runs (O-V1–O-V7). Both conditions now closed: external PATH-sidecar → resolved by **Sprint P** (bundled sidecar); signing/auto-update/installer-final → resolved by **Desktop Installer & Release Hardening** (NSIS installer + signing-ready + opt-in update + tagged release). Superseded by P + ADR 017.                                                                                                                                                                                                                           |
-| **Sprint P — Bundled Sidecar / Standalone Desktop Alpha** | ✅ PASS          | P1–P6 done; packaged app launches PATH-free, `/healthz`+`/ui` 200 (no 401), logs, crash screen, no orphan (WM_CLOSE + owner-confirmed native X-close 2026-06-14); `HEALTH_BUDGET` 5→20 s for PyInstaller cold start; signing/auto-update/installer/cross-platform deferred (not blockers)                                                                                                                                                                                                                                                                                    |
-| **Desktop Installer & Release Hardening**                 | ✅ PASS          | ADR 017 (2026-06-15). Shipped + owner-validated: exit-66 (`DataDirError`→66), single version source + drift guard, NSIS per-user installer (install/launch/uninstall smoke PASS, data preserved), signing-ready `bundle.windows`, opt-in notification-only update check (default OFF), tag-triggered `release.yml` — **v0.7.1 released end-to-end via CI** (installer + `latest.json` published; manifest URL serves `{"version":"0.7.1"}`), upgrade-compat test PASS (0.7.1 over 0.7.0 keeps data, single entry). Deferred non-blocker: code-signing cert. See gate report. |
-| **v0.7.2 — Connection-First Routing + Enforcement Loop** | ✅ Done / tagged | ADR 018 + ADR 019, released as tag `v0.7.2` on `main`. **018:** one `openai_chat`(+`fake`), removed gemini/ollama natives + `google-generativeai`, connection registry + per-segment routing/fallback + discovery cache + CLI parity (S1–S5). **Post-S5 (done):** cockpit translate + glossary-suggest + candidate made routing-aware (`resolve_translation_engines`/`resolve_consumer_config`) — fixes live `provider.model missing`/`incomplete`; dup retranslate CTA dropped; copywriting pass. **019 (done):** glossary/character/TM enforcement loop + anti-slop (E1–E4). **Post-release audit (2026-07-05):** 3 High findings fixed and **merged via PR #56** (key resolution, gemini shim URL, provider call inside write txn); Medium/Low carry-forward absorbed into v0.7.3.                                                                                                                                                                                                                                                             |
-| **v0.7.3 — Performance & Reliability**                    | 🔜 Active (planned) | Execution plan + ADR 020 draft written 2026-07-05 (Gate A). M1 storage/algorithmic quick wins (`synchronous=NORMAL`, O(n²) rolling-window fix, render N+1 parses) → M2 audit carry-forward (TOML data-loss, dead-primary fallback, brand history, inspect seam) → M3 enforcement provenance + cost accounting (migration v13) → M4 opt-in bounded translate concurrency (ADR 020, default 1) → M5 validation/live checks/release gate. See §2.3/§2.4 + [execution plan](docs/superpowers/specs/2026-07-05-v073-performance-execution-plan.md).                                                                                                                                                                                                                                                             |
+| **Foundation → v0.7.1 desktop track** (Audit Cleanup, Q2C–Q2F, Sprint N/O/P, Desktop Installer & Release Hardening) | ✅ Done | Hardened core → self-contained Windows desktop alpha → NSIS installer → **v0.7.1 released via tag-triggered CI**. Standing deferred: code-signing cert (ADR 017 — `WINDOWS_CERTIFICATE_THUMBPRINT` enables, no code change). Detail: [docs/SPRINT_HISTORY.md](docs/SPRINT_HISTORY.md) + ADR 016/017. |
+| **v0.7.2 — Connection-First Routing + Enforcement Loop** | ✅ Done / tagged | ADR 018 (one `openai_chat`+`fake`, connection registry, per-segment routing/fallback, discovery cache, CLI parity) + ADR 019 (enforcement loop E1–E4, anti-slop). Post-release audit 2026-07-05: 3 High fixed, merged via PR #56; Medium/Low carry-forward absorbed into v0.7.3. Detail: git history, ADR 018/019, handoffs. |
+| **v0.7.3 — Performance & Reliability**                    | 🔜 Active (planned) | Execution plan + ADR 020 draft (2026-07-05, Gate A) + **measured audit 2026-07-13** ([audit_weaver_073.md](audit_weaver_073.md): F/A findings verified on current code, N1–N8 added). M1 bench-baseline fix + storage/algorithmic quick wins → M2 reliability + input-safety carry-forward → M3 enforcement provenance + honest cost accounting (migration v14; M1.5 took v13 for the glossary-candidates index) → M4 opt-in bounded concurrency (ADR 020, default 1) → M5 validation/live checks/release gate. See §2.3/§2.4. |
 | **Cross-Platform Desktop (macOS/Linux)**                  | 📋 Planned       | WKWebView (macOS) + WebKitGTK (Linux) session-header injection and POSIX graceful shutdown (SIGTERM), plus per-OS bundled sidecar. See §2.1.1.                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | **Desktop Optimization**                                  | 📋 Backlog       | onedir→onefile or payload trim and cold-start budget tuning, only after the installer ships and with evidence. See §2.1.1.                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
@@ -75,35 +68,7 @@ When starting a new sprint or phase:
 
 Evidence-linked carry-forward. These are proposals, not active scope: each needs its own plan (and an ADR where it changes packaging shape, the stack, or a contract) before implementation. Do not scaffold ahead of a plan.
 
-> Naming: forward sprints use **descriptive names, not alphabet letters**. Completed sprints keep their historical labels (Sprint N/O/P, Q2x) only because handoff filenames, ADRs, and git history already reference them.
-
-**Desktop track pipeline:**
-
-```text
-Packaging Alpha                ✅ done   (was Sprint O)
-   ↓
-Bundled Sidecar                ✅ done   (was Sprint P)
-   ↓
-Installer & Release Hardening  ✅ done   (ADR 017; v0.7.1 released)
-   • Windows NSIS installer        ✅
-   • Signing-ready pipeline        ✅ (signs on cert; deferred)
-   • Opt-in update notification    ✅ (default OFF)
-   • Upgrade testing               ✅
-   ↓
-Cross-Platform Desktop         🔜 next      (macOS / Linux)
-   ↓
-Desktop Optimization           📋 backlog
-```
-
-**Desktop (carried out of Sprint N/O/P):**
-
-| Item                                                                         | Source of truth                                                                     | Proposed sprint                       |
-| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------- |
-| Windows installer (`nsis`/`msi`), code signing, auto-update, upgrade testing | ADR 016 (deferred); `desktop/tauri.conf.json` `targets:["app"]` only                | **Installer & Release Hardening**     |
-| Exit code `66` data-dir error implementation                                 | `docs/SIDECAR_CONTRACT.md` §5 (reserved) → `services/app_paths.ensure_runtime_dirs` | Installer & Release Hardening (minor) |
-| macOS WKWebView + Linux WebKitGTK session-header injection                   | `desktop/src/webview_session.rs` (`#[cfg(not(windows))]` no-op)                     | **Cross-Platform Desktop**            |
-| POSIX graceful shutdown (SIGTERM before SIGKILL)                             | `desktop/src/sidecar.rs` (`kill()` SIGKILL-only on non-Windows)                     | Cross-Platform Desktop                |
-| onedir→onefile / payload-size + cold-start tuning                            | ADR 016 ("onefile remains a future optimization")                                   | Desktop Optimization                  |
+**Next planned sprint — Cross-Platform Desktop (macOS/Linux):** WKWebView/WebKitGTK session-header injection (`desktop/src/webview_session.rs` is a `#[cfg(not(windows))]` no-op today), POSIX graceful shutdown — SIGTERM before SIGKILL (`desktop/src/sidecar.rs`), per-OS bundled sidecar. Needs a fresh plan + ADR before any code. **Desktop Optimization** (onedir→onefile, payload/cold-start tuning) stays backlog behind it. Completed desktop-track history + durable desktop lessons: [docs/SPRINT_HISTORY.md](docs/SPRINT_HISTORY.md).
 
 **Product / feature backlog (deferred by their ADRs, no owner schedule yet):**
 
@@ -113,10 +78,10 @@ Desktop Optimization           📋 backlog
 | Per-chapter QA tree badges             | ADR 008 (deferred to avoid full novel-scope scan)    | Deferred UX; gate on render-path budget (Gate B1) |
 | QA `error` severity tier               | ADR 013 (**Rejected / Deferred**)                    | Do **not** plan unless explicitly reopened        |
 | Provider-complete cost auditing        | ADR 014 (out of scope)                               | Reopen only with a migration + ADR                |
+| Inline-markup preservation on EPUB export (audit N6: `_replace_text` flattens `<em>/<br/>` in translated blocks) | [audit_weaver_073.md](audit_weaver_073.md) §2 · `renderers/epub.py:234-237` | Deferred quality item; needs design + translation-quality eval, not a quick fix |
+| Furigana reading as optional IR/prompt annotation (audit N8: `<rt>` dropped on import) | [audit_weaver_073.md](audit_weaver_073.md) §3 · `readers/epub.py:1429-1448` | Deferred; must pass §4.3 gate 1 (real pain evidenced) first |
 
 **Permanently out of scope unless an ADR reopens (CLAUDE.md §3.4/§3.5):** new provider families, route rewrites, SPA migration, Node build pipeline, external queue/worker daemon, cloud sync, telemetry/phone-home, multi-user SaaS architecture.
-
-> Sequencing rule: ship **Installer & Release Hardening** (public, signed Windows installer) before Cross-Platform Desktop and Desktop Optimization. Those two are lower priority than a signed, installable Windows build, which is the nearest user-facing gap after the bundled sidecar.
 
 ### 2.2 Reusable Phase Gate
 
@@ -131,201 +96,50 @@ Before starting any new sprint, phase, or stage:
 
 > Required reminder: **Check exit criteria first. No next stage until evidence exists. Explain the detail for manual inspection.**
 
-### 2.3 Active Phase — v0.7.3 Performance & Reliability Release (planned; implementation not started)
+### 2.3 Active Phase — v0.7.3 Performance & Reliability Release (planned; audit-verified; implementation not started)
 
-**Sprint focus:** measurable translation-pipeline performance (throughput, scalability, cockpit latency) + closure of the full v0.7.2 audit carry-forward ledger (A1–A8). No feature ships unless it directly improves speed, accuracy, reliability, or maintainability.
+**Sprint focus:** measurable translation-pipeline performance (throughput, scalability, cockpit latency) + closure of the full audit ledger — v0.7.2 carry-forward **A1–A8** plus the 2026-07-13 measured-audit findings **N1–N8**. No feature ships unless it directly improves speed, accuracy, reliability, or maintainability.
 
-**Source of truth:** [`docs/superpowers/specs/2026-07-05-v073-performance-execution-plan.md`](docs/superpowers/specs/2026-07-05-v073-performance-execution-plan.md) (evidence baseline F1–F8, per-milestone slices/anchors/acceptance) + [ADR 020](docs/decisions/020-bounded-translate-concurrency.md) (**Proposed** — must be Accepted before M4). Do not re-derive the findings; the anchors are in the plan.
+**Sources of truth:** [`2026-07-05-v073-performance-execution-plan.md`](docs/superpowers/specs/2026-07-05-v073-performance-execution-plan.md) (F1–F8/A1–A8 anchors, per-milestone slices/acceptance) + [ADR 020](docs/decisions/020-bounded-translate-concurrency.md) (**Proposed** — must be Accepted before M4) + [`audit_weaver_073.md`](audit_weaver_073.md) (2026-07-13: measured evidence, N1–N8 anchors, reproducible probes). Do not re-derive findings; the anchors are in those documents.
 
-**Milestones (one milestone = one branch = one PR, in order):**
+**Measured baseline (2026-07-13, owner machine — the numbers the milestones must beat):**
+
+- Rolling-window CTE (F2): 0.98 ms @1k → **48.1 ms @50k** translation rows per query; chapter-scoped variant **0.18 ms @50k** (−99.6%).
+- Commit cost (F3): `synchronous=FULL` (today) **1.325 ms** vs `NORMAL` **0.031 ms** (43×); ≥2 commits/segment.
+- Fresh 10k-segment fake run: **72.9 s** total; per-segment growth **1.96×** (first-100 6.89 ms → last-100 13.50 ms) — the "<20% delta" exit criterion currently fails at 96%.
+- The bench harness cannot reproduce these numbers itself until N1 is fixed (audit probes are the interim reference).
+
+**Milestones (one milestone = one branch = one PR, in order; audit N-findings are grouped into the milestone that already touches the same seam):**
 
 | Milestone | Scope | Status |
 | --- | --- | --- |
-| **M1 — Storage & algorithmic quick wins** (P0) | `PRAGMA synchronous=NORMAL` + read-only pragmas; O(n²) rolling-window CTE scoped to chapter; `list_connections`/secrets N+1 parse fix; `discover_projects` render/queue-poll dedupe under the existing 5 s cache; casefold hoists + `executemany` + candidates index. Bench: flat-cost scaling probe + render budgets. | 📋 |
-| **M2 — Audit carry-forward fixes** (P0) | Corrupt-TOML write-guard + shared `_escape` (control chars); dead-primary → fallback-aware pre-flight; legacy brand preserved in attempt history; `weaver inspect` via routing resolution. | 📋 |
-| **M3 — Enforcement provenance + cost** (P1) | Detection ungated from `enforce_repair`; verdicts/repair outcomes persisted (migration v13, columns on `translations`) + row/summary token reconciliation; explicit `max_retries` + repair-call counts in run summary. | 📋 |
-| **M4 — Bounded translate concurrency** (P1) | Opt-in `[translation] max_concurrent = 1..4` (default 1 = today bit-for-bit); FakeProvider latency knob first; per-worker connections; locked cold-mark. **Blocked on ADR 020 Accepted.** | ⏭️ |
-| **M5 — Validation & release gate** (P0) | Bench + acceptance gate with before/after evidence; live Gemini (`…/v1beta/openai`, current model) + first `requires_ollama` test; E2 repair token-cost delta; concurrency live spot-check; CHANGELOG/version/tag. | 📋 |
+| **M1 — Bench baseline + storage/algorithmic quick wins** (P0, `perf/v073-storage-quick-wins`) | **Slice 1 = N1 (prerequisite for every baseline claim):** fix the broken bench harness — `_rewrite_project_for_fake` (`bench/run_performance_budgets.py:239`) string-replaces `type = "deepseek"` but v0.7.2 `weaver init` writes `[provider] type = ""`, so translate/export budgets no-op; write the fake provider block explicitly. Then: `PRAGMA synchronous=NORMAL` + read-only pragmas (F3); O(n²) rolling-window CTE scoped to chapter, **both** call sites incl. `list_export_segment_states` (F2); `list_connections`/secrets single-parse (F4); `discover_projects` render/queue-poll dedupe under the existing 5 s cache (F5); casefold hoists + `executemany` + `idx_glossary_candidates_project` + `table_info` cache (F7). Bench additions: flat-cost probe (target growth < 1.2×) + render budgets; delete the fictional "glossary LRU cache" doc claim. | ✅ **Done** (`ef3bbe3`/`fe4a1c2`/`eeb63ee`; not merged). N1 restored; flat-cost **1.009×**; queue poll 1 DB-open/project (warm). Two deviations: index took migration **v13** (M3→v14); `table_info` guard **retained** (pre-v9 read safety, not a hot loop) instead of cached; `workspace_index._CacheKey` unified onto the discovery key. |
+| **M2 — Reliability + input-safety carry-forward** (P0, `fix/v073-audit-carryforward`) | Corrupt-TOML write-guard/backup + shared `_escape` incl. control chars (A2+A7); dead-primary → fallback-aware pre-flight (A1); legacy brand preserved in attempt history (A3); `weaver inspect` via routing resolution (A8). **Grouped input-safety (same reliability concern, small guards + tests):** apply `MAX_UPLOAD_BYTES` to `/projects/epub-preview` (N3, `api/routers/projects.py:95-100`); zip-decompression ceiling via manifest `file_size` sum before `read_epub` (N4 — `_archive_info` already reads it); per-chapter import degradation for malformed XHTML (N5 — Gate B decision: broken chapter = validation issue, not whole-book failure). | 📋 |
+| **M3 — Enforcement provenance + honest cost accounting** (P1, `feat/v073-enforcement-provenance`) | Detection ungated from `enforce_repair` (A4a); verdicts/repair outcomes persisted (migration v14 — M1.5 shipped v13 for `idx_glossary_candidates_project`, `SCHEMA_VERSION` already 13; columns on `translations`) + row/summary token reconciliation (A4b+A5); explicit `max_retries` on the OpenAI client **and** resolve the dead `[translation] max_retries` init key — wire it or delete it (F6+N2, `services/project.py:350`); repair/JSON-repair call counts in the run summary. **Grouped accounting accuracy:** CJK-aware token estimator (N7 — `chars//4` undercounts JP ~3×; two-class heuristic, no new dependency) + recalibrate `MAX_CONTEXT_TOKENS` afterwards. | 📋 |
+| **M4 — Bounded translate concurrency** (P1, `feat/v073-bounded-concurrency`) | Opt-in `[translation] max_concurrent = 1..4` (default 1 = today bit-for-bit); FakeProvider latency knob first; per-worker connections; locked cold-mark. **Blocked on ADR 020 Accepted.** | ⏭️ |
+| **M5 — Validation & release gate** (P0, `chore/v073-release-gate`) | Bench + acceptance gate with before/after evidence vs the measured baseline above; live Gemini (`…/v1beta/openai`, current model — `gemini-1.5-flash` retired) + first `requires_ollama` test; E2 repair token-cost delta; concurrency live spot-check; manual `epubcheck` on export artifacts (audit rec — dev-tooling, no runtime dependency); optional py-spy session on `weaver serve` during a batch run (memory-leak evidence gap); CHANGELOG/version/tag `v0.7.3`. | 📋 |
 
-**Non-goals (fenced):** streaming responses (strict-JSON makes it perceived-latency-only — owner-confirmed defer); circuit breaker/health scores/presets/ledger (D9); fuzzy TM; asyncio outside web; external queue; new provider families; speculative cache layers (fix the callers instead); deferred memory items (upload buffering, EPUB zip re-opens, DOCX in-memory build — listed in the plan, no scaffolding).
+**Non-goals (fenced):** streaming responses (strict-JSON makes it perceived-latency-only — owner-confirmed defer); circuit breaker/health scores/presets/ledger (D9); fuzzy TM; asyncio outside web; external queue; new provider families; speculative cache layers (fix the callers instead); Aho-Corasick glossary matching (no evidence of >5k-term glossaries; cap-20 early-exit bounds today's cost); inline-markup export preservation (N6) + furigana annotation (N8) — deferred to §2.1.1; deferred memory items (upload full-buffering beyond the N3/N4 guards, EPUB zip re-opens, DOCX in-memory build — no scaffolding).
 
-**Next:** start M1 on `perf/v073-storage-quick-wins`. M4 may slip to v0.7.4 without breaking the release (decide at M3 exit).
-
----
-
-**Historical — Desktop Installer & Release Hardening (✅ PASS)**
-
-The Desktop Installer & Release Hardening sprint closed **PASS** (2026-06-15). ADR 017 shipped: NSIS per-user installer, signing-ready pipeline (unsigned until cert), opt-in notification-only update check (default OFF), single version source + drift guard, exit-66, and a tag-triggered release workflow that published **v0.7.1** end-to-end (installer + `latest.json`). Owner-machine smoke (install/launch/uninstall + upgrade) PASS; data preserved across both. Code signing is the only deferred non-blocker. Decisions locked: auto-update = opt-in notification only (default OFF); signing = signing-ready; installer = NSIS only; release = GitHub Actions on tag push. Full rationale in ADR 017. Cross-Platform Desktop (macOS/Linux) remains planned (§2.1.1).
-
----
-
-**Historical — Sprint P complete (✅ PASS)**
-
-**Sprint P closed** under ADR 016, **PASS** (owner human-close confirmed 2026-06-14). Q2F + Sprint N + Sprint O also closed. Full backlog in §2.1.1.
-
-**Status: ✅ Sprint P PASS** — the packaged Windows alpha is self-contained. Bundled PyInstaller onedir sidecar staged via Tauri `bundle.externalBin`; resolver order per ADR 016: `WEAVER_DESKTOP_SIDECAR` override → bundled sidecar → PATH `weaver` fallback. Packaged PATH-free launch returns `/healthz` 200 then `/ui` 200 (no 401 loop), generates logs in `%APPDATA%\Weaver\logs`, shows the crash screen on forced failure, and leaves no orphan after WM_CLOSE and the owner-confirmed native X-button close.
-
-Done (Sprint P — P1–P6):
-
-- P1 audit: `externalBin` alone is insufficient; a Rust resolver is required.
-- ADR 016 accepted: PyInstaller onedir + Tauri externalBin staging + minimal bundled-sidecar resolver.
-- P2 built `desktop/target/sidecar/weaver/weaver.exe`; direct sidecar serve passed `/healthz` 200 and `/ui` 200.
-- P3 staged `desktop/sidecar/weaver-x86_64-pc-windows-msvc.exe`, configured Tauri `externalBin`, mapped PyInstaller `_internal`, added resolver order.
-- P3b fixed the startup-readiness race: `HEALTH_BUDGET` 5→20 s (bounded) for PyInstaller cold start, plus `[host]` startup diagnostics (source/path/budget, elapsed) in `sidecar.console.log` and on the crash screen.
-- P4/P5 packaged standalone smoke + regression audit: PATH-free `/healthz`+`/ui` 200, 0 new 401, 6 logs, `NO_SECRET_TOKEN_MATCHES`, WM_CLOSE → no orphan, bad-override crash screen, scope fence held.
-- P6 gate report: PASS-WITH-CONDITIONS. Sizes: host 3.27 MB, sidecar 17.2 MB, onedir ~171 MB.
-
-Carry-forward (deferred, not blockers):
-
-- Human X-button close owner-confirmed 2026-06-14 (P-V8 PASS) → Sprint P promoted to PASS.
-- Signing / auto-update / final installer / cross-platform deferred to a release-hardening sprint.
-
-Done (Sprint O — packaged alpha, owner-confirmed):
-
-- O1 packaging audit; O3 `cargo tauri build` → `weaver-desktop.exe` 3.1 MB (exit 0)
-- O4 packaged smoke: launch → cockpit `/ui`, `/healthz`+`/ui` 200 (no 401), no orphan, logs, crash screen
-- O5 logs/crash/uninstall behavior documented; O6 gate report (PASS-WITH-CONDITIONS)
-- Carry-forward condition: packaged exe still needs `.venv\Scripts` on PATH → Sprint P removes this
-
-Done (Q2F):
-
-- Sidecar contract fully audited against current FastAPI app
-- `/healthz`, `/health`, `/version`, `/runtime/status` verified over real HTTP
-- Random port + session token startup contract validated
-- Token boundary verified: public paths vs protected paths
-- Startup diagnostics tested: exit 64 (non-loopback in desktop), exit 65 (port-in-use), exit 66 reserved
-- `/ui` rendered HTML contains no hardcoded `127.0.0.1:8765` (static grep + runtime test)
-- Templates contain zero `127.0.0.1` references
-- CORS lockdown, docs-disabled, same-origin-only all verified
-- Rust/Tauri `cargo check` passes, crate version pins confirmed via `cargo tree`
-- Desktop smoke checklist created
-- Q2F readiness report produced
-
-Done (Sprint N — runtime smoke, owner-confirmed via `cargo tauri dev`):
-
-- N1 native window + loading screen ✅; N2 loading→cockpit `/ui` transition ✅
-- N3 no 401 loop; protected routes work via `X-Weaver-Session` ✅
-- N4 close window → sidecar killed, no orphan `weaver`/`python`/`uvicorn` ✅
-- N5 `runtime.log` + `sidecar.console.log` generated in `logs_dir` ✅
-- N6 forced startup failure → crash screen with mapped exit code ✅
+**Next:** M1 done — start **M2** on `fix/v073-audit-carryforward`. M4 may slip to v0.7.4 without breaking the release (decide at M3 exit).
 
 ### 2.4 Exit Criteria
 
-#### v0.7.3 Performance & Reliability exit — 📋 OPEN (defined 2026-07-05, Gate A)
+#### v0.7.3 Performance & Reliability exit — 📋 OPEN (defined 2026-07-05; tightened by the 2026-07-13 audit)
 
 v0.7.3 ships only when every criterion below has concrete evidence (bench output, test run, or owner-confirmed live check) recorded in the milestone handoffs:
 
+- [x] **Baseline restored (N1)** — M1: bench runs end-to-end; both harnesses fixed. Full suite 1624 passed; all budgets PASS; acceptance gate AC-1…AC-9 PASS.
 - [ ] **Throughput:** `max_concurrent = 3` ⇒ ≥ 2.4× chapter wall-clock vs sequential on the latency-simulating FakeProvider bench; live spot-check confirms ≥ 2×. _(Waived if M4 slips to v0.7.4 by explicit owner decision at M3 exit.)_
-- [ ] **Scalability:** fake-provider per-segment cost flat across the 10k-segment fixture (last-100 vs first-100 delta < 20%) — proves the O(n²) rolling-window fix.
-- [ ] **Cockpit latency:** providers-hub + queue renders do ≤ 1 TOML parse per file and ≤ 1 DB open per project per render (asserted via counting seams).
+- [x] **Scalability** — M1.2: rolling-window flat cost **1.009×** on the 10k fixture (was 1.96×), bench flat-cost probe green.
+- [x] **Cockpit latency** — M1.3/M1.4: ≤ 1 `connections.toml`/`secrets.toml` parse per render; queue poll ≤ 1 DB open per project (warm), both asserted via counting-seam tests.
 - [ ] **Reliability:** corrupt `connections.toml`/`secrets.toml` is never silently destroyed (backup-before-rewrite tested); dead primary with a healthy fallback completes the run; enforcement verdicts/repair outcomes persisted + surfaced.
-- [ ] **Accuracy accounting:** per-segment row tokens reconcile exactly with the run summary incl. repair; legacy brand recorded in attempt history again; `weaver inspect` routing-aware.
-- [ ] **No regressions:** existing `bench/run_performance_budgets.py` budgets + `bench/run_acceptance_gate.py` green; full pytest suite green; Gate-B1 checks intact; migration v13 forward-tested + idempotent.
+- [ ] **Input safety (N3/N4/N5):** `/projects/epub-preview` enforces `MAX_UPLOAD_BYTES`; an EPUB whose declared uncompressed size exceeds the ceiling is rejected before parse; a single malformed chapter degrades per the M2 Gate-B decision — each with a regression test.
+- [ ] **Accuracy accounting:** per-segment row tokens reconcile exactly with the run summary incl. repair; legacy brand recorded in attempt history again; `weaver inspect` routing-aware; `[translation] max_retries` is either wired or deleted (N2); token estimator CJK-aware + `MAX_CONTEXT_TOKENS` recalibrated (N7).
+- [ ] **No regressions:** existing `bench/run_performance_budgets.py` budgets + `bench/run_acceptance_gate.py` green; full pytest suite green; Gate-B1 checks intact; migration v14 forward-tested + idempotent.
 - [ ] **Live validations:** Gemini over `…/v1beta/openai` (current default model chosen — `gemini-1.5-flash` retired) and Ollama over `:11434/v1` pass their gated tests on the owner machine; E2 repair token-cost delta recorded → `enforce_repair` default decision confirmed.
 
-#### Connection-First Routing (v0.7.2) exit — ✅ MET (ADR 018, released in tag `v0.7.2`)
-
-_Bagian A — engine de-brand (DONE 2026-06-15):_
-
-- [x] `providers/deepseek.py` renamed to `openai_chat.py` (`OpenAIChatProvider`/`OpenAIChatConfig`); brand strings gone from engine/errors (`grep -i deepseek src/weaver` = shim-only). Ruff/pyright/pytest green (1491 passed).
-- [x] Cockpit "Legacy aliases…" hint removed; `_config_form.html` + `test_ui_providers.py` updated.
-- [x] `providers/gemini.py` + `providers/ollama.py` removed; `google-generativeai` dropped from `pyproject.toml`; `gemini_generate`/`ollama_generate` protocols gone (registry = `openai_chat` + `fake` only). Legacy `type=gemini|ollama` auto-maps to an `openai_chat` connection via the D6 shim (Gemini → `…/v1beta/openai` — endpoint corrected in the 2026-07-05 audit fix, Ollama → `:11434/v1` keyless). Keyless `openai_chat` (empty `api_key_env` → dummy key) added + tested. (S1, verified 2026-06-16: ruff/pyright clean, pytest 1519 passed.)
-
-_Bagian B — connection-first UX + registry + routing (lean backing, D9):_
-
-- [x] **Connection form = Name + Endpoint + Key + [Test]** only; **no** protocol/type/engine field shown. Advanced (collapsed) = env-name override + "use shell env" + keyless. Test renders `✓ Connected · N models · NNN ms`. (`_connection_form.html`, hybrid key per D7.)
-- [x] "Providers" surface relabelled **Connections**; route `/ui/providers` kept (ADR 015 bookmarks alive).
-- [x] `core/connection_registry.py` + `~/.weaver/connections.toml` (honors `WEAVER_CONNECTIONS_PATH`, owner-only 0600); register/test/delete via cockpit + `services/connections.py` facade (hybrid key → `WEAVER_CONN_<NAME>` secret).
-- [x] **Model discovery** (`providers/discovery.py`): on-demand `GET /v1/models` POST (Test + project "Load models") yields the model list/count, **never on render, no background thread**. Persisted to a workspace cache (`core/connection_models.py` → `~/.weaver/connection_models.json`, S3) so the cockpit shows a connection's models without re-probing; `(stale)` hint after the TTL; changing the connection in Switch AI reads the cache (no probe).
-- [x] **Model-centric project AI**: project page shows **Active AI** (`model via connection`) for `translate`; **Switch AI** picks a connection + model (with on-demand "Load models" suggestions) and writes `[routing.translate]`; the next run uses it. (`ui_routing.py`, `_active_ai.html`, `services/routing.py`.)
-- [x] `model` accepts any free-form id end-to-end; discovery only _suggests_ (no enum anywhere).
-- [x] `services/routing.py` precedence (`[routing.<task>]` → legacy `[provider]` → workspace `[defaults].default_connection`) wired into `translate_project`; **simple per-segment fallback** (`resolve_chain` + `[routing.<task>].fallback` array, try-next on `ProviderError` with a 30 s in-process cold-mark, no circuit breaker) wired into `translate_one_segment`. (S2, done 2026-06-16.)
-- [x] Legacy `[provider]`-only projects resolve bit-for-bit to 0.7.1 behavior (resolver returns `[provider]` when no routing entry; covered by the existing translation suite).
-- [x] `ruff`, `ruff format`, `pyright`, `pytest` green (1537 passed; +46 connection/routing tests).
-- [x] **Lean-backing fence (D9) held:** no circuit breaker, health-score formula, presets, `routing_decisions` table, cost/observability dashboard, rotation window, or native non-OpenAI families. Health badge = config state on render; live ✓/models only on Test.
-
-##### Slice log (S1–S5 — all shipped; historical evidence)
-
-- **S1 — Collapse natives + drop dep (closes Bagian A). ✅ DONE (2026-06-16).** Deleted `providers/gemini.py`/`ollama.py` (+ their unit/live tests), dropped `google-generativeai`, removed `gemini_generate`/`ollama_generate` from `registry.py` (now `openai_chat` + `fake`). `_LEGACY_DEFAULTS` shim maps `type=gemini|ollama|deepseek` → `openai_chat` endpoints. **Keyless edge fixed:** `_build_openai_chat` accepts empty `api_key_env`; `OpenAIChatProvider` feeds a dummy key when keyless, but keeps the "named env but no value → `ProviderUnavailable`" guard. Verified: ruff/pyright clean, pytest 1519 passed; stale protocol strings cleaned in `config_writer` + `test_workspace_providers`. _Deferred (not blocking): live validation of Gemini/Ollama over their OpenAI-compatible endpoints (`requires_cloud`/`requires_ollama`) on a real machine._
-- **S2 — Routing precedence tier + simple fallback. ✅ DONE (2026-06-16).** Added the workspace `[defaults].default_connection` tier to `resolve_provider_config` and `resolve_chain(task)` (primary + `[routing.<task>].fallback` array of `{connection, model}`; unknown fallback connections skipped, primary stays strict). `translate_one_segment` now tries the chain per segment, cold-marking a failed engine for 30 s (no circuit breaker, D9); `translate_project` builds the fallback engines once and shares a per-run cold dict. TM short-circuit stays ahead of routing. Tested incl. an end-to-end rescue (primary `fail_rate=1.0` cold-marked + skipped, backup carries all 6 segments). _Remaining for S3/S4: a cockpit editor to author the `fallback` array (today it is project.toml-only)._
-- **S3 — Discovery cache. ✅ DONE (2026-06-16).** `core/connection_models.py` caches each connection's last `/v1/models` snapshot to a **workspace JSON file** `~/.weaver/connection_models.json` (honors `WEAVER_CONNECTION_MODELS_PATH`, 0600). **Deviation from ADR 018 §6.1** (which sketched a per-project `connection_models` SQLite table): a connection is workspace-level, so its cache is too — a per-project table would duplicate it per project and needs a migration; the JSON file is the lean fit (D9) and keeps derived data out of `connections.toml` (D2). `services/connections.refresh_models`/`cached_models` wired into the connection-card Test + project Load-models (probe → cache) and a cache-only render path (`/routing/cached-models`, Gate-B1 safe); `(stale)` hint after the 6 h TTL. _Remaining (S4): a single grouped-by-connection picker across all connections (today the Switch AI datalist shows the selected connection's cached models)._
-- **S4 — Cockpit cleanup + fallback-author UI. ✅ DONE (2026-06-16).** Reframed the legacy editor heading to "Per-project provider (legacy)" with a pointer to Connections (route kept, ADR 015). Added a **Fallback chain** section to the Active AI panel: shows the configured chain and lets the user **Add / Clear** fallbacks from the cockpit — no more hand-editing `project.toml`. Backed by `config_writer.set_routing(..., fallbacks=...)`, which now rewrites the machine-owned `[routing.<task>]` section (preserving every other section + comments), preserves an existing `fallback` array when none is passed, and writes `{connection, model}` inline-table arrays. _Remaining (nice-to-have): a single grouped-by-connection model picker across all connections (today the Switch AI datalist shows the selected connection's cached models)._
-- **S5 — CLI parity. ✅ DONE (2026-06-16).** `weaver connections list/add/test/rm` (hybrid key: `--key`/`--env`/`--shell`/`--keyless`, prompts hidden; `test` probes + caches) and `weaver routing show/set` (writes `[routing.<task>]`) mirror the cockpit via the existing services. Key values are never printed.
-
-**Key files (already built, reuse — do not re-derive):** `core/connection_registry.py`, `core/task_types.py`, `providers/discovery.py`, `services/connections.py` (hybrid key: `probe_connection`, `add_connection`, `derive_env_name`), `services/routing.py` (`resolve_provider_config`, `resolve_active_ai`), `services/config_writer.set_routing`, `api/routers/ui_providers.py` (connection routes) + `ui_routing.py` (Active AI/Switch AI), partials `_connection_*`/`_connections`/`_active_ai`/`_routing_models`. Tests mirror under `tests/unit/{core,providers,services,api}/`.
-
-##### Post-sprint owner-feedback refinements (2026-06-16)
-
-- **Connection form gained a Default Model field** (Test loads the endpoint's models into a suggestions datalist via `hx-swap-oob`). A router serves many models; the connection captures an optional default. (commit `2835b85`)
-- **Legacy per-project provider editor removed** from the cockpit — `#config-editor` + `_config_form.html` + `POST /ui/providers/config` gone; JSON `/config` API + `provider_config` service kept for automation/back-compat. `/ui/config` now redirects to `#connections`. (commit `52da0f3`)
-- **Cross-project table is now an Active-AI switch station** — each row shows the resolved Active AI (model via connection / legacy / not set) and a per-row **Switch AI** that writes `[routing.translate]` for that project and re-renders the row (`_provider_row.html`, `POST /ui/providers/{name}/switch`, `workspace_providers` carries the resolved Active AI; `resolve_active_ai` now normalizes legacy `[provider]` so a brand alias still shows its shim model). Gate B1 preserved (no provider call on render).
-
-##### Post-S5 hardening (2026-06-16) — ✅ DONE
-
-- [x] **Cockpit translate path routing-aware.** `validate_provider_config` → `resolve_translation_engines` in `workspace_translate.py`; `prepare_chapter_translation` + `prepare_batch_translation` now resolve `resolve_chain(TaskType.translate)` (Active AI + fallback engines on the `TranslationPlan`), not raw `[provider]`. Fixes the live `provider.model missing` error for connection-first projects; brings the cockpit to CLI parity (fallback chain too). +4 regression tests.
-- [x] **Glossary-suggest + candidate routing-aware.** New `services/routing.resolve_consumer_config` (resolve the secondary task; inherit the project's `translate` Active AI when the task isn't separately routed and `[provider]` is empty). Wired into `glossary_suggestion.py` (`TaskType.glossary_suggest`) and `candidate_generation.py` (`TaskType.candidate`). Fixes the live `Provider configuration is incomplete` error on the glossary page / "Suggest" actions. +4 tests.
-- [x] **Duplicate CTA removed.** `skip_existing` dropped from the Retranslate dropdown (it equalled the primary "Translate" button) — `workspace.html` + `test_ui_jobs`.
-- [x] **Plain-language copywriting pass** across the cockpit (onboarding, dashboard, project, Active AI, connections/secrets, providers table, QA, export preflight, queue, resources, workspace/segment) + `status_labels` ("Stale"→"Outdated", "Manual"→"Manual edit"). Behavior unchanged; ~10 UI test-string updates.
-- [x] `ruff`/`ruff format`/`pyright` clean; full suite **1553 passed, 1 skipped**.
-
-#### Translation Enforcement Loop (ADR 019) exit — ✅ MET (released in tag `v0.7.2`)
-
-Makes glossary/character/TM **binding**, not decorative, + anti-slop. Plan: [`2026-06-16-enforcement-loop-execution-plan.md`](superpowers/specs/2026-06-16-enforcement-loop-execution-plan.md). Hard-rule fence: bounded **1** repair pass (no circuit breaker, D9), explicit translate-time only (Gate B1), failure visible, cost shown. Slices (each independent + shippable):
-
-- [x] **E1+E2 — Detection gate + bounded repair. ✅ DONE (2026-06-16).** Shipped together (a detection-only gate would be a zero-caller module, §4.2/§4.3). `services/enforcement.py` (pure): `evaluate_translation` reuses `check_glossary_mismatch` + `check_character_name_missing` + `check_untranslated_japanese` + a **loose anti-truncation floor 0.15** (NOT `[qa] minimum_length_ratio` — forcing length causes padding-slop, Q4); `repair_translation(provider, …)` (provider param = `[routing.repair]` seam, deferred) builds the repair prompt (`prompts.render_enforcement_repair_prompt`, Python-string), calls `complete()`, re-parses. Wired into `translate_one_segment`: detect → **one** bounded re-ask → re-validate → commit the repaired attempt only if not strictly worse, else keep primary. `_try_repair` degrades gracefully (`ProviderError`/`ParserError`/`NotImplementedError` → keep primary; never block, never substitute). `[translation] enforce_repair` default true (`enforce_repair_enabled`); detection runs regardless. Plumbed through `translate_project` + `TranslationPlan` (chapter + batch). Repass tokens counted into segment usage. **+11 tests** (9 gate/repair unit, 2 e2e: repair-replaces / parse-fail-keeps-primary). Full suite **1564 passed**.
-- [x] **E3 — `[translation_profile]` contract + banned-slop seed. ✅ DONE (2026-06-16).** New `TranslationProfile` value type (providers/types) on `TranslationContext`; `build_translation_profile(config)` parses `[translation_profile]` (`tone`/`dialog_style`/`name_rendering`/`tense`/`banned_phrases`), returns `None` when absent (no behavior change). Style fields emit a `<profile>` prompt block (`balanced_user.jinja2`, only when `has_style`). `banned_phrases` is a deterministic **soft** anti-slop check in `evaluate_translation` (feeds the same E2 repair). Seed `core/slop_seed.py` (5 phrases) applies only when the section is declared; `banned_phrases = []` disables, custom array replaces. Plumbed via `TranslationPlan.profile` (chapter + batch). Pure config, no schema change.
-- [x] **E4 — Recover discarded `uncertain_terms` → `glossary_candidates`. ✅ DONE (2026-06-16).** `storage.record_uncertain_glossary_candidate` (idempotent: skip approved terms, bump existing **pending** candidate, never resurrect handled ones, `category="discovered"`); called per committed segment in `translate_one_segment` on `final.uncertain_terms`. Free entity discovery, no extra model call (replaces the proposal's "continuous extraction").
-- [x] `ruff`/`ruff format`/`pyright`/`pytest` green each slice (E3+E4: +13 tests). _Owner-visible token-cost delta before locking E2 default-on still recommended on a live run._
-
-#### Desktop Installer & Release Hardening exit — ✅ MET (ADR 017, PASS)
-
-- [x] NSIS installer builds; installs per-user with a Start-menu entry + uninstaller (owner smoke 2026-06-15).
-- [x] Uninstall preserves `%APPDATA%\Weaver` (projects/DB/logs) (install smoke + upgrade test).
-- [x] Signing pipeline signs when a cert secret is present and builds unsigned (without failing) when absent — unsigned path proven via the v0.7.1 CI release; signed path enables on cert (deferred).
-- [x] Update check is OFF by default; opted-in it notifies (no download/install) and is a silent no-op on failure (4 Rust tests; live `latest.json` manifest verified).
-- [x] `pyproject` is the single version source; the drift guard fails on mismatch.
-- [x] Tag-triggered release workflow publishes a GitHub Release with the installer + `latest.json` (v0.7.1, run 27529052365).
-- [x] Exit 66 raised + tested; `SIDECAR_CONTRACT.md` §5 updated.
-- [x] Upgrade test: installing vN+1 over vN preserves data and replaces the binary (0.7.1 over 0.7.0, owner machine).
-- [x] `uv run ruff check .`, `ruff format --check .`, `pyright`, `pytest` all green.
-- [x] Final gate report records sizes, signed/unsigned status, and upgrade evidence.
-
-> **Standing condition (deferred non-blocker):** released installers stay **unsigned** until a code-signing certificate is procured (ADR 017 D2) — store `WINDOWS_CERTIFICATE_THUMBPRINT` to enable, no code change. macOS/Linux remain deferred (§2.1.1).
-
-#### Q2F exit (already met)
-
-- [x] Sidecar contract documented and mapped.
-- [x] Health/readiness endpoints tested over real HTTP.
-- [x] Random port + session token contract validated.
-- [x] Token boundary verified.
-- [x] Exit codes 64/65 tested; 66 documented reserved.
-- [x] Startup diagnostics (no secret leakage, stdout summary) verified.
-- [x] Rust/Tauri compile verified (`cargo check`).
-- [x] Desktop smoke checklist documented.
-- [x] Q2F readiness report completed.
-
-#### Sprint N exit — ✅ MET (owner-confirmed runtime smoke); Q2F promoted to **PASS**
-
-- [x] N1 — Native window opens and the loading screen appears.
-- [x] N2 — Loading screen transitions to the Cockpit `/ui`.
-- [x] N3 — No 401 loop; protected routes work via the `X-Weaver-Session` header.
-- [x] N4 — Closing the window kills the sidecar; no orphan `weaver`/`python`/`uvicorn` process remains.
-- [x] N5 — `runtime.log` and `sidecar.console.log` generated in `logs_dir`.
-- [x] N6 — Forced startup failure shows the crash screen with a mapped exit code.
-- [x] `cargo tauri dev` smoke run; N1–N6 owner-confirmed. **Sprint O — Desktop Packaging / Installer Alpha** is now unblocked.
-
-#### Sprint P exit — ✅ MET (PASS)
-
-- [x] P1 — Audit current sidecar launch path and Tauri `externalBin` expectations.
-- [x] P2 — Build experimental PyInstaller onedir sidecar and direct-test via `WEAVER_DESKTOP_SIDECAR`.
-- [x] P3 — Stage `externalBin` + add minimal bundled-sidecar resolver.
-- [x] P3b — Fix startup-readiness race (`HEALTH_BUDGET` 5→20 s) + add `[host]` startup diagnostics.
-- [x] P4 — Packaged app launches without `.venv\Scripts` on PATH; `/healthz` 200 + WebView `/ui` 200 proven (isolated + default `%APPDATA%`).
-- [x] P5 — Logs, crash, shutdown, no orphan (WM_CLOSE), `NO_SECRET_TOKEN_MATCHES` validated against the bundled sidecar.
-- [x] P-V8 — Human native X-button close owner-confirmed 2026-06-14: no orphan, no restart/hang.
-- [x] P6 — Final gate report: PASS.
-
-Deferred (not blockers): signing / auto-update / final installer / cross-platform → release-hardening sprint.
+> Completed sprint exits (v0.7.2 routing + enforcement, Desktop Installer & Release Hardening, Q2F, Sprint N, Sprint P) are historical — ✅ MET, evidence in git history, ADR 016–019, and `docs/superpowers/handoffs/`. Do not re-verify or extend them here. Standing deferred non-blocker from ADR 017: released installers stay **unsigned** until a code-signing cert exists (`WINDOWS_CERTIFICATE_THUMBPRINT` enables it, no code change).
 
 ### 2.5 Phase Log
 
@@ -339,15 +153,9 @@ Deep detail lives in git history, ADRs, sprint plans, and handoff notes. This se
 | Provider layer                | Current provider ADR/spec + provider tests                                                                                                                                                                              | Keep provider primitives domain-agnostic. Put workflow validation in services, not provider adapters.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | Workspace/read models         | Current workspace services + tests                                                                                                                                                                                      | Read paths should stay cheap, deterministic, and side-effect-free. Avoid expensive scanning, hashing, provider calls, or QA work on render paths.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Cleanup/audit work            | Current audit plan + handoff notes                                                                                                                                                                                      | Treat audit findings as hypotheses until manually verified. Delete only when references, runtime paths, tests, and fallback behavior are understood.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Sidecar contract testing      | `tests/integration/test_runtime_random_port.py` · `tests/unit/api/test_desktop_security.py`                                                                                                                             | Real HTTP/Uvicorn is preferred over TestClient for sidecar contract tests. Reuse the `sidecar_server` fixture pattern rather than reimplementing Uvicorn threading.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| CLI startup diagnostics       | `tests/unit/api/test_desktop_security.py`                                                                                                                                                                               | Mock `uvicorn.run` for exit-code tests (64/65). Use `_make_fake_uvicorn` helper. Assert no secret/token leakage in error output.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Sprint N readiness            | `docs/SIDECAR_CONTRACT.md` · `desktop/README.md`                                                                                                                                                                        | Desktop shell must be compile-verified (`cargo check`) before runtime smoke (`cargo tauri dev`). Do not skip compile gate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| Desktop packaging (Q2F/N/O/P) | `docs/INSTALL_DESKTOP.md` · Sprint P gate report (`docs/superpowers/handoffs/2026-06-14-sprint-p6-gate-report.md`) · ADR 016 (per-stage Q2F/N/O/P handoffs consolidated into the gate report; full logs in git history) | Sprint P (PASS) shipped the self-contained Windows alpha: PyInstaller onedir + Tauri `bundle.externalBin` + runtime resolver. Resolver order is mandatory: `WEAVER_DESKTOP_SIDECAR` override → bundled sidecar → PATH `weaver` fallback; `externalBin` config alone is insufficient and the PATH fallback must stay. Desktop startup `HEALTH_BUDGET` is **20 s** (bounded, P3b) because PyInstaller cold start exceeds the old 5 s — independent of the §7 5 s shutdown grace. Do not switch onedir→onefile, drop the PATH fallback/override, or add `tauri-plugin-shell` without evidence + an ADR. Bundling logic stays in `desktop/`/CI, never in `src/weaver/`. Sprint P = PASS (human X-close owner-confirmed 2026-06-14); signing/installer deferred to release-hardening. |
-
 | Connection/routing security (v0.7.2) | `docs/superpowers/handoffs/2026-06-16-connection-routing-security-review.md` | Connection/routing/enforcement routes audited for webUI + desktop. All behind the `X-Weaver-Session` boundary (only `_PUBLIC_PATHS = /healthz,/health,/version,/static` are open) + same-origin CORS; Gate B1 held (provider calls are explicit-POST only); secrets validated (`^[A-Za-z_][A-Za-z0-9_]*$`) + `0o600` + never echoed; HTMX hooks are **relative** (no host hardcoding). **Two fixes:** `find_project` rejects `/`,`\\`,`.`,`..` names (Windows `\\`-traversal — desktop target); inline error fallbacks now `html.escape` the `name` param (reflected-XSS). Rule: untrusted route params reflected outside Jinja **must** be `html.escape`d; never join a route `name` into a filesystem path without the separator/`..` guard. |
 | Provider keys & transaction shape (v0.7.2 audit) | `docs/superpowers/handoffs/2026-07-05-v072-audit-and-blocker-fixes.md` · commits `019834a`/`dee710f` | The provider factory resolves key values **shell env → secret store** at build time (`providers/registry._resolve_key_value`) — never assume `apply_secrets_to_env` re-runs mid-session; keep the Test-probe and build-time resolution paths consistent. Never hold a SQLite write transaction across a provider network call: one segment **result** = one atomic commit (row + memory + candidates + status); the `in_progress` marker is its own short txn and `reset_in_progress_segments` is the crash net. The gemini legacy shim endpoint is `…/v1beta/openai` (bare `…/v1beta` has no `/chat/completions`). |
-
-| Installer & release (ADR 017) | `docs/decisions/017-*.md` · `docs/superpowers/handoffs/2026-06-15-installer-release-gate-report.md` · `.github/workflows/release.yml` | `pyproject` is the **single version source**; never hand-edit `tauri.conf.json` version — run `desktop/scripts/sync-version.ps1`, and a `v*` tag must equal it (`check-version.ps1 -Tag`). Releases are tag-triggered (`release.yml`, windows runner); signing is **off until** the `WINDOWS_CERTIFICATE_THUMBPRINT` secret exists (no code change to enable). Update check is **opt-in, notification-only, default OFF** (`WEAVER_DESKTOP_UPDATE_CHECK` env or `%APPDATA%\Weaver\desktop\settings.json`) — never add download/install or `tauri-plugin-updater`/`-shell` without a new ADR. Installer config validated against the compiled `tauri-utils` schema (`deny_unknown_fields`) — verify field casing there, not just docs. Exit-66 is now a real tested code (`DataDirError`). Desktop/packaging logic stays in `desktop/`+CI, never `src/weaver/`. |
+| Perf & bench (v0.7.3 M1) | `docs/superpowers/handoffs/2026-07-13-v073-m1-storage-quick-wins.md` · commits `ef3bbe3`/`fe4a1c2`/`eeb63ee` | **mtime cache keys must NOT include the `-wal` mtime** — a read-only WAL read creates/touches `-wal`, so a wal-sensitive key spuriously misses on the absent→present transition; key on `(project.toml, weaver.db)` mtime + TTL only (both `project_discovery._CacheKey` and `workspace_index._CacheKey`). Prove cache/N+1 wins with **counting-seam tests** (spy `connect_readonly_database` / the parse fn), not weak `state=="ready"` assertions. Scope O(n²) rolling-window CTEs to the chapter — a segment maps to one chapter so `MAX(attempt)` is byte-identical (pin with an inline old-SQL oracle). **`weaver validate` exits 1 when `critical`>0**, so the bench fake pattern must be pure-English (no `{source}`, no JP) or validate fails. Never trust a bench "exit 0" read through a `\| tee`/`\| tail` pipe — the pipe's exit code masks the real one. |
 
 > Historical test counts are evidence only at the time they were recorded. Re-run relevant verification for the current phase; do not assume old counts still apply.
 
@@ -572,8 +380,6 @@ A track is owned by exactly one role. Supporting roles review or provide input b
 | T8    | **Performance & Runtime**      | Perf Eng          | Feature complete → budget met or regression justified; **zero render-path hashing**; no blocking UX; job recovery tested |
 | T9    | **Release & Final Gate**       | Release Captain   | All tracks done; T6/T7/T8 passed → checklist signed; known gaps + next step clear                                        |
 
-**Sprint Q track note:** every Q stage runs T0 (docs) + the build tracks it needs, always gated by T6/T7/T8. Q11 is validation-only (T6/T7/T8 → T0) — no new build tracks. v12 migration is conditional at Q12.
-
 ---
 
 ## 7. Orchestrator Operating Model
@@ -585,7 +391,7 @@ A track is owned by exactly one role. Supporting roles review or provide input b
 5. Run Critic review (role #10) before the final gate; run QA + Security + Perf (T6+T7+T8) before merging.
 6. Produce a per-track status: **Done** (implemented + validated + documented + handed off) · **Partial** (known gaps documented) · **Blocked** (external dependency) · **Deferred** (reason + trigger) · **Risk Accepted** (mitigation + rollback documented).
 
-**Operating rule:** optimize for sequence, coherence, and risk reduction — not maximum parallel work. **Q1+Q2 hardened the foundation precisely so Q3+ hubs can be built one at a time without re-auditing the read paths.**
+**Operating rule:** optimize for sequence, coherence, and risk reduction — not maximum parallel work.
 
 ---
 
