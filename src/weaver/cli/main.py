@@ -170,6 +170,8 @@ def init_project(
         f"Extracted {result.glossary_candidate_count} glossary candidates -> "
         f"{result.glossary_candidate_path}"
     )
+    for issue in result.read_issues:
+        typer.echo(f"Warning: {issue}")
     if from_template:
         typer.echo(f"Template: {from_template}")
     typer.echo("")
@@ -251,6 +253,8 @@ def import_volume_command(
     typer.echo(f"Added volume: {result.volume_title}")
     typer.echo(f"Detected: {result.chapter_count} chapters, {result.segment_count} segments")
     typer.echo(f"Extracted {result.glossary_candidate_count} glossary candidates")
+    for issue in result.read_issues:
+        typer.echo(f"Warning: {issue}")
     typer.echo("")
     typer.echo("Next:")
     typer.echo(f"  weaver glossary review {project_toml}")

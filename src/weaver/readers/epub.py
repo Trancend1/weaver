@@ -147,19 +147,32 @@ def read_epub(path: Path) -> DocumentIR:
         book = epub.read_epub(path)
         metadata = _read_metadata(book)
         spine_items = _read_spine_items(book)
-        return DocumentIR(
-            metadata=metadata,
-            assets=_read_assets(book),
-            chapters=[
-                _read_chapter(item, order, metadata.identifier)
-                for order, item in enumerate(spine_items)
-            ],
-        )
+        assets = _read_assets(book)
     except (OSError, KeyError, ElementTree.ParseError, EpubException) as exc:
         raise EpubReadError(
             f"Failed to read EPUB '{path}'. Likely cause: invalid EPUB structure. "
             "Next command: run `weaver init <path-to-epub>` with a valid EPUB file."
         ) from exc
+
+    # Per-chapter degradation (audit N5): one malformed spine chapter is a
+    # visible validation issue, not a whole-book failure. The skipped chapter
+    # keeps its spine position; parseable chapters import unchanged.
+    chapters: list[ChapterIR] = []
+    read_issues: list[str] = []
+    for order, item in enumerate(spine_items):
+        try:
+            chapters.append(_read_chapter(item, order, metadata.identifier))
+        except ElementTree.ParseError as exc:
+            read_issues.append(
+                f"Chapter '{item.get_name()}' was skipped: malformed XHTML ({exc}). "
+                "Fix the chapter markup in the source EPUB and re-import to include it."
+            )
+    return DocumentIR(
+        metadata=metadata,
+        assets=assets,
+        chapters=chapters,
+        read_issues=tuple(read_issues),
+    )
 
 
 def read_chapter_excerpt(path: Path, resolved_path: str, *, limit: int = 280) -> str | None:

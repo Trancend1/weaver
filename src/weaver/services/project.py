@@ -41,6 +41,8 @@ class InitResult:
     segment_count: int
     glossary_candidate_count: int
     glossary_candidate_path: Path
+    # Non-fatal reader degradations from the initial volume import (audit N5).
+    read_issues: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -194,12 +196,14 @@ def initialize_project(
         provider_type=provider_type,
         template_overrides=template_overrides,
     )
+    read_issues: tuple[str, ...] = ()
     if source_path is not None:
         volume_result = import_volume(project_toml, source_path, cwd=base_dir)
         chapter_count = volume_result.chapter_count
         segment_count = volume_result.segment_count
         glossary_candidate_count = volume_result.glossary_candidate_count
         glossary_candidate_path = candidate_path
+        read_issues = volume_result.read_issues
     else:
         chapter_count = 0
         segment_count = 0
@@ -221,6 +225,7 @@ def initialize_project(
         segment_count=segment_count,
         glossary_candidate_count=glossary_candidate_count,
         glossary_candidate_path=glossary_candidate_path,
+        read_issues=read_issues,
     )
 
 

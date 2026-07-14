@@ -77,6 +77,10 @@ class DocumentIR:
     metadata: DocumentMetadata
     assets: list[AssetIR]
     chapters: list[ChapterIR]
+    # Non-fatal reader degradations (audit N5): e.g. a spine chapter whose
+    # XHTML could not be parsed and was skipped. Never silently empty — the
+    # import surfaces these to the user.
+    read_issues: tuple[str, ...] = ()
 
 
 def scope_document_to_volume(document: DocumentIR, volume_id: int) -> DocumentIR:

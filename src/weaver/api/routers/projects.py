@@ -444,6 +444,7 @@ async def import_volume_endpoint(
         chapter_count=result.chapter_count,
         segment_count=result.segment_count,
         glossary_candidate_count=result.glossary_candidate_count,
+        read_issues=list(result.read_issues),
     )
 
 
