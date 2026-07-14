@@ -38,6 +38,7 @@ def queue_page(request: Request) -> HTMLResponse:
         registry_live_check=lambda pname, jid: (
             (job := registry.get(jid)) is not None and job.status == "running"
         ),
+        cache=request.app.state.workspace_cache,
     )
 
     return templates.TemplateResponse(

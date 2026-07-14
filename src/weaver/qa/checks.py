@@ -188,21 +188,19 @@ def check_glossary_mismatch(seg: SegmentInput, terms: Sequence[GlossaryTerm]) ->
 
     if seg.translation_text is None or not seg.translation_text.strip():
         return []
+    # Hoist the source/translation casefolds out of the per-term loop: both are
+    # invariant across terms, so folding once per segment is O(1) vs O(terms).
+    folded_source = seg.normalized_source_text.casefold()
+    folded_translation = seg.translation_text.casefold()
     findings: list[QAWarning] = []
     for term in terms:
         if not term.source or not term.target:
             continue
-        source_haystack = (
-            seg.normalized_source_text
-            if term.case_sensitive
-            else seg.normalized_source_text.casefold()
-        )
+        source_haystack = seg.normalized_source_text if term.case_sensitive else folded_source
         source_needle = term.source if term.case_sensitive else term.source.casefold()
         if source_needle not in source_haystack:
             continue
-        translation_haystack = (
-            seg.translation_text if term.case_sensitive else seg.translation_text.casefold()
-        )
+        translation_haystack = seg.translation_text if term.case_sensitive else folded_translation
         target_needle = term.target if term.case_sensitive else term.target.casefold()
         if target_needle in translation_haystack:
             continue

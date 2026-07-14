@@ -71,6 +71,8 @@ def build_workspace_queue(
     books_dir: Path,
     *,
     registry_live_check: Callable[[str, str], bool] | None = None,
+    cache: dict[str, Any] | None = None,
+    ttl_seconds: float = 5.0,
 ) -> WorkspaceQueue:
     """Build a read-only cross-project job queue.
 
@@ -79,6 +81,10 @@ def build_workspace_queue(
         registry_live_check: Optional ``(project_name, job_id) -> bool`` that
             returns True when a job is currently live in the in-process
             ``JobRegistry``.  Used to classify stale ``running`` rows.
+        cache: Optional shared discovery cache (see ``discover_projects``). When
+            supplied, the 3 s queue poll re-inspects nothing within the TTL, so
+            each project is opened at most once per poll (only for its jobs).
+        ttl_seconds: Discovery cache age before a project is re-inspected.
 
     Returns:
         A :class:`WorkspaceQueue` with recent jobs and degraded-project rows.
@@ -87,7 +93,7 @@ def build_workspace_queue(
 
     import time as _time
 
-    discovered = discover_projects(books_dir)
+    discovered = discover_projects(books_dir, cache=cache, ttl_seconds=ttl_seconds)
     all_jobs: list[QueueJobRow] = []
     degraded: list[QueueDegradedProject] = []
 

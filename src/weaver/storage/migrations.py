@@ -625,6 +625,32 @@ def _migrate_to_v12(connection: sqlite3.Connection) -> None:
     connection.execute("DROP TABLE qa_warnings")
 
 
+def _migrate_to_v13(connection: sqlite3.Connection) -> None:
+    """Add the project-scoped ``glossary_candidates`` index (schema v13, v0.7.3 M1.5).
+
+    ``record_uncertain_glossary_candidate`` runs two lookups per uncertain term
+    per segment inside the translate commit; without a ``(project_id, source)``
+    index those are full scans of ``glossary_candidates`` that grow with the
+    table. Purely additive and idempotent — creates the index when absent, no
+    existing data touched.
+    """
+
+    tables = {
+        str(row["name"])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    if "glossary_candidates" not in tables:
+        # Tolerant of the hand-built minimal databases the migration tests stand
+        # up (projects-only); a real database has this table from v1.
+        return
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_glossary_candidates_project "
+        "ON glossary_candidates(project_id, source)"
+    )
+
+
 _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _migrate_to_v2,
     3: _migrate_to_v3,
@@ -637,4 +663,5 @@ _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     10: _migrate_to_v10,
     11: _migrate_to_v11,
     12: _migrate_to_v12,
+    13: _migrate_to_v13,
 }

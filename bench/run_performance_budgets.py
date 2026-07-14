@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import sqlite3
 import time
@@ -18,7 +19,10 @@ from bench.generate_synthetic_fixture import generate_synthetic_epub
 from weaver.cli.main import app
 from weaver.readers.epub import read_epub
 from weaver.services.glossary import extract_glossary_candidates
-from weaver.storage.db import connect_database
+from weaver.services.workspace_providers import build_workspace_providers
+from weaver.services.workspace_queue import build_workspace_queue
+from weaver.storage.db import connect_database, connect_readonly_database
+from weaver.storage.translations import list_previous_translated_segments
 
 DEFAULT_FIXTURE = Path("tests/fixtures/synthetic_200_chapter.epub")
 DEFAULT_WORKDIR = Path(".tmp_benchmarks")
@@ -131,6 +135,15 @@ def run_benchmarks(
     )
     results.append(_budget("weaver validate", 15.0, validate_seconds, "10,000 segments"))
 
+    results.append(_measure_window_flat_cost(db_path))
+
+    providers_seconds = _measure(lambda: build_workspace_providers(workdir))
+    results.append(
+        _budget("providers-hub render", 2.0, providers_seconds, "1-project workspace, read-only")
+    )
+    queue_seconds = _measure(lambda: build_workspace_queue(workdir))
+    results.append(_budget("queue render", 2.0, queue_seconds, "1-project workspace, read-only"))
+
     db_size_mb = db_path.stat().st_size / 1024 / 1024
     results.append(_budget("SQLite DB size", None, None, f"{db_size_mb:.2f} MB < 100 MB"))
     results.append(
@@ -222,6 +235,51 @@ def _chdir(path: Path):
         os.chdir(previous)
 
 
+_FLAT_COST_OP = "rolling-window flat cost"
+_FLAT_COST_MAX_GROWTH = 1.2
+
+
+def _measure_window_flat_cost(db_path: Path) -> BudgetResult:
+    """Prove the rolling-window query is flat across the 10k-segment table.
+
+    The chapter-scoped CTE (v0.7.3 M1.2) makes ``list_previous_translated_segments``
+    depend only on chapter size, not total table size — so the last chapter of
+    the fixture must cost about the same as the first (growth < 1.2x), which the
+    pre-M1.2 O(n^2) query failed (measured 1.96x on a fresh 10k run).
+    """
+
+    with closing(connect_readonly_database(db_path)) as connection:
+        chapters = [
+            str(row["id"])
+            for row in connection.execute("SELECT id FROM chapters ORDER BY spine_order").fetchall()
+        ]
+        first_avg = _avg_window_query(connection, chapters[0])
+        last_avg = _avg_window_query(connection, chapters[-1])
+
+    growth = last_avg / first_avg if first_avg > 0 else 1.0
+    return BudgetResult(
+        operation=_FLAT_COST_OP,
+        target_seconds=_FLAT_COST_MAX_GROWTH,
+        elapsed_seconds=growth,
+        passed=growth < _FLAT_COST_MAX_GROWTH,
+        note=(
+            f"first chapter {first_avg * 1e6:.1f} us vs last {last_avg * 1e6:.1f} us "
+            "per query over 10,000 segments"
+        ),
+    )
+
+
+def _avg_window_query(
+    connection: sqlite3.Connection, chapter_id: str, *, iterations: int = 100
+) -> float:
+    start = time.perf_counter()
+    for _ in range(iterations):
+        list_previous_translated_segments(
+            connection, chapter_id=chapter_id, before_block_order=1_000_000
+        )
+    return (time.perf_counter() - start) / iterations
+
+
 def _measure_resume_scan(db_path: Path) -> float:
     with sqlite3.connect(db_path) as connection:
         connection.execute("UPDATE segments SET status = 'in_progress'")
@@ -234,15 +292,39 @@ def _measure_resume_scan(db_path: Path) -> float:
     return _measure(open_and_reset)
 
 
+# `pattern` yields pure-English output (no `{source}`, no Japanese) so the QA
+# checks see clean translations and `weaver validate` exits 0 — matching the
+# pre-v0.7.2 bench contract. The default `[FAKE] {source}` pattern would retain
+# the Japanese source and trip `untranslated_japanese` criticals (validate → 1).
+_FAKE_PROVIDER_BLOCK = (
+    "[provider]\n"
+    'type = "custom"\n'
+    'protocol = "fake"\n'
+    'model = "fake-1"\n'
+    'base_url = ""\n'
+    'api_key_env = ""\n'
+    'pattern = "Translated sentence."\n\n'
+)
+
+
 def _rewrite_project_for_fake(project_toml: Path) -> None:
+    """Point the benchmark project at the deterministic fake provider.
+
+    Since v0.7.2, ``weaver init`` writes an unresolvable placeholder
+    ``[provider]`` block (empty ``protocol``), so the old string-patch of
+    ``type = "deepseek"`` silently no-ops and translate/export budgets never
+    run. Replace the whole ``[provider]`` table with the canonical fake block
+    (``protocol = "fake"`` — resolved by ``providers.registry._build_fake``).
+    """
+
     text = project_toml.read_text(encoding="utf-8")
-    text = text.replace('type = "deepseek"', 'type = "fake"')
-    text = text.replace('model = "deepseek-chat"', 'model = "fake-1"')
-    text = text.replace(
-        'base_url = "http://localhost:11434"',
-        'base_url = "http://localhost:11434"\npattern = "Translated sentence."',
-    )
-    project_toml.write_text(text, encoding="utf-8")
+    new_text, count = re.subn(r"\[provider\][^\[]*", _FAKE_PROVIDER_BLOCK, text, count=1)
+    if count != 1:
+        raise RuntimeError(
+            f"Expected exactly one [provider] table in {project_toml}; replaced {count}. "
+            "The bench fake-provider rewrite is out of sync with `weaver init`."
+        )
+    project_toml.write_text(new_text, encoding="utf-8")
 
 
 def _budget(
@@ -270,6 +352,8 @@ def _format_budget(result: BudgetResult) -> str:
         return "-"
     if result.operation == "weaver translate fake provider":
         return "< 50 ms/segment"
+    if result.operation == _FLAT_COST_OP:
+        return f"< {result.target_seconds:g}x growth"
     return f"< {result.target_seconds:g} s"
 
 
@@ -278,6 +362,8 @@ def _format_measured(result: BudgetResult) -> str:
         return "-"
     if result.operation == "weaver translate fake provider":
         return f"{result.elapsed_seconds * 1000:.2f} ms/segment"
+    if result.operation == _FLAT_COST_OP:
+        return f"{result.elapsed_seconds:.2f}x"
     return f"{result.elapsed_seconds:.2f} s"
 
 

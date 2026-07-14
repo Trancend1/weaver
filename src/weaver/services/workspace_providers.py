@@ -90,18 +90,27 @@ class _ProjectProviderState:
     degraded: ProviderDegradedProject | None
 
 
-def build_workspace_providers(books_dir: Path) -> WorkspaceProviders:
+def build_workspace_providers(
+    books_dir: Path,
+    *,
+    cache: dict[str, Any] | None = None,
+    ttl_seconds: float = 5.0,
+) -> WorkspaceProviders:
     """Build a read-only cross-project provider summary.
 
     Args:
         books_dir: Root directory containing ``.weaver/<name>/`` projects.
+        cache: Optional shared discovery cache (see ``discover_projects``); lets
+            the providers hub reuse the discovery it and ``_config_ctx`` both
+            need within one render instead of inspecting every project twice.
+        ttl_seconds: Discovery cache age before a project is re-inspected.
 
     Returns:
         A :class:`WorkspaceProviders` with one summary per discovered project.
         Broken projects appear in ``degraded`` — one bad project never blanks
         the hub.  No provider is ever instantiated or called.
     """
-    discovered = discover_projects(books_dir)
+    discovered = discover_projects(books_dir, cache=cache, ttl_seconds=ttl_seconds)
     stored_secrets = set(list_secret_names())
     projects: list[ProjectProviderSummary] = []
     degraded: list[ProviderDegradedProject] = []

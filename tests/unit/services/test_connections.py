@@ -110,6 +110,38 @@ def test_list_views_reflects_secret_presence() -> None:
     assert views[0].secret_present is True
 
 
+def test_list_views_parses_each_config_file_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Counting seam (v0.7.3 M1.3): one connections.toml + one secrets.toml
+    parse per render regardless of connection count (was N+1 for each)."""
+
+    for i in range(3):
+        add_connection(name=f"conn{i}", base_url="https://o/v1", api_key=f"sk-{i}")
+
+    import weaver.core.connection_registry as reg
+    import weaver.core.secret_store as sec
+
+    counts = {"connections": 0, "secrets": 0}
+    real_load_connections = reg.load_connections
+    real_load_secrets = sec.load_secrets
+
+    def counting_connections(path: Path | None = None):
+        counts["connections"] += 1
+        return real_load_connections(path)
+
+    def counting_secrets(path: Path | None = None):
+        counts["secrets"] += 1
+        return real_load_secrets(path)
+
+    monkeypatch.setattr(reg, "load_connections", counting_connections)
+    monkeypatch.setattr(sec, "load_secrets", counting_secrets)
+
+    views = list_connection_views()
+
+    assert len(views) == 3
+    assert counts["connections"] == 1
+    assert counts["secrets"] == 1
+
+
 def test_remove_connection() -> None:
     add_connection(name="c", base_url="https://o/v1", api_key="sk-x")
     assert remove_connection("c") is True

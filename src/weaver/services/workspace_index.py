@@ -55,11 +55,19 @@ class WorkspaceIndex:
 
 @dataclass(frozen=True)
 class _CacheKey:
-    """Filesystem invalidation key for one project."""
+    """Filesystem invalidation key for one project.
+
+    Keyed on the ``project.toml`` + main ``weaver.db`` mtimes only, **not** the
+    ``-wal`` mtime — unified with ``project_discovery._CacheKey``. A read-only
+    read can create/touch the ``-wal`` (so a wal-sensitive key risks a spurious
+    miss on the ``-wal`` absent→present transition), while read-only reads never
+    change the main db mtime. A committed write bumps the db mtime once
+    checkpointed; the TTL bounds staleness in the pre-checkpoint window, which
+    this polling surface tolerates by design.
+    """
 
     toml_mtime: int
     db_mtime: int
-    wal_mtime: int
 
 
 def build_workspace_index(
@@ -87,10 +95,13 @@ def build_workspace_index(
         bad project never blanks the index.
     """
 
-    discovered = discover_projects(books_dir)
     now = time.monotonic()
     entries: list[ProjectIndexEntry] = []
     working_cache: dict[str, Any] = cache if cache is not None else {}
+    # Fold discovery (one readonly DB open + toml parse per project) under the
+    # same shared cache + TTL as the per-project entries, so a repeated render
+    # within the TTL re-inspects nothing.
+    discovered = discover_projects(books_dir, cache=working_cache, ttl_seconds=ttl_seconds)
 
     for project in discovered:
         entry = _entry_for_project(
@@ -254,9 +265,7 @@ def _cache_key_for(project_toml: Path, db_path: Path) -> _CacheKey | None:
     try:
         toml_mtime = project_toml.stat().st_mtime_ns
         db_mtime = db_path.stat().st_mtime_ns
-        wal_mtime = db_path.with_suffix(".db-wal")
-        wal_mtime_val = wal_mtime.stat().st_mtime_ns if wal_mtime.exists() else 0
-        return _CacheKey(toml_mtime=toml_mtime, db_mtime=db_mtime, wal_mtime=wal_mtime_val)
+        return _CacheKey(toml_mtime=toml_mtime, db_mtime=db_mtime)
     except OSError:
         return None
 

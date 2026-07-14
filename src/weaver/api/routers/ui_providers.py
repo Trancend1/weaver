@@ -40,6 +40,11 @@ def _base_dir(request: Request) -> Path:
     return request.app.state.base_dir  # type: ignore[no-any-return]
 
 
+def _discovery_cache(request: Request) -> dict[str, object] | None:
+    """Shared per-app discovery cache (folds repeated inspects under one TTL)."""
+    return getattr(request.app.state, "workspace_cache", None)
+
+
 def _opt(value: str | None) -> str | None:
     return value.strip() if value and value.strip() else None
 
@@ -55,7 +60,7 @@ def _config_ctx(request: Request, project: str | None) -> dict[str, object]:
     return {
         "view": view,
         "project": _opt(project),
-        "projects": [dp.name for dp in discover_projects(base)],
+        "projects": [dp.name for dp in discover_projects(base, cache=_discovery_cache(request))],
     }
 
 
@@ -75,7 +80,7 @@ def providers_page(request: Request, project: str | None = None) -> HTMLResponse
     secret config editor (the single config surface). The table is read-only; edits
     flow through the ``provider_config`` service via the POST routes below."""
     base = _base_dir(request)
-    providers = build_workspace_providers(base)
+    providers = build_workspace_providers(base, cache=_discovery_cache(request))
     try:
         config_ctx = _config_ctx(request, project)
     except WeaverError as exc:

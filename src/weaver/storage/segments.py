@@ -62,30 +62,59 @@ def sync_document_segments(
 
     # Ids are scoped to the volume by the caller (``scope_document_to_volume``)
     # before sync, so identical content across volumes does not collide here.
-    for chapter in document.chapters:
-        connection.execute(
-            """
-            INSERT INTO chapters (id, project_id, volume_id, title, href, spine_order)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              project_id = excluded.project_id,
-              volume_id = excluded.volume_id,
-              title = excluded.title,
-              href = excluded.href,
-              spine_order = excluded.spine_order
-            """,
-            (chapter.id, project_id, volume_id, chapter.title, chapter.href, chapter.order),
+    #
+    # Batch the upserts: for a 10k-block novel the per-row loop issued 1 chapter
+    # upsert + (SELECT + INSERT/UPDATE) per segment. Two ``executemany`` calls
+    # (chapters first so the segment FK is satisfied) replace all of it. The
+    # segment upsert expresses the same stale-marking rule as ``insert_segment``
+    # for the sync path (new row = ``pending``; existing row goes ``stale`` only
+    # when the source hash changed, otherwise its status is preserved).
+    chapter_rows = [
+        (chapter.id, project_id, volume_id, chapter.title, chapter.href, chapter.order)
+        for chapter in document.chapters
+    ]
+    segment_rows = [
+        (
+            block.id,
+            chapter.id,
+            block.order,
+            block.kind,
+            block.source_text,
+            compute_source_hash(block.normalized_source_text),
         )
-        for block in chapter.blocks:
-            insert_segment(
-                connection,
-                segment_id=block.id,
-                chapter_id=chapter.id,
-                block_order=block.order,
-                kind=block.kind,
-                source_text=block.source_text,
-                source_hash=compute_source_hash(block.normalized_source_text),
-            )
+        for chapter in document.chapters
+        for block in chapter.blocks
+    ]
+    connection.executemany(
+        """
+        INSERT INTO chapters (id, project_id, volume_id, title, href, spine_order)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          project_id = excluded.project_id,
+          volume_id = excluded.volume_id,
+          title = excluded.title,
+          href = excluded.href,
+          spine_order = excluded.spine_order
+        """,
+        chapter_rows,
+    )
+    connection.executemany(
+        """
+        INSERT INTO segments (id, chapter_id, block_order, kind, source_text, source_hash, status)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending')
+        ON CONFLICT(id) DO UPDATE SET
+          chapter_id = excluded.chapter_id,
+          block_order = excluded.block_order,
+          kind = excluded.kind,
+          source_text = excluded.source_text,
+          source_hash = excluded.source_hash,
+          status = CASE
+            WHEN segments.source_hash != excluded.source_hash THEN 'stale'
+            ELSE segments.status
+          END
+        """,
+        segment_rows,
+    )
 
 
 def insert_segment(

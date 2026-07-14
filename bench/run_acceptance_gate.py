@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sqlite3
 import time
@@ -350,15 +351,29 @@ def _glossary_counts(db_path: Path) -> dict[str, int]:
         }
 
 
-def _rewrite_project_for_fake(project_toml: Path, *, pattern: str) -> None:
-    text = project_toml.read_text(encoding="utf-8")
-    text = text.replace('type = "deepseek"', 'type = "fake"')
-    text = text.replace('model = "deepseek-chat"', 'model = "fake-1"')
-    text = text.replace(
-        'base_url = "http://localhost:11434"',
-        f'base_url = "http://localhost:11434"\npattern = "{pattern}"',
+def _fake_provider_block(pattern: str) -> str:
+    return (
+        "[provider]\n"
+        'type = "custom"\n'
+        'protocol = "fake"\n'
+        'model = "fake-1"\n'
+        'base_url = ""\n'
+        'api_key_env = ""\n'
+        f'pattern = "{pattern}"\n\n'
     )
-    project_toml.write_text(text, encoding="utf-8")
+
+
+def _rewrite_project_for_fake(project_toml: Path, *, pattern: str) -> None:
+    # `weaver init` writes an unresolvable placeholder `[provider]` block since
+    # v0.7.2 (empty protocol), so replace the whole table with the canonical
+    # fake block (protocol = "fake") rather than string-patching a brand.
+    text = project_toml.read_text(encoding="utf-8")
+    new_text, count = re.subn(r"\[provider\][^\[]*", _fake_provider_block(pattern), text, count=1)
+    if count != 1:
+        raise RuntimeError(
+            f"Expected exactly one [provider] table in {project_toml}; replaced {count}."
+        )
+    project_toml.write_text(new_text, encoding="utf-8")
 
 
 def _seed_conflict_and_translate(
@@ -435,12 +450,11 @@ def _provider_unavailable(
     project_arg: str,
 ):
     original = project_toml.read_text(encoding="utf-8")
-    broken = original.replace('type = "fake"', 'type = "ollama"')
+    # Turn the fake block into a real openai_chat transport pointed at an
+    # unreachable endpoint so translate hits the provider-unavailable path.
+    broken = original.replace('protocol = "fake"', 'protocol = "openai_chat"')
     broken = broken.replace('model = "fake-1"', 'model = "missing-model"')
-    broken = broken.replace(
-        'base_url = "http://localhost:11434"',
-        'base_url = "http://127.0.0.1:1"',
-    )
+    broken = broken.replace('base_url = ""', 'base_url = "http://127.0.0.1:1/v1"')
     project_toml.write_text(broken, encoding="utf-8")
     result = _invoke_cli(runner, ["translate", project_arg], cwd=workdir)
     project_toml.write_text(original, encoding="utf-8")

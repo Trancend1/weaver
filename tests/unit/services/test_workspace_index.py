@@ -294,6 +294,45 @@ def test_workspace_index_cache_hit_and_invalidation(tmp_path: Path) -> None:
     assert cached[2] > 0
 
 
+def test_index_warm_rebuild_reopens_nothing_across_wal_transition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The entry + discovery caches must both hit on a warm rebuild even when the
+    first read creates the ``-wal`` (absent→present) — proven by opening the DB
+    zero times on the second build. This is robust because the cache key is keyed
+    on ``(project.toml, weaver.db)`` mtimes only, not the read-touched ``-wal``.
+    """
+
+    initialize_project(FIXTURE_EPUB, cwd=tmp_path, project_name="alpha")
+    db_path = tmp_path / ".weaver" / "alpha" / "weaver.db"
+    # Force the checkpointed (no -wal) state so the first read triggers the
+    # absent→present transition that a wal-sensitive key would miss on.
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+    cache: dict[str, Any] = {}
+    build_workspace_index(tmp_path, cache=cache)  # warm
+
+    import weaver.services.project as project_mod
+    import weaver.services.workspace_index as index_mod
+
+    opens = {"n": 0}
+    real_ro = index_mod.connect_readonly_database
+
+    def counting(path):  # noqa: ANN001 - test shim
+        opens["n"] += 1
+        return real_ro(path)
+
+    monkeypatch.setattr(index_mod, "connect_readonly_database", counting)
+    monkeypatch.setattr(project_mod, "connect_readonly_database", counting)
+
+    index = build_workspace_index(tmp_path, cache=cache)
+
+    assert index.entries[0].name == "alpha"
+    assert opens["n"] == 0  # fully cached; no DB reopened
+
+
 # ---------- No-write regression ----------
 
 

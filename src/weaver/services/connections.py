@@ -191,7 +191,10 @@ def all_cached_models() -> dict[str, CachedModels]:
 def list_connection_views() -> list[ConnectionView]:
     """Return card views for all registered connections (no provider call)."""
 
-    return [_to_view(conn) for conn in list_connections()]
+    # Parse secrets.toml once for the whole render instead of once per
+    # connection (the previous `_secret_present` per card re-parsed the file).
+    secret_names = set(list_secret_names())
+    return [_to_view(conn, secret_names=secret_names) for conn in list_connections()]
 
 
 def remove_connection(name: str) -> bool:
@@ -209,18 +212,26 @@ def _resolve_key_value(*, api_key_env: str | None, name: str, use_shell_env: boo
     return os.environ.get(env_name) or load_secrets().get(env_name, "")
 
 
-def _secret_present(env_name: str) -> bool:
-    return bool(env_name) and (env_name in list_secret_names() or bool(os.environ.get(env_name)))
+def _secret_present(env_name: str, *, secret_names: set[str] | None = None) -> bool:
+    if not env_name:
+        return False
+    # ``secret_names`` lets a bulk caller (``list_connection_views``) pass a
+    # single pre-parsed set instead of re-reading secrets.toml per connection.
+    stored = (
+        env_name in secret_names if secret_names is not None else env_name in list_secret_names()
+    )
+    return stored or bool(os.environ.get(env_name))
 
 
-def _to_view(conn: Connection) -> ConnectionView:
+def _to_view(conn: Connection, *, secret_names: set[str] | None = None) -> ConnectionView:
     return ConnectionView(
         name=conn.name,
         base_url=conn.base_url,
         default_model=conn.default_model,
         api_key_env=conn.api_key_env,
         requires_key=conn.requires_key,
-        secret_present=(not conn.requires_key) or _secret_present(conn.api_key_env),
+        secret_present=(not conn.requires_key)
+        or _secret_present(conn.api_key_env, secret_names=secret_names),
     )
 
 

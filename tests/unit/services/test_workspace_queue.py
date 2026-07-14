@@ -5,10 +5,74 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from weaver.services.project import initialize_project
 from weaver.services.workspace_queue import WorkspaceQueue, build_workspace_queue
 
 FIXTURE_EPUB = Path(__file__).parents[2] / "fixtures" / "aozora_sample.epub"
+
+
+def _two_projects_with_jobs(tmp_path: Path) -> None:
+    initialize_project(FIXTURE_EPUB, cwd=tmp_path, project_name="alpha")
+    initialize_project(FIXTURE_EPUB, cwd=tmp_path, project_name="beta")
+    for name in ("alpha", "beta"):
+        db = tmp_path / ".weaver" / name / "weaver.db"
+        conn = sqlite3.connect(db)
+        conn.row_factory = sqlite3.Row
+        _insert_job(conn, f"job-{name}", "running", "2025-06-10T10:00:00+00:00")
+        conn.commit()
+        conn.close()
+
+
+def _count_readonly_opens(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
+    """Count every ``connect_readonly_database`` call across discovery + queue."""
+
+    import weaver.services.project as project_mod
+    import weaver.services.workspace_queue as queue_mod
+
+    opens = {"n": 0}
+    real_ro = queue_mod.connect_readonly_database
+
+    def counting(path):  # noqa: ANN001 - test shim
+        opens["n"] += 1
+        return real_ro(path)
+
+    monkeypatch.setattr(queue_mod, "connect_readonly_database", counting)
+    monkeypatch.setattr(project_mod, "connect_readonly_database", counting)
+    return opens
+
+
+def test_queue_poll_opens_each_db_once_with_warm_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M1.4 counting seam: with the shared discovery cache warm, each project's
+    DB is opened at most once per poll (jobs only — discovery is served from
+    cache). Without the cache the same poll opens each DB twice."""
+
+    _two_projects_with_jobs(tmp_path)
+    cache: dict[str, object] = {}
+    build_workspace_queue(tmp_path, cache=cache)  # warm the discovery cache
+
+    opens = _count_readonly_opens(monkeypatch)
+    queue = build_workspace_queue(tmp_path, cache=cache)
+
+    assert len(queue.jobs) == 2
+    assert opens["n"] == 2  # 1 open per project (2 projects); discovery cached
+
+
+def test_queue_poll_without_cache_opens_each_db_twice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Baseline contrast: uncached discovery inspects each project (open #1) and
+    the queue reads its jobs (open #2) — two opens per project per poll."""
+
+    _two_projects_with_jobs(tmp_path)
+    opens = _count_readonly_opens(monkeypatch)
+
+    build_workspace_queue(tmp_path)  # no cache
+
+    assert opens["n"] == 4  # 2 projects x (discovery inspect + jobs read)
 
 
 def _insert_job(
