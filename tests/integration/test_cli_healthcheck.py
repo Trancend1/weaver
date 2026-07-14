@@ -45,9 +45,7 @@ def test_inspect_without_healthcheck_flag_omits_healthcheck_row(tmp_path, monkey
     assert "Healthcheck" not in inspect_result.output
 
 
-def test_inspect_connection_first_project_shows_resolved_active_ai(
-    tmp_path, monkeypatch
-) -> None:
+def test_inspect_connection_first_project_shows_resolved_active_ai(tmp_path, monkeypatch) -> None:
     # Audit A8: a connection-first project keeps its Active AI under
     # [routing.translate] and leaves [provider] empty — inspect must resolve
     # routing like the translate path, not read the raw [provider] block.
