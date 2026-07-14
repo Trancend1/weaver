@@ -154,7 +154,8 @@ and hidden round-trips become countable (F6).
   gates only the repair re-ask, matching the `enforce_repair_enabled` docstring
   (`services/translation.py:709-712`) and the ADR 019 plan.
 - **M3.2** (A4b+A5) Persist verdicts/repair outcomes and reconcile tokens. **Recommended shape
-  (settle at Gate B):** columns on `translations` (migration v13) — violations JSON,
+  (settle at Gate B):** columns on `translations` (migration **v14** — M1.5 took v13 for
+  `idx_glossary_candidates_project`, so `SCHEMA_VERSION` is already 13) — violations JSON,
   `repair_attempted`/`repair_outcome`, repair token columns. Provenance belongs on the attempt
   row; avoids a new join on read paths; A5 resolves by construction (row carries final-attempt
   tokens + repair delta; run summary = sum of rows). Surface in the run summary
@@ -168,7 +169,7 @@ and hidden round-trips become countable (F6).
 - `enforce_repair = false` → detection still runs and persists findings; zero repair calls.
 - Per-segment row tokens + run summary reconcile exactly on a repaired fixture
   (`sum(rows) == summary`, incl. repair).
-- Migration v13 forward-tested + idempotent (T4 rules); pre-v13 DB opens and renders cleanly.
+- Migration v14 forward-tested + idempotent (T4 rules); pre-v14 DB opens and renders cleanly.
 - Run summary shows repair/JSON-repair call counts.
 
 **Non-goals:** no `[routing.repair]`/`TaskType.repair` (seam stays declared, ADR 019 §5);
@@ -230,7 +231,7 @@ tasks, no dynamic autoscaling — a fixed bounded window only.
 
 ```
 M1 (quick wins) ──► M2 (carry-forward) ──► M3 (provenance/cost) ──► M4 (concurrency, ADR 020) ──► M5 (gate)
-   │ flat-cost + render probes land here      │ migration v13           │ blocked on ADR 020 Accepted
+   │ flat-cost probes + idx v13 land here      │ migration v14           │ blocked on ADR 020 Accepted
 ```
 
 - One milestone = one branch = one PR. Each slice: `uv run ruff check .` + `ruff format --check .`
