@@ -8,7 +8,7 @@ from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
 from xml.etree import ElementTree
-from zipfile import ZipFile
+from zipfile import BadZipFile, ZipFile
 
 from ebooklib import epub
 from ebooklib.epub import EpubBook, EpubException, EpubItem
@@ -46,6 +46,14 @@ from weaver.readers.html_blocks import (
 DOCUMENT_MEDIA_TYPES = {"application/xhtml+xml", "text/html"}
 IMAGE_MEDIA_TYPES = {"image/jpeg", "image/png", "image/webp", "image/svg+xml"}
 
+# Ceiling on the total *declared* uncompressed size of an EPUB archive (audit
+# N4). An EPUB is a zip: a small upload can declare gigabytes uncompressed (zip
+# bomb) that ebooklib would expand in memory. The declared sizes come from the
+# zip central directory (no extraction), and zipfile rejects members whose real
+# stream exceeds their declared size, so this bound is sound. 1 GiB is 4x the
+# 256 MiB upload cap — far above any real light-novel EPUB.
+MAX_UNCOMPRESSED_BYTES = 1024 * 1024 * 1024  # 1 GiB
+
 # Sprint J5 (ADR 010-adjacent): increment whenever ``parse_epub_structure`` or
 # any helper it owns changes the shape of :class:`ParsedEpub`. The Sprint J
 # preservation snapshot table keys on this value to invalidate stale rows.
@@ -61,6 +69,7 @@ def parse_epub_structure(path: Path) -> ParsedEpub:
     contract for now.
     """
 
+    _ensure_uncompressed_size_within_limit(path)
     archive_info = _archive_info(path)
     opf_path = _container_opf_path(path)
     opf_root = _opf_root(path, opf_path) if opf_path is not None else None
@@ -128,9 +137,12 @@ def read_epub(path: Path) -> DocumentIR:
         DocumentIR with metadata, assets, chapters, and text blocks.
 
     Raises:
-        EpubReadError: If the EPUB cannot be opened or required package files are missing.
+        EpubReadError: If the EPUB cannot be opened, required package files are
+            missing, or the archive declares more than
+            :data:`MAX_UNCOMPRESSED_BYTES` uncompressed (zip-bomb guard).
     """
 
+    _ensure_uncompressed_size_within_limit(path)
     try:
         book = epub.read_epub(path)
         metadata = _read_metadata(book)
@@ -184,6 +196,35 @@ def _read_metadata(book: EpubBook) -> DocumentMetadata:
 def _archive_info(path: Path) -> dict[str, int]:
     with ZipFile(path, "r") as archive:
         return {item.filename: item.file_size for item in archive.infolist()}
+
+
+def _ensure_uncompressed_size_within_limit(path: Path) -> None:
+    """Reject an archive whose declared uncompressed size exceeds the ceiling.
+
+    Runs before any parse (audit N4). Unreadable/non-zip files pass through so
+    the parser raises its own, more specific error.
+
+    Raises:
+        EpubReadError: When the declared uncompressed total is over
+            :data:`MAX_UNCOMPRESSED_BYTES`.
+    """
+
+    try:
+        with ZipFile(path, "r") as archive:
+            declared_total = sum(item.file_size for item in archive.infolist())
+    except (OSError, BadZipFile):
+        return
+    if declared_total <= MAX_UNCOMPRESSED_BYTES:
+        return
+    declared_mib = declared_total / (1024 * 1024)
+    limit_mib = MAX_UNCOMPRESSED_BYTES // (1024 * 1024)
+    raise EpubReadError(
+        f"EPUB '{path}' declares {declared_mib:.0f} MiB uncompressed, over the "
+        f"{limit_mib} MiB safety ceiling. "
+        "Likely cause: a zip bomb or an EPUB bundling very large media. "
+        "Next command: repackage the EPUB without oversized media, or use a "
+        "smaller source."
+    )
 
 
 def _container_opf_path(path: Path) -> str | None:
