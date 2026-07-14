@@ -22,6 +22,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
+from weaver.core.toml_write import escape_toml_string, guard_unparseable_toml
 from weaver.errors import ConfigError
 
 KEYS_TABLE = "keys"
@@ -126,10 +127,11 @@ def apply_secrets_to_env(path: Path | None = None) -> None:
 
 
 def _write_secrets(secrets: dict[str, str], path: Path) -> None:
+    guard_unparseable_toml(path, label="Secret store")
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [f"[{KEYS_TABLE}]"]
     for name in sorted(secrets):
-        lines.append(f'{name} = "{_escape(secrets[name])}"')
+        lines.append(f'{name} = "{escape_toml_string(secrets[name])}"')
     content = "\n".join(lines) + "\n"
     with tempfile.NamedTemporaryFile(
         "w",
@@ -150,7 +152,3 @@ def _restrict_permissions(path: Path) -> None:
     # Windows / exotic filesystems cannot enforce POSIX modes — best-effort.
     with contextlib.suppress(OSError):
         path.chmod(stat.S_IRUSR | stat.S_IWUSR)
-
-
-def _escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')

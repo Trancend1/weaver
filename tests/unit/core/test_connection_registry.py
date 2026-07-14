@@ -94,6 +94,41 @@ def test_missing_base_url_is_rejected(conn_path: Path) -> None:
         register_connection(Connection(name="c", base_url="", api_key_env="A"))
 
 
+def test_control_char_values_round_trip(conn_path: Path) -> None:
+    # Audit A2: the old escape left \n/\r/\t/C0 unescaped, corrupting the file.
+    register_connection(
+        Connection(
+            name="tricky",
+            base_url="https://a/v1",
+            api_key_env="A_KEY",
+            default_model="model\nwith\tcontrols\x1b",
+            headers={"X-Note": "line1\nline2"},
+        )
+    )
+    got = get_connection("tricky")
+    assert got is not None
+    assert got.default_model == "model\nwith\tcontrols\x1b"
+    assert got.headers == {"X-Note": "line1\nline2"}
+
+
+def test_write_over_corrupt_registry_backs_up_never_destroys(conn_path: Path) -> None:
+    # Audit A7: tolerant read returns {} on a corrupt file; a write must not
+    # silently rebuild from that empty view.
+    conn_path.write_text('[connections.old]\nbase_url = "unterminated\n', encoding="utf-8")
+
+    with pytest.raises(ConfigError) as exc_info:
+        register_connection(Connection(name="c", base_url="https://a/v1", api_key_env="A"))
+
+    backups = list(conn_path.parent.glob("connections.toml.corrupt-*"))
+    assert len(backups) == 1
+    assert "connections.old" in backups[0].read_text(encoding="utf-8")
+    assert str(backups[0]) in str(exc_info.value)
+
+    # Retry after the move-aside succeeds with a fresh file.
+    register_connection(Connection(name="c", base_url="https://a/v1", api_key_env="A"))
+    assert get_connection("c") is not None
+
+
 def test_round_trip_preserves_headers_and_timeout(conn_path: Path) -> None:
     register_connection(
         Connection(
