@@ -34,6 +34,19 @@ def test_epub_preview_json_upload(client: TestClient) -> None:
     assert "validation_issues" in body
 
 
+def test_epub_preview_upload_over_cap_is_rejected(client: TestClient, monkeypatch) -> None:
+    # Audit N3: preview must enforce the same MAX_UPLOAD_BYTES cap as
+    # create/import, not act as an uncapped bypass.
+    import weaver.services.source_intake as source_intake
+
+    monkeypatch.setattr(source_intake, "MAX_UPLOAD_BYTES", 16)
+
+    response = client.post("/projects/epub-preview", files=_epub_upload())
+
+    assert response.status_code == 422
+    assert "over the" in response.json()["detail"]
+
+
 def test_epub_preview_json_source_path_is_sandboxed(client: TestClient, tmp_path: Path) -> None:
     source = tmp_path / "aozora_sample.epub"
     source.write_bytes(FIXTURE_EPUB.read_bytes())

@@ -12,11 +12,15 @@ from pathlib import Path
 from typing import Any
 
 from weaver.core.config import load_project_config
+from weaver.core.task_types import TaskType
 from weaver.core.templates import get_template
+from weaver.core.toml_write import escape_toml_string
 from weaver.errors import ConfigError, ProjectNotFoundError, ProviderError, WeaverError
 from weaver.providers import ProviderStatus, build_provider
+from weaver.providers.registry import normalize_provider_config
 from weaver.services.import_source import import_volume
 from weaver.services.logging_setup import log_runtime_event
+from weaver.services.routing import resolve_chain
 from weaver.storage.db import (
     SCHEMA_VERSION,
     connect_readonly_database,
@@ -37,6 +41,8 @@ class InitResult:
     segment_count: int
     glossary_candidate_count: int
     glossary_candidate_path: Path
+    # Non-fatal reader degradations from the initial volume import (audit N5).
+    read_issues: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -190,12 +196,14 @@ def initialize_project(
         provider_type=provider_type,
         template_overrides=template_overrides,
     )
+    read_issues: tuple[str, ...] = ()
     if source_path is not None:
         volume_result = import_volume(project_toml, source_path, cwd=base_dir)
         chapter_count = volume_result.chapter_count
         segment_count = volume_result.segment_count
         glossary_candidate_count = volume_result.glossary_candidate_count
         glossary_candidate_path = candidate_path
+        read_issues = volume_result.read_issues
     else:
         chapter_count = 0
         segment_count = 0
@@ -217,6 +225,7 @@ def initialize_project(
         segment_count=segment_count,
         glossary_candidate_count=glossary_candidate_count,
         glossary_candidate_path=glossary_candidate_path,
+        read_issues=read_issues,
     )
 
 
@@ -241,20 +250,25 @@ def inspect_project(
     base_dir = cwd or Path.cwd()
     data = load_project_config(project_toml)
     project = data["project"]
-    provider = data["provider"]
+    # Resolve the provider through routing exactly like the translate path
+    # (audit A8): a connection-first project keeps its Active AI under
+    # [routing.translate] and leaves [provider] empty, so raw [provider] reads
+    # would show nothing (or KeyError on a trimmed section).
+    engine_chain = resolve_chain(project_toml, TaskType.translate, data=data)
+    provider_config = normalize_provider_config(engine_chain[0].provider_config)
     db_path = _resolve_path(str(project["database_path"]), base_dir, project_toml.parent)
 
     with closing(connect_readonly_database(db_path)) as connection:
         counts = _read_counts(connection)
         schema_version, project_uuid = _read_identity(connection)
 
-    status = _run_provider_healthcheck(provider) if run_healthcheck else None
+    status = _run_provider_healthcheck(provider_config) if run_healthcheck else None
 
     return InspectSummary(
         project_name=str(project["name"]),
         source_file=str(project["source_file"]),
-        provider=str(provider["type"]),
-        model=str(provider["model"]),
+        provider=str(provider_config.get("type") or provider_config.get("protocol") or ""),
+        model=str(provider_config.get("model") or ""),
         volume_count=counts["volumes"],
         chapter_count=counts["chapters"],
         segment_count=counts["segments"],
@@ -330,7 +344,7 @@ def _write_project_toml(
 
     content = f"""[project]
 name = "{project_name}"
-source_file = "{_escape_toml(source_file)}"
+source_file = "{escape_toml_string(source_file)}"
 project_dir = "{project_dir}"
 database_path = "{database_path}"
 output_dir = "{output_dir}"
@@ -392,7 +406,7 @@ def _provider_lines(provider_type: str) -> list[str]:
         ]
     return [
         "[provider]",
-        f'type = "{_escape_toml(provider_type)}"',
+        f'type = "{escape_toml_string(provider_type)}"',
         'protocol = ""',
         'model = ""',
         'base_url = ""',
@@ -457,10 +471,6 @@ def _resolve_path(path_value: str, cwd: Path, project_toml_dir: Path) -> Path:
 
 def _posix_relative(path: Path, start: Path) -> str:
     return Path(os.path.relpath(path, start)).as_posix()
-
-
-def _escape_toml(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _toml_bool(value: object) -> str:

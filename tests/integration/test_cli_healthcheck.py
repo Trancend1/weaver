@@ -7,6 +7,8 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from weaver.cli.main import app
+from weaver.core.connection_registry import Connection, register_connection
+from weaver.services.config_writer import set_routing
 
 FIXTURE_EPUB = Path(__file__).parents[1] / "fixtures" / "aozora_sample.epub"
 
@@ -41,6 +43,38 @@ def test_inspect_without_healthcheck_flag_omits_healthcheck_row(tmp_path, monkey
 
     assert inspect_result.exit_code == 0, inspect_result.output
     assert "Healthcheck" not in inspect_result.output
+
+
+def test_inspect_connection_first_project_shows_resolved_active_ai(tmp_path, monkeypatch) -> None:
+    # Audit A8: a connection-first project keeps its Active AI under
+    # [routing.translate] and leaves [provider] empty — inspect must resolve
+    # routing like the translate path, not read the raw [provider] block.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("WEAVER_CONNECTIONS_PATH", str(tmp_path / "connections.toml"))
+    runner = CliRunner()
+
+    init_result = runner.invoke(app, ["init", str(FIXTURE_EPUB)])
+    assert init_result.exit_code == 0, init_result.output
+    project_toml = tmp_path / ".weaver" / "aozora_sample" / "project.toml"
+
+    register_connection(
+        Connection(
+            name="localfake",
+            base_url="https://fake.invalid/v1",
+            api_key_env="",
+            default_model="fake-1",
+            protocol="fake",
+            requires_key=False,
+        )
+    )
+    set_routing(project_toml, task="translate", connection="localfake", model="fake-1")
+
+    inspect_result = runner.invoke(app, ["inspect", str(project_toml), "--healthcheck"])
+
+    assert inspect_result.exit_code == 0, inspect_result.output
+    assert "localfake" in inspect_result.output  # resolved Active AI, not raw [provider]
+    assert "fake-1" in inspect_result.output
+    assert "healthy" in inspect_result.output
 
 
 def _rewrite_provider_to_fake(project_toml: Path) -> None:

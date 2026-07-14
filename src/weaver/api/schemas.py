@@ -133,6 +133,8 @@ class ImportVolumeResponse(BaseModel):
     chapter_count: int
     segment_count: int
     glossary_candidate_count: int
+    # Non-fatal reader degradations (audit N5), e.g. a skipped malformed chapter.
+    read_issues: list[str] = []
 
 
 # ---------------------------------------------------------------------------

@@ -29,6 +29,7 @@ from typing import Any
 
 from weaver.core.global_config import default_global_config_path
 from weaver.core.task_types import TaskType
+from weaver.core.toml_write import escape_toml_string
 from weaver.errors import ConfigError
 from weaver.providers.registry import (
     PROTOCOL_OPENAI_CHAT,
@@ -193,15 +194,15 @@ def _resolve_fallbacks(
 def _render_routing_section(
     task: str, connection: str, model: str | None, fallbacks: Sequence[tuple[str, str]]
 ) -> str:
-    lines = [f"[routing.{task}]", f'connection = "{_escape(connection)}"']
+    lines = [f"[routing.{task}]", f'connection = "{escape_toml_string(connection)}"']
     if model and model.strip():
-        lines.append(f'model = "{_escape(model.strip())}"')
+        lines.append(f'model = "{escape_toml_string(model.strip())}"')
     if fallbacks:
         items = []
         for conn, mdl in fallbacks:
-            inner = f'connection = "{_escape(conn)}"'
+            inner = f'connection = "{escape_toml_string(conn)}"'
             if mdl:
-                inner += f', model = "{_escape(mdl)}"'
+                inner += f', model = "{escape_toml_string(mdl)}"'
             items.append("{ " + inner + " }")
         lines.append("fallback = [" + ", ".join(items) + "]")
     return "\n".join(lines) + "\n"
@@ -373,11 +374,7 @@ def _line_key(line: str) -> str | None:
 
 
 def _format_key(key: str, value: str) -> str:
-    return f'{key} = "{_escape(value)}"'
-
-
-def _escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'{key} = "{escape_toml_string(value)}"'
 
 
 def _append_section(text: str, header: str, updates: dict[str, str]) -> str:

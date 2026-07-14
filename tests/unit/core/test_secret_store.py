@@ -28,6 +28,37 @@ def test_set_load_roundtrip(tmp_path: Path) -> None:
     assert secrets["MY_API_KEY"] == 'has"quote\\and'  # escaping round-trips
 
 
+def test_control_char_value_round_trips(tmp_path: Path) -> None:
+    # Audit A2: the old escape left \n/\r/\t/C0 unescaped, corrupting the file.
+    store = tmp_path / "secrets.toml"
+    tricky = "line1\nline2\ttab\rret\x1besc"
+    set_secret("TRICKY_KEY", tricky, path=store)
+    set_secret("OTHER_KEY", "plain", path=store)
+
+    secrets = load_secrets(store)
+    assert secrets["TRICKY_KEY"] == tricky
+    assert secrets["OTHER_KEY"] == "plain"
+
+
+def test_write_over_corrupt_store_backs_up_never_destroys(tmp_path: Path) -> None:
+    # Audit A7: tolerant read returns {} on a corrupt file; a write must not
+    # silently rebuild from that empty view.
+    store = tmp_path / "secrets.toml"
+    store.write_text('[keys]\nOLD_KEY = "unterminated\n', encoding="utf-8")
+
+    with pytest.raises(ConfigError) as exc_info:
+        set_secret("NEW_KEY", "value", path=store)
+
+    backups = list(tmp_path.glob("secrets.toml.corrupt-*"))
+    assert len(backups) == 1
+    assert "OLD_KEY" in backups[0].read_text(encoding="utf-8")
+    assert str(backups[0]) in str(exc_info.value)
+
+    # Retry after the move-aside succeeds with a fresh file.
+    set_secret("NEW_KEY", "value", path=store)
+    assert load_secrets(store) == {"NEW_KEY": "value"}
+
+
 def test_list_returns_names_only(tmp_path: Path) -> None:
     store = tmp_path / "secrets.toml"
     set_secret("B_KEY", "2", path=store)

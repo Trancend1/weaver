@@ -393,6 +393,7 @@ class TranslationJob:
                 "input_tokens": result.input_tokens,
                 "output_tokens": result.output_tokens,
                 "cancelled": result.cancelled,
+                "preflight_warning": result.preflight_warning,
             }
             if self.storage is not None:
                 self.storage.flush_progress(
@@ -778,6 +779,7 @@ def _batch_result_data(result: BatchTranslationResult) -> dict[str, Any]:
         "started_at": result.started_at,
         "finished_at": result.finished_at,
         "duration_seconds": result.duration_seconds,
+        "preflight_warning": result.preflight_warning,
     }
 
 

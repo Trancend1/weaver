@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import sqlite3
 import time
 from collections.abc import Callable, Iterable, Sequence
@@ -68,6 +69,8 @@ VALID_HONORIFIC_POLICIES = frozenset({"preserve", "localize", "hybrid"})
 # run (ADR 018 D4 — a simple try-next window, not a circuit breaker).
 _FALLBACK_COLD_SECONDS = 30.0
 
+_LOGGER = logging.getLogger(__name__)
+
 ProgressCallback = Callable[[int, int, SegmentRecord, bool, int | None, int | None], None]
 
 
@@ -84,6 +87,51 @@ class TranslationRunSummary:
     stale_segments: int
     input_tokens: int
     output_tokens: int
+    # Non-None when the primary provider failed its pre-flight healthcheck and
+    # the run continued on a healthy fallback (audit A1); surfaced by the CLI.
+    preflight_warning: str | None = None
+
+
+def preflight_provider_chain(
+    provider: LLMProvider,
+    fallback_engines: Sequence[tuple[LLMProvider, str]] = (),
+) -> str | None:
+    """Healthcheck the engine chain once before a run starts (audit A1).
+
+    A healthy primary returns ``None`` — today's behavior. A dead primary no
+    longer aborts a run that has a healthy fallback configured: the per-segment
+    try-next chain (ADR 018 D4) cold-marks the primary and advances, so the run
+    completes on the fallback. The returned warning is logged here and carried
+    on the plan/summary so the failure stays visible, never silent.
+
+    Raises:
+        ProviderUnavailable: When the primary is unhealthy and no configured
+            fallback passes its healthcheck (or none is configured) — the
+            pre-flight abort stands.
+    """
+
+    status = provider.healthcheck()
+    if status.healthy:
+        return None
+    detail = status.message or "no detail returned"
+    for engine, _model in fallback_engines:
+        if engine.healthcheck().healthy:
+            warning = (
+                f"Primary provider {provider.name} is unavailable: {detail}. "
+                f"Continuing on healthy fallback {engine.name}; the primary is "
+                "retried during the run (ADR 018 D4)."
+            )
+            _LOGGER.warning(warning)
+            return warning
+    fallback_note = (
+        ", and no configured fallback passed its healthcheck" if fallback_engines else ""
+    )
+    raise ProviderUnavailable(
+        f"Provider {provider.name} is unavailable: {detail}{fallback_note}. "
+        "Likely cause: API key missing/invalid, network unreachable, or "
+        "local Ollama not running. "
+        "Next command: run `weaver inspect --healthcheck <project.toml>`."
+    )
 
 
 def build_context(
@@ -281,25 +329,6 @@ def translate_project(
         )
 
     active_provider = build_provider(provider_config) if provider is None else provider
-    status = active_provider.healthcheck()
-    if not status.healthy:
-        detail = status.message or "no detail returned"
-        raise ProviderUnavailable(
-            f"Provider {active_provider.name} is unavailable: {detail}. "
-            "Likely cause: API key missing/invalid, network unreachable, or "
-            "local Ollama not running. "
-            "Next command: run `weaver inspect --healthcheck <project.toml>`."
-        )
-    provider_model = str(provider_config["model"])
-    honorific_policy = str(translation_config.get("honorifics", "preserve"))
-    if honorific_policy not in VALID_HONORIFIC_POLICIES:
-        valid = ", ".join(sorted(VALID_HONORIFIC_POLICIES))
-        raise ConfigError(
-            f"Invalid honorifics value `{honorific_policy}`. "
-            f"Likely cause: project.toml [translation] honorifics must be one of: {valid}. "
-            "Next command: edit project.toml and correct the value."
-        )
-
     # Build the fallback engines once per run (skip any that cannot be built — a
     # missing-key fallback must not abort the run; the primary still translates).
     # Skipped when a provider is injected directly (test path).
@@ -313,6 +342,16 @@ def translate_project(
                 )
             except (ConfigError, ProviderError):
                 continue
+    preflight_warning = preflight_provider_chain(active_provider, fallback_engines)
+    provider_model = str(provider_config["model"])
+    honorific_policy = str(translation_config.get("honorifics", "preserve"))
+    if honorific_policy not in VALID_HONORIFIC_POLICIES:
+        valid = ", ".join(sorted(VALID_HONORIFIC_POLICIES))
+        raise ConfigError(
+            f"Invalid honorifics value `{honorific_policy}`. "
+            f"Likely cause: project.toml [translation] honorifics must be one of: {valid}. "
+            "Next command: edit project.toml and correct the value."
+        )
 
     translated_count = 0
     reused_count = 0
@@ -396,6 +435,7 @@ def translate_project(
         stale_segments=counts["stale"],
         input_tokens=input_tokens,
         output_tokens=output_tokens,
+        preflight_warning=preflight_warning,
     )
 
 

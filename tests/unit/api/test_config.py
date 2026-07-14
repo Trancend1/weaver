@@ -80,7 +80,7 @@ def test_patch_project_scope_persists(isolated: Path) -> None:
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["provider_type"] == "custom"
+    assert body["provider_type"] == "fake"  # brand preserved (audit A3)
     assert body["protocol"] == "fake"
     assert body["model"] == "fake-9"
     # persisted: a fresh read reflects it

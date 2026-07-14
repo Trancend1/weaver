@@ -56,4 +56,4 @@ def test_build_deepseek_rejects_nonpositive_timeout() -> None:
 def test_build_provider_accepts_valid_numbers() -> None:
     # Ollama needs no API key, so a valid numeric config builds end to end.
     provider = build_provider({"type": "ollama", "temperature": 0.7, "timeout_seconds": 30})
-    assert provider.name == "custom"
+    assert provider.name == "ollama"  # brand preserved (audit A3)

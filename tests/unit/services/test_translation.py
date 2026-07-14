@@ -8,12 +8,15 @@ from pathlib import Path
 import pytest
 
 from weaver.core.segment import compute_source_hash
+from weaver.errors import ProviderUnavailable
+from weaver.providers.base import LLMProvider, ProviderStatus
 from weaver.providers.fake import FakeProvider
 from weaver.providers.types import GlossaryTerm
 from weaver.services.translation import (
     MAX_CONTEXT_SEGMENTS,
     MAX_GLOSSARY_TERMS_PER_SEGMENT,
     build_context,
+    preflight_provider_chain,
     translate_one_segment,
 )
 from weaver.storage.db import initialize_database
@@ -379,3 +382,64 @@ def test_unexpected_provider_exception_restores_prior_status(tmp_path: Path) -> 
     ]
     assert status == "pending", "segment must return to its pre-run status"
     conn.close()
+
+
+# --- preflight_provider_chain tests (audit A1) ------------------------------
+
+
+class _HealthStub(LLMProvider):
+    """Provider stub whose healthcheck outcome is fixed at construction."""
+
+    def __init__(self, name: str, *, healthy: bool) -> None:
+        self.name = name
+        self._healthy = healthy
+
+    def translate(self, request):  # pragma: no cover - never called at preflight
+        raise NotImplementedError
+
+    def complete(self, prompt, *, system=None, max_output_tokens):  # pragma: no cover
+        raise NotImplementedError
+
+    def healthcheck(self) -> ProviderStatus:
+        return ProviderStatus(
+            healthy=self._healthy,
+            provider_name=self.name,
+            model="m",
+            message=None if self._healthy else "connection refused",
+            latency_ms=0,
+        )
+
+
+def test_preflight_healthy_primary_returns_no_warning() -> None:
+    warning = preflight_provider_chain(_HealthStub("primary", healthy=True))
+    assert warning is None
+
+
+def test_preflight_dead_primary_with_healthy_fallback_warns_not_aborts() -> None:
+    primary = _HealthStub("primary", healthy=False)
+    fallback = _HealthStub("backup", healthy=True)
+
+    warning = preflight_provider_chain(primary, [(fallback, "m2")])
+
+    assert warning is not None
+    assert "primary" in warning
+    assert "backup" in warning
+
+
+def test_preflight_dead_primary_without_fallback_aborts_unchanged() -> None:
+    with pytest.raises(ProviderUnavailable) as exc_info:
+        preflight_provider_chain(_HealthStub("primary", healthy=False))
+
+    message = str(exc_info.value)
+    assert "Provider primary is unavailable: connection refused." in message
+    assert "weaver inspect --healthcheck" in message
+
+
+def test_preflight_dead_primary_and_dead_fallback_aborts() -> None:
+    primary = _HealthStub("primary", healthy=False)
+    fallback = _HealthStub("backup", healthy=False)
+
+    with pytest.raises(ProviderUnavailable) as exc_info:
+        preflight_provider_chain(primary, [(fallback, "m2")])
+
+    assert "no configured fallback passed its healthcheck" in str(exc_info.value)

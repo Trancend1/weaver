@@ -94,8 +94,9 @@ def normalize_provider_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
     Legacy built-in provider types are projected to ``openai_chat`` with
     their default endpoint/model/key-env. User-supplied fields always win
-    over defaults. The original ``type`` is preserved alongside ``type`` for
-    the engine name (ADR 018 D6).
+    over defaults. The original ``type`` is preserved as the engine name
+    (ADR 018 D6), so a legacy-brand project keeps recording its real brand
+    (``deepseek``/``gemini``/``ollama``) in attempt history (audit A3).
     """
 
     provider_type = _clean(config.get("type"))
@@ -104,8 +105,6 @@ def normalize_provider_config(config: Mapping[str, Any]) -> dict[str, Any]:
     for key, value in config.items():
         if _clean(value) is not None:
             normalized[key] = value
-    if legacy is not None:
-        normalized["type"] = "custom"
     return normalized
 
 

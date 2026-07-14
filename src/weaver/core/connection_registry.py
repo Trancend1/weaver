@@ -22,6 +22,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from weaver.core.toml_write import escape_toml_string, guard_unparseable_toml
 from weaver.errors import ConfigError
 
 CONNECTIONS_TABLE = "connections"
@@ -163,6 +164,7 @@ def _as_float(value: object, fallback: float) -> float:
 
 
 def _write_connections(connections: dict[str, Connection], path: Path) -> None:
+    guard_unparseable_toml(path, label="Connection registry")
     path.parent.mkdir(parents=True, exist_ok=True)
     blocks: list[str] = []
     for name in sorted(connections):
@@ -178,15 +180,16 @@ def _write_connections(connections: dict[str, Connection], path: Path) -> None:
 
 def _serialize(connection: Connection) -> str:
     lines = [f"[{CONNECTIONS_TABLE}.{connection.name}]"]
-    lines.append(f'protocol = "{_escape(connection.protocol)}"')
-    lines.append(f'base_url = "{_escape(connection.base_url)}"')
-    lines.append(f'api_key_env = "{_escape(connection.api_key_env)}"')
-    lines.append(f'default_model = "{_escape(connection.default_model)}"')
+    lines.append(f'protocol = "{escape_toml_string(connection.protocol)}"')
+    lines.append(f'base_url = "{escape_toml_string(connection.base_url)}"')
+    lines.append(f'api_key_env = "{escape_toml_string(connection.api_key_env)}"')
+    lines.append(f'default_model = "{escape_toml_string(connection.default_model)}"')
     lines.append(f"timeout_seconds = {connection.timeout_seconds}")
     lines.append(f"requires_key = {'true' if connection.requires_key else 'false'}")
     if connection.headers:
         pairs = ", ".join(
-            f'"{_escape(k)}" = "{_escape(v)}"' for k, v in sorted(connection.headers.items())
+            f'"{escape_toml_string(k)}" = "{escape_toml_string(v)}"'
+            for k, v in sorted(connection.headers.items())
         )
         lines.append(f"headers = {{ {pairs} }}")
     return "\n".join(lines) + "\n"
@@ -197,7 +200,3 @@ def _restrict_permissions(path: Path) -> None:
 
     with contextlib.suppress(OSError):
         path.chmod(stat.S_IRUSR | stat.S_IWUSR)
-
-
-def _escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')

@@ -36,6 +36,9 @@ class VolumeResult:
     chapter_count: int
     segment_count: int
     glossary_candidate_count: int
+    # Non-fatal reader degradations (audit N5), e.g. a malformed spine chapter
+    # that was skipped. Surfaced by the CLI and the runtime log.
+    read_issues: tuple[str, ...] = ()
 
 
 def import_volume(
@@ -129,12 +132,20 @@ def import_volume(
         segments=segment_count,
         format=str(source_format),
     )
+    for issue in document.read_issues:
+        log_runtime_event(
+            "volume.chapter_skipped",
+            project=project_toml.parent.name,
+            volume_id=volume_id,
+            detail=issue,
+        )
     return VolumeResult(
         volume_id=volume_id,
         volume_title=volume_title,
         chapter_count=chapter_count,
         segment_count=segment_count,
         glossary_candidate_count=glossary_result.candidate_count,
+        read_issues=document.read_issues,
     )
 
 
