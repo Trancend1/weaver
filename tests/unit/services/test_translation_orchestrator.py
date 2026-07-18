@@ -284,6 +284,44 @@ def test_run_summary_reconciles_exactly_with_row_tokens_including_repair(
     assert row[3] == 6
 
 
+class _JsonRepairFlaggingProvider(LLMProvider):
+    """Simulates a provider that needed its internal JSON-parse repair call."""
+
+    name = "stub"
+
+    def translate(self, request: TranslationRequest) -> TranslationResponse:
+        return TranslationResponse(
+            translation="A clean english line.",
+            notes=(),
+            uncertain_terms=(),
+            raw_response="{}",
+            input_tokens=12,
+            output_tokens=6,
+            json_repair_used=True,
+        )
+
+    def complete(self, prompt, *, system=None, max_output_tokens):  # pragma: no cover
+        raise NotImplementedError
+
+    def healthcheck(self) -> ProviderStatus:
+        return ProviderStatus(
+            healthy=True, provider_name=self.name, model="stub", message=None, latency_ms=0
+        )
+
+
+def test_run_summary_counts_provider_json_repair_calls(tmp_path, monkeypatch) -> None:
+    # Audit F6: the provider-internal JSON-parse repair round-trip becomes a
+    # visible count on the run summary instead of a silent extra network call.
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+
+    summary = translate_project(init.project_toml, provider=_JsonRepairFlaggingProvider())
+
+    assert summary.translated_segments == 6
+    assert summary.json_repair_calls == 6
+    assert summary.repair_calls == 0
+
+
 def test_enforce_repair_off_run_persists_findings_with_zero_repair_calls(
     tmp_path, monkeypatch
 ) -> None:

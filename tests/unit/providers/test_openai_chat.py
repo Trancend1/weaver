@@ -78,6 +78,17 @@ def test_deepseek_translate_happy_path_returns_translation_and_tokens() -> None:
     assert completions.calls[0]["response_format"] == {"type": "json_object"}
 
 
+def test_deepseek_translate_happy_path_reports_no_json_repair() -> None:
+    completions = _StubChatCompletions(
+        [_completion('{"translation": "Test", "notes": [], "uncertain_terms": []}')]
+    )
+    provider = OpenAIChatProvider(client=_StubClient(completions))
+
+    response = provider.translate(_request())
+
+    assert response.json_repair_used is False
+
+
 def test_deepseek_translate_issues_repair_on_invalid_json() -> None:
     completions = _StubChatCompletions(
         [
@@ -91,6 +102,55 @@ def test_deepseek_translate_issues_repair_on_invalid_json() -> None:
 
     assert response.translation == "Test"
     assert len(completions.calls) == 2
+    # Both round-trips were spent (audit F6): usage is summed, never dropped,
+    # and the hidden repair call is flagged for run-summary counting.
+    assert response.json_repair_used is True
+    assert response.input_tokens == 100  # 50 (first) + 50 (repair)
+    assert response.output_tokens == 40  # 20 + 20
+
+
+def test_deepseek_translate_repair_sums_usage_when_first_call_lacks_usage() -> None:
+    first = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="not json"))],
+        usage=None,
+    )
+    completions = _StubChatCompletions(
+        [
+            first,
+            _completion(
+                '{"translation": "Test", "notes": [], "uncertain_terms": []}',
+                prompt_tokens=30,
+                completion_tokens=10,
+            ),
+        ]
+    )
+    provider = OpenAIChatProvider(client=_StubClient(completions))
+
+    response = provider.translate(_request())
+
+    assert response.input_tokens == 30
+    assert response.output_tokens == 10
+
+
+def test_client_is_built_with_explicit_max_retries(monkeypatch) -> None:
+    # Audit F6/N2: the SDK's silent retry default becomes an explicit, pinned,
+    # per-connection configurable number.
+    captured: dict[str, object] = {}
+
+    class _CapturingOpenAI:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    import openai
+
+    monkeypatch.setattr(openai, "OpenAI", _CapturingOpenAI)
+
+    OpenAIChatProvider(config=OpenAIChatConfig(base_url="http://localhost:1", max_retries=7))
+    assert captured["max_retries"] == 7
+
+    captured.clear()
+    OpenAIChatProvider(config=OpenAIChatConfig(base_url="http://localhost:1"))
+    assert captured["max_retries"] == 2, "default must be pinned explicitly, not SDK-silent"
 
 
 def test_deepseek_translate_propagates_parse_error_after_repair() -> None:

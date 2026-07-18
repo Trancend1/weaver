@@ -85,7 +85,10 @@ class TranslationResponse:
     """Parsed provider response for one segment.
 
     `input_tokens` / `output_tokens` are None when the provider does not
-    report usage (e.g. Ollama, Fake).
+    report usage (e.g. Ollama, Fake). When the provider needed an internal
+    JSON-parse repair round-trip, `json_repair_used` is True and the token
+    counts cover **both** calls, so the hidden round-trip's cost is never
+    silently dropped (audit F6).
     """
 
     translation: str
@@ -94,6 +97,7 @@ class TranslationResponse:
     raw_response: str
     input_tokens: int | None
     output_tokens: int | None
+    json_repair_used: bool = False
 
 
 @dataclass(frozen=True)

@@ -755,6 +755,7 @@ def translate_one_segment(
                 input_tokens=spent_input,
                 output_tokens=spent_output,
                 repair_call_made=repair_attempted,
+                json_repair_used=response.json_repair_used,
             )
 
         with transaction(connection):
