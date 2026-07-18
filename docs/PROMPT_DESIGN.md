@@ -391,7 +391,7 @@ These budgets exist to control cost and latency, not to work around context limi
 - Use `google-generativeai` SDK, `GenerativeModel("gemini-1.5-flash")`.
 - Set `generation_config={"temperature": 0.3, "response_mime_type": "application/json"}` — Gemini natively supports JSON-only response mode.
 - Free tier: 15 requests/minute, 1 million tokens/day — sufficient for serial translation of a full novel.
-- Rate limit handling: on 429, backoff 60 seconds and retry. Mark segment failed only after `max_retries` exhausted.
+- Rate limit handling: 429s are retried with backoff by the OpenAI SDK transport within the explicit `[provider] max_retries` budget (default 2 — v0.7.3 M3, audit N2); once exhausted the segment is marked failed.
 - **Recommended first-choice for hardware-limited developers and users who want zero-cost translation.**
 
 ### FakeProvider
