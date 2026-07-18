@@ -42,7 +42,7 @@ _CURRENT_SCHEMA_COLUMNS = {
     "projects": {"id", "name", "source_path", "source_lang", "target_lang", "uuid"},
     "volumes": {"id", "project_id", "source_format", "volume_order"},
     "segments": {"id", "chapter_id", "source_hash", "status", "review_status"},
-    "translations": {"segment_id", "attempt", "input_tokens", "output_tokens"},
+    "translations": {"segment_id", "attempt", "input_tokens", "output_tokens", "repair_outcome"},
     "jobs": {"id", "kind", "project_name", "status", "result_json"},
     "export_history": {"id", "format", "kind", "status", "artifact_path"},
 }
@@ -651,6 +651,55 @@ def _migrate_to_v13(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_to_v14(connection: sqlite3.Connection) -> None:
+    """Add enforcement provenance columns to ``translations`` (schema v14, v0.7.3 M3).
+
+    Persists the enforcement verdict and repair outcome on the attempt row
+    (audit A4b) and splits repair token spend from the primary call so per-row
+    totals reconcile with the run summary (audit A5):
+
+    - ``enforcement_violations``: JSON array of violation messages found on the
+      committed text. NULL = never evaluated (pre-v14 rows render "not
+      evaluated"); ``'[]'`` = evaluated clean.
+    - ``repair_attempted`` / ``repair_outcome``: whether the bounded repair
+      re-ask (ADR 019 E2) ran and how it ended
+      (``accepted`` / ``discarded`` / ``failed``).
+    - ``repair_input_tokens`` / ``repair_output_tokens``: the repair call's
+      spend; ``input_tokens`` / ``output_tokens`` keep the primary call only.
+
+    Purely additive and idempotent; existing rows keep NULL provenance.
+    """
+
+    tables = {
+        str(row["name"])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    if "translations" not in tables:
+        # Tolerant of the hand-built minimal databases the migration tests
+        # stand up (projects-only); a real database has this table from v1.
+        return
+    columns = {
+        str(row["name"]) for row in connection.execute("PRAGMA table_info(translations)").fetchall()
+    }
+    if "enforcement_violations" not in columns:
+        connection.execute("ALTER TABLE translations ADD COLUMN enforcement_violations TEXT")
+    if "repair_attempted" not in columns:
+        connection.execute(
+            "ALTER TABLE translations ADD COLUMN repair_attempted INTEGER NOT NULL DEFAULT 0"
+        )
+    if "repair_outcome" not in columns:
+        connection.execute(
+            "ALTER TABLE translations ADD COLUMN repair_outcome TEXT "
+            "CHECK (repair_outcome IN ('accepted', 'discarded', 'failed'))"
+        )
+    if "repair_input_tokens" not in columns:
+        connection.execute("ALTER TABLE translations ADD COLUMN repair_input_tokens INTEGER")
+    if "repair_output_tokens" not in columns:
+        connection.execute("ALTER TABLE translations ADD COLUMN repair_output_tokens INTEGER")
+
+
 _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _migrate_to_v2,
     3: _migrate_to_v3,
@@ -664,4 +713,5 @@ _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     11: _migrate_to_v11,
     12: _migrate_to_v12,
     13: _migrate_to_v13,
+    14: _migrate_to_v14,
 }
