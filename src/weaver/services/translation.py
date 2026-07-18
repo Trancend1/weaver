@@ -90,6 +90,31 @@ class TranslationRunSummary:
     # Non-None when the primary provider failed its pre-flight healthcheck and
     # the run continued on a healthy fallback (audit A1); surfaced by the CLI.
     preflight_warning: str | None = None
+    # Hidden round-trips made visible (audit F6 / §4.3 gate 6): enforcement
+    # repair re-asks (E2) and provider-internal JSON-parse repairs.
+    repair_calls: int = 0
+    json_repair_calls: int = 0
+
+
+@dataclass(frozen=True)
+class SegmentTranslationOutcome:
+    """Result of one :func:`translate_one_segment` call.
+
+    ``input_tokens``/``output_tokens`` are the segment's **total** provider
+    spend (primary call plus the repair re-ask when one was issued), so run
+    summaries reconcile exactly with the per-row primary/repair split persisted
+    by ``record_translation`` (audit A5). ``None`` on failure or memory reuse.
+    """
+
+    translated: bool
+    reused_from_memory: bool
+    input_tokens: int | None
+    output_tokens: int | None
+    # True when an enforcement repair re-ask (ADR 019 E2) was issued for this
+    # segment — regardless of whether its result was accepted.
+    repair_call_made: bool = False
+    # True when the provider needed an internal JSON-parse repair round-trip.
+    json_repair_used: bool = False
 
 
 def preflight_provider_chain(
@@ -357,6 +382,8 @@ def translate_project(
     reused_count = 0
     input_tokens = 0
     output_tokens = 0
+    repair_calls = 0
+    json_repair_calls = 0
 
     with closing(connect_database(db_path)) as connection:
         project = _load_single_project(connection)
@@ -388,39 +415,41 @@ def translate_project(
                     "Next command: rerun `weaver init <input.epub>` for this source."
                 )
 
-            translated, reused, response_input_tokens, response_output_tokens = (
-                translate_one_segment(
-                    connection=connection,
-                    segment=segment,
-                    source_text=block.source_text,
-                    normalized_source_text=block.normalized_source_text,
-                    project=project,
-                    glossary_terms=glossary_terms,
-                    honorific_policy=honorific_policy,
-                    provider=active_provider,
-                    provider_model=provider_model,
-                    characters=characters,
-                    persist_raw_response=persist_raw_response,
-                    fallbacks=fallback_engines,
-                    cold=run_cold,
-                    enforce_repair=enforce_repair,
-                    profile=profile,
-                )
+            outcome = translate_one_segment(
+                connection=connection,
+                segment=segment,
+                source_text=block.source_text,
+                normalized_source_text=block.normalized_source_text,
+                project=project,
+                glossary_terms=glossary_terms,
+                honorific_policy=honorific_policy,
+                provider=active_provider,
+                provider_model=provider_model,
+                characters=characters,
+                persist_raw_response=persist_raw_response,
+                fallbacks=fallback_engines,
+                cold=run_cold,
+                enforce_repair=enforce_repair,
+                profile=profile,
             )
-            if translated:
+            if outcome.translated:
                 translated_count += 1
-                input_tokens += response_input_tokens or 0
-                output_tokens += response_output_tokens or 0
-            if reused:
+                input_tokens += outcome.input_tokens or 0
+                output_tokens += outcome.output_tokens or 0
+            if outcome.reused_from_memory:
                 reused_count += 1
+            if outcome.repair_call_made:
+                repair_calls += 1
+            if outcome.json_repair_used:
+                json_repair_calls += 1
             if progress_callback is not None:
                 progress_callback(
                     index,
                     total_selected,
                     segment,
-                    translated,
-                    response_input_tokens,
-                    response_output_tokens,
+                    outcome.translated,
+                    outcome.input_tokens,
+                    outcome.output_tokens,
                 )
 
         counts = _read_segment_counts(connection)
@@ -436,6 +465,8 @@ def translate_project(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         preflight_warning=preflight_warning,
+        repair_calls=repair_calls,
+        json_repair_calls=json_repair_calls,
     )
 
 
@@ -503,7 +534,7 @@ def translate_one_segment(
     cold: dict[str, float] | None = None,
     enforce_repair: bool = True,
     profile: TranslationProfile | None = None,
-) -> tuple[bool, bool, int | None, int | None]:
+) -> SegmentTranslationOutcome:
     """Translate one segment; commit its result and status atomically.
 
     Sets the segment to ``in_progress`` (its own short transaction). When
@@ -551,10 +582,10 @@ def translate_one_segment(
             so raw provider payloads do not accumulate by default.
 
     Returns:
-        ``(translated, reused_from_memory, input_tokens, output_tokens)``.
-        ``reused_from_memory`` is True only when the result came from translation
-        memory (no provider call, no token cost). Tokens are None on failure, on
-        a memory hit, or when the provider does not report usage.
+        A :class:`SegmentTranslationOutcome`. ``reused_from_memory`` is True only
+        when the result came from translation memory (no provider call, no token
+        cost). Tokens are the segment's total spend (primary + repair re-ask);
+        None on failure or a memory hit.
     """
 
     with transaction(connection):
@@ -578,7 +609,9 @@ def translate_one_segment(
                     )
                     update_segment_status(connection, segment_id=segment.id, status="translated")
                 settled = True
-                return True, True, None, None
+                return SegmentTranslationOutcome(
+                    translated=True, reused_from_memory=True, input_tokens=None, output_tokens=None
+                )
 
         previous_segments = list_previous_translated_segments(
             connection,
@@ -620,50 +653,66 @@ def translate_one_segment(
                 continue
 
             # Enforcement gate (ADR 019 E1+E2): glossary/character/anti-slop must
-            # bind. Detection is free; on violation, one bounded repair re-ask (E2)
-            # when enforce_repair is on. Never blocks — the committed text is the
-            # best attempt and any residual violation stays visible in the QA report.
+            # bind. Detection always runs (free, deterministic) so the verdict is
+            # persisted with the attempt (audit A4a); `enforce_repair` gates only
+            # the token-costing repair re-ask. Never blocks — the committed text
+            # is the best attempt and any residual violation stays visible in the
+            # QA report and the attempt history.
             final = response
-            spent_input = response.input_tokens or 0
-            spent_output = response.output_tokens or 0
-            if enforce_repair:
-                verdict = evaluate_translation(
-                    segment_id=segment.id,
+            verdict = evaluate_translation(
+                segment_id=segment.id,
+                source_text=source_text,
+                normalized_source_text=normalized_source_text,
+                translation_text=response.translation,
+                glossary_terms=glossary_terms,
+                characters=characters,
+                banned_phrases=banned_phrases,
+            )
+            # Violations describing the *committed* text (may improve on repair).
+            final_violations = verdict.violations
+            repair_attempted = False
+            repair_outcome: str | None = None
+            repair_input_tokens: int | None = None
+            repair_output_tokens: int | None = None
+            if enforce_repair and not verdict.ok:
+                repair_attempted = True
+                repaired = _try_repair(
+                    cand_provider,
                     source_text=source_text,
-                    normalized_source_text=normalized_source_text,
-                    translation_text=response.translation,
-                    glossary_terms=glossary_terms,
-                    characters=characters,
-                    banned_phrases=banned_phrases,
+                    previous_translation=response.translation,
+                    violations=verdict.violations,
+                    source_language=project.source_lang,
+                    target_language=project.target_lang,
                 )
-                if not verdict.ok:
-                    repaired = _try_repair(
-                        cand_provider,
+                if repaired is None:
+                    repair_outcome = "failed"
+                else:
+                    # The repair was spent regardless of outcome; record its cost.
+                    repair_input_tokens = repaired.input_tokens
+                    repair_output_tokens = repaired.output_tokens
+                    recheck = evaluate_translation(
+                        segment_id=segment.id,
                         source_text=source_text,
-                        previous_translation=response.translation,
-                        violations=verdict.violations,
-                        source_language=project.source_lang,
-                        target_language=project.target_lang,
+                        normalized_source_text=normalized_source_text,
+                        translation_text=repaired.translation,
+                        glossary_terms=glossary_terms,
+                        characters=characters,
+                        banned_phrases=banned_phrases,
                     )
-                    if repaired is not None:
-                        # The repair was spent regardless; count its tokens.
-                        spent_input += repaired.input_tokens or 0
-                        spent_output += repaired.output_tokens or 0
-                        recheck = evaluate_translation(
-                            segment_id=segment.id,
-                            source_text=source_text,
-                            normalized_source_text=normalized_source_text,
-                            translation_text=repaired.translation,
-                            glossary_terms=glossary_terms,
-                            characters=characters,
-                            banned_phrases=banned_phrases,
-                        )
-                        # Keep the repaired attempt unless it is strictly worse than
-                        # the original (a targeted fix that regressed is discarded).
-                        if len(recheck.violations) <= len(verdict.violations):
-                            final = repaired
+                    # Keep the repaired attempt unless it is strictly worse than
+                    # the original (a targeted fix that regressed is discarded).
+                    if len(recheck.violations) <= len(verdict.violations):
+                        final = repaired
+                        final_violations = recheck.violations
+                        repair_outcome = "accepted"
+                    else:
+                        repair_outcome = "discarded"
+            spent_input = (response.input_tokens or 0) + (repair_input_tokens or 0)
+            spent_output = (response.output_tokens or 0) + (repair_output_tokens or 0)
 
-            # Result + memory + candidates + status commit atomically.
+            # Result + memory + candidates + status commit atomically. The row
+            # keeps the primary call's tokens; the repair spend goes in its own
+            # columns so sum(rows) reconciles with the run summary (audit A5).
             with transaction(connection):
                 record_translation(
                     connection,
@@ -673,8 +722,13 @@ def translate_one_segment(
                     provider=cand_provider.name,
                     model=cand_model,
                     raw_response=final.raw_response if persist_raw_response else None,
-                    input_tokens=final.input_tokens,
-                    output_tokens=final.output_tokens,
+                    input_tokens=response.input_tokens,
+                    output_tokens=response.output_tokens,
+                    enforcement_violations=final_violations,
+                    repair_attempted=repair_attempted,
+                    repair_outcome=repair_outcome,
+                    repair_input_tokens=repair_input_tokens,
+                    repair_output_tokens=repair_output_tokens,
                 )
                 save_translation_memory(
                     connection,
@@ -695,12 +749,20 @@ def translate_one_segment(
                     )
                 update_segment_status(connection, segment_id=segment.id, status="translated")
             settled = True
-            return True, False, spent_input, spent_output
+            return SegmentTranslationOutcome(
+                translated=True,
+                reused_from_memory=False,
+                input_tokens=spent_input,
+                output_tokens=spent_output,
+                repair_call_made=repair_attempted,
+            )
 
         with transaction(connection):
             update_segment_status(connection, segment_id=segment.id, status="failed")
         settled = True
-        return False, False, None, None
+        return SegmentTranslationOutcome(
+            translated=False, reused_from_memory=False, input_tokens=None, output_tokens=None
+        )
     finally:
         if not settled:
             # An unexpected exception (e.g. ParserError) is propagating: put the
