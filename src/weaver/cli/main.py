@@ -612,6 +612,12 @@ def _translate_one_project(
     typer.echo(f"Stale: {summary.stale_segments}")
     if summary.input_tokens or summary.output_tokens:
         typer.echo(f"Tokens: input {summary.input_tokens} | output {summary.output_tokens}")
+    if summary.repair_calls or summary.json_repair_calls:
+        # Hidden round-trips made visible (audit F6): every extra provider call
+        # issued for enforcement repair or JSON-parse repair is counted here.
+        typer.echo(
+            f"Repair calls: enforcement {summary.repair_calls} | JSON {summary.json_repair_calls}"
+        )
 
 
 @app.command(

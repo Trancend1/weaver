@@ -2,7 +2,7 @@
   <button type="button" class="link-btn" hx-on:click="this.closest('.history').remove()">Hide history</button>
   {% if history.attempts %}
   <table class="history-tbl">
-    <thead><tr><th>#</th><th>Provider</th><th>Model</th><th>When</th><th>Text</th></tr></thead>
+    <thead><tr><th>#</th><th>Provider</th><th>Model</th><th>When</th><th>Enforcement</th><th>Text</th></tr></thead>
     <tbody>
       {% for a in history.attempts %}
       <tr{% if loop.last %} class="current"{% endif %}>
@@ -10,6 +10,16 @@
         <td>{{ a.provider }}</td>
         <td>{{ a.model }}</td>
         <td class="meta">{{ a.created_at }}</td>
+        <td class="meta">
+          {%- if a.enforcement_violations is none -%}
+            not evaluated
+          {%- elif a.enforcement_violations -%}
+            <span title="{{ a.enforcement_violations | join('; ') }}">{{ a.enforcement_violations | length }} finding{{ 's' if a.enforcement_violations | length != 1 else '' }}</span>
+            {%- if a.repair_attempted %} · repair {{ a.repair_outcome }}{% endif -%}
+          {%- else -%}
+            clean{% if a.repair_attempted %} · repair {{ a.repair_outcome }}{% endif -%}
+          {%- endif -%}
+        </td>
         <td>{{ a.text }}</td>
       </tr>
       {% endfor %}

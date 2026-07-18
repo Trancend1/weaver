@@ -394,6 +394,8 @@ class TranslationJob:
                 "output_tokens": result.output_tokens,
                 "cancelled": result.cancelled,
                 "preflight_warning": result.preflight_warning,
+                "repair_calls": result.repair_calls,
+                "json_repair_calls": result.json_repair_calls,
             }
             if self.storage is not None:
                 self.storage.flush_progress(
@@ -780,6 +782,8 @@ def _batch_result_data(result: BatchTranslationResult) -> dict[str, Any]:
         "finished_at": result.finished_at,
         "duration_seconds": result.duration_seconds,
         "preflight_warning": result.preflight_warning,
+        "repair_calls": result.repair_calls,
+        "json_repair_calls": result.json_repair_calls,
     }
 
 

@@ -183,6 +183,47 @@ def test_history_shows_attempts_after_save(ws_client: TestClient) -> None:
     assert "attempt" in r.text.lower()
 
 
+def test_history_renders_enforcement_verdict_read_only(ws_client: TestClient, tmp_path) -> None:
+    # Audit A4: attempt history surfaces the persisted verdict. A manual save
+    # renders "not evaluated"; a seeded AI attempt with findings renders its
+    # count and repair outcome. Render path stays read-only (Gate B1).
+    from contextlib import closing
+
+    from weaver.storage.db import connect_database, transaction
+    from weaver.storage.translations import record_translation
+
+    name = _name(ws_client)
+    chapter_id = _first_chapter_id(ws_client, name)
+    seg_id = _first_segment_id(ws_client, name, chapter_id)
+    ws_client.post(
+        f"/ui/projects/{name}/chapters/{chapter_id}/segments/{seg_id}",
+        data={"translated_text": "MANUAL SAVE"},
+    )
+    db_path = tmp_path / ".weaver" / name / "weaver.db"
+    with closing(connect_database(db_path)) as connection:
+        row = connection.execute(
+            "SELECT source_hash FROM segments WHERE id = ?", (seg_id,)
+        ).fetchone()
+        with transaction(connection):
+            record_translation(
+                connection,
+                segment_id=seg_id,
+                text="AI ATTEMPT",
+                source_hash=str(row["source_hash"]),
+                provider="stub",
+                model="stub-1",
+                enforcement_violations=["Missing glossary target."],
+                repair_attempted=True,
+                repair_outcome="accepted",
+            )
+
+    r = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}/segments/{seg_id}/history")
+    assert r.status_code == 200
+    assert "not evaluated" in r.text  # the manual attempt
+    assert "1 finding" in r.text  # the seeded AI attempt
+    assert "repair accepted" in r.text
+
+
 def test_history_unknown_segment_404(ws_client: TestClient) -> None:
     name = _name(ws_client)
     chapter_id = _first_chapter_id(ws_client, name)
