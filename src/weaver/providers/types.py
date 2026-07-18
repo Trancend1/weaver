@@ -53,7 +53,8 @@ class TranslationContext:
     """Per-segment context assembled by `build_context()`.
 
     `previous_segments` is ordered oldest-first so the immediately preceding
-    segment is last. Capped at 5 entries / 600 tokens per PROMPT_DESIGN.md.
+    segment is last. Capped at 5 entries / 1000 CJK-aware estimated tokens per
+    PROMPT_DESIGN.md (audit N7).
     `glossary_terms` is pre-filtered to entries that substring-match the
     current segment's normalized source text, capped at 20 entries.
     `characters` is pre-filtered the same way (jp_name substring), capped at 20.

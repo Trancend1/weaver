@@ -55,8 +55,13 @@ from weaver.storage.volumes import list_volumes
 MAX_GLOSSARY_TERMS_PER_SEGMENT = 20
 MAX_CHARACTERS_PER_SEGMENT = 20
 MAX_CONTEXT_SEGMENTS = 5
-MAX_CONTEXT_TOKENS = 600
-DRY_RUN_TOKENS_PER_CHAR = 0.25  # 1 token ≈ 4 source characters
+# Honest CJK-aware budget for the rolling window (audit N7). The old flat
+# `chars // 4` estimator undercounted Japanese ~3x, so the previous "600 token"
+# label really admitted ~1.5–2k tokens of JP context. Recalibrated: a typical
+# 5-pair light-novel window (~JP source + EN translation) costs ~700 honest
+# tokens, so 1000 preserves today's effective window for common prose while
+# roughly halving the old worst-case real spend.
+MAX_CONTEXT_TOKENS = 1000
 
 # Provider/model sentinel recorded on a translation reused from translation memory,
 # so the attempt history stays audit-able (it was not a live provider call).
@@ -173,8 +178,9 @@ def build_context(
     Filters `glossary_terms` to entries whose `source` appears as a substring
     of the segment's normalized source text, capped at 20 entries
     (PROMPT_DESIGN.md §Glossary Filtering). Trims `previous_segments` to the
-    most recent 5 entries within a 600-token estimate (oldest-first ordering
-    preserved). Tokens are estimated as 1 token ≈ 4 characters.
+    most recent 5 entries within the `MAX_CONTEXT_TOKENS` estimate (oldest-first
+    ordering preserved). Tokens are estimated CJK-aware via `estimate_tokens`
+    (CJK ≈ 1 token/char, other ≈ 1/4 — audit N7).
 
     Args:
         normalized_source_text: Normalized source text of the current segment,
@@ -266,14 +272,47 @@ def _trim_window(
     if not previous_segments:
         return ()
     tail = list(previous_segments[-MAX_CONTEXT_SEGMENTS:])
-    while tail and _estimate_tokens(tail) > MAX_CONTEXT_TOKENS:
+    while tail and _estimate_window_tokens(tail) > MAX_CONTEXT_TOKENS:
         tail.pop(0)
     return tuple((str(source), str(translation)) for source, translation in tail)
 
 
-def _estimate_tokens(window: Sequence[tuple[str, str]]) -> int:
-    total_chars = sum(len(source) + len(translation) for source, translation in window)
-    return total_chars // 4
+# Unicode ranges treated as CJK for token estimation: on modern BPE
+# vocabularies these characters tokenize near 1 token each, while Latin prose
+# averages ~4 characters per token.
+_CJK_RANGES = (
+    (0x3000, 0x30FF),  # CJK punctuation, hiragana, katakana
+    (0x3400, 0x4DBF),  # CJK unified extension A
+    (0x4E00, 0x9FFF),  # CJK unified ideographs
+    (0xF900, 0xFAFF),  # CJK compatibility ideographs
+    (0xFF00, 0xFFEF),  # full-width forms + half-width katakana
+)
+
+
+def estimate_tokens(text: str) -> int:
+    """Two-class token estimate (audit N7): CJK ≈ 1 token/char, other ≈ 1/4.
+
+    Deterministic, dependency-free heuristic shared by the rolling-window
+    budget and dry-run cost estimates. The old flat ``chars // 4`` undercounted
+    Japanese roughly 3x.
+    """
+
+    cjk_chars = 0
+    other_chars = 0
+    for char in text:
+        code = ord(char)
+        if any(low <= code <= high for low, high in _CJK_RANGES):
+            cjk_chars += 1
+        else:
+            other_chars += 1
+    return cjk_chars + other_chars // 4
+
+
+def _estimate_window_tokens(window: Sequence[tuple[str, str]]) -> int:
+    return sum(
+        estimate_tokens(str(source)) + estimate_tokens(str(translation))
+        for source, translation in window
+    )
 
 
 def translate_project(
@@ -296,7 +335,7 @@ def translate_project(
         retry_failed: Select failed segments instead of pending segments.
         dry_run: When True, count selected segments and estimate input tokens
             without contacting the provider or mutating the database. Returned
-            `input_tokens` is an estimate (1 token ≈ 4 source characters);
+            `input_tokens` is a CJK-aware estimate (`estimate_tokens`);
             `translated_segments` is always 0.
         provider: Optional provider injection for tests.
         provider_override: Optional dict merged onto the configured `[provider]`
@@ -497,8 +536,7 @@ def _dry_run_summary(
     estimated_input_tokens = 0
     for index, segment in enumerate(selected, start=1):
         block = block_by_id.get(segment.id)
-        source_chars = len(block.normalized_source_text) if block is not None else 0
-        segment_estimate = int(source_chars * DRY_RUN_TOKENS_PER_CHAR)
+        segment_estimate = estimate_tokens(block.normalized_source_text) if block is not None else 0
         estimated_input_tokens += segment_estimate
         if progress_callback is not None:
             progress_callback(index, total_selected, segment, False, segment_estimate, None)

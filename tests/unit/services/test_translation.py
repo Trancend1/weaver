@@ -15,8 +15,10 @@ from weaver.providers.fake import FakeProvider
 from weaver.providers.types import Completion, GlossaryTerm, TranslationResponse
 from weaver.services.translation import (
     MAX_CONTEXT_SEGMENTS,
+    MAX_CONTEXT_TOKENS,
     MAX_GLOSSARY_TERMS_PER_SEGMENT,
     build_context,
+    estimate_tokens,
     preflight_provider_chain,
     translate_one_segment,
 )
@@ -117,6 +119,44 @@ def test_build_context_rejects_unknown_honorific_policy() -> None:
             previous_segments=[],
             honorific_policy="rude",
         )
+
+
+def test_estimate_tokens_counts_cjk_near_one_token_per_char() -> None:
+    # Audit N7: the flat chars//4 estimate undercounted Japanese ~3x.
+    assert estimate_tokens("あ" * 100) == 100
+    assert estimate_tokens("漢" * 100) == 100
+    assert estimate_tokens("ｶ" * 100) == 100  # half-width katakana (FF00–FFEF)
+
+
+def test_estimate_tokens_keeps_quarter_ratio_for_latin_text() -> None:
+    assert estimate_tokens("a" * 100) == 25
+    assert estimate_tokens("") == 0
+
+
+def test_estimate_tokens_mixed_text_sums_both_classes() -> None:
+    # 8 CJK chars (≈ 8 tokens) + 8 Latin/ASCII chars (≈ 2 tokens).
+    assert estimate_tokens("吾輩は猫である。x" + "abcdefg") == 10
+
+
+def test_window_budget_trims_japanese_windows_by_real_cost() -> None:
+    # 5 pairs of (300 JP chars ≈ 300 tokens, 200 EN chars ≈ 50 tokens) is
+    # ~1750 honest tokens; the 1000-token budget keeps only the 2 most recent
+    # pairs. The old flat estimator priced this window at 625 "tokens" and
+    # would have kept all 5.
+    window = [("あ" * 300, "a" * 200) for _ in range(5)]
+
+    ctx = build_context(
+        normalized_source_text="次。",
+        glossary_terms=[],
+        previous_segments=window,
+    )
+
+    assert len(ctx.previous_segments) == 2
+    kept_cost = sum(
+        estimate_tokens(source) + estimate_tokens(translation)
+        for source, translation in ctx.previous_segments
+    )
+    assert kept_cost <= MAX_CONTEXT_TOKENS
 
 
 def test_build_context_drops_window_segments_when_over_token_budget() -> None:

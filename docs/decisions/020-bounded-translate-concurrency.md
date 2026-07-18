@@ -39,7 +39,7 @@ Add a **bounded in-process worker window** to the translate loops:
    CLAUDE.md §4.2).
 4. **Rolling-window semantics:** the context window for a segment is the last N **committed**
    segments (`list_previous_translated_segments`); in-flight neighbors are invisible. With the
-   window already capped at ≤ 5 segments / 600 tokens, the quality dilution is bounded and only
+   window already capped at ≤ 5 segments / 1000 CJK-aware estimated tokens (v0.7.3 M3, audit N7), the quality dilution is bounded and only
    occurs when the user opts in. Dispatch stays in block order; an optional capped window-gap
    policy is Decision Point 1 below.
 5. **Shared state:** the `run_cold` fallback cold-mark dict goes behind a lock (or becomes a

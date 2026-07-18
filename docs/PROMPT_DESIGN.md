@@ -161,7 +161,7 @@ Example (2-segment window):
 
 If the segment is the first in a chapter: omit the `<context>` block.
 
-**Maximum context tokens:** Target ≤ 600 tokens for the context block. If the rolling window exceeds this due to long segments, truncate to fewer previous segments. Never truncate a segment mid-sentence.
+**Maximum context tokens:** Target ≤ 1,000 tokens for the context block, measured with the CJK-aware estimator (CJK characters ≈ 1 token each, other characters ≈ ¼ token — audit N7; the pre-v0.7.3 flat `chars // 4` estimate undercounted Japanese ~3×). If the rolling window exceeds this due to long segments, truncate to fewer previous segments. Never truncate a segment mid-sentence.
 
 #### `{source_text}`
 
@@ -353,9 +353,9 @@ Target token counts per segment translation call:
 | System prompt | ~120 tokens | 200 tokens |
 | Policy block | ~10 tokens | 20 tokens |
 | Glossary block | ~60 tokens | 200 tokens (20 terms × ~10 tokens each) |
-| Context block | ~300 tokens | 600 tokens |
+| Context block | ~700 tokens | 1,000 tokens |
 | Source segment | ~150 tokens | 1,000 tokens |
-| **Total input** | **~640 tokens** | **~2,020 tokens** |
+| **Total input** | **~1,040 tokens** | **~2,420 tokens** |
 | Output (translation) | ~200 tokens | 1,500 tokens |
 
 If a source segment exceeds 1,000 tokens (rare for prose paragraphs; possible for dense passages), the segment is flagged during `weaver init` with a warning. It is still translated but the context window may be compressed to stay under provider limits.
