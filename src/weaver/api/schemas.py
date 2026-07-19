@@ -346,13 +346,25 @@ class SegmentTranslationResponse(BaseModel):
 
 
 class TranslationAttemptResponse(BaseModel):
-    """One recorded translation attempt for a segment."""
+    """One recorded translation attempt for a segment.
+
+    ``enforcement_violations`` is ``None`` when the attempt was never evaluated
+    by the enforcement gate (pre-v14 rows, memory reuse, manual saves); an empty
+    list means evaluated clean (audit A4).
+    """
 
     attempt: int
     translated_text: str
     provider: str
     model: str
     created_at: str
+    enforcement_violations: list[str] | None = None
+    repair_attempted: bool = False
+    repair_outcome: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    repair_input_tokens: int | None = None
+    repair_output_tokens: int | None = None
 
 
 class SegmentTranslationHistoryResponse(BaseModel):

@@ -71,6 +71,16 @@ CREATE TABLE IF NOT EXISTS translations (
   raw_response TEXT,
   input_tokens INTEGER,
   output_tokens INTEGER,
+  -- Enforcement provenance (ADR 019, v0.7.3 M3 / audit A4): the verdict on the
+  -- committed text. NULL enforcement_violations = attempt was never evaluated
+  -- (pre-v14 rows, memory reuse, manual saves); '[]' = evaluated clean.
+  enforcement_violations TEXT,
+  repair_attempted INTEGER NOT NULL DEFAULT 0,
+  repair_outcome TEXT CHECK (repair_outcome IN ('accepted', 'discarded', 'failed')),
+  -- Repair re-ask token spend (audit A5): input_tokens/output_tokens hold the
+  -- primary call only, so per-row totals reconcile with the run summary.
+  repair_input_tokens INTEGER,
+  repair_output_tokens INTEGER,
   PRIMARY KEY (segment_id, attempt)
 );
 

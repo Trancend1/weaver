@@ -114,7 +114,7 @@ Local-only logging:
 
 ### Rate Limiting
 
-Cloud provider rate limiting is the provider's responsibility. Weaver respects 429 responses with exponential backoff. After `max_retries` exceeded, segment marked failed.
+Cloud provider rate limiting is the provider's responsibility. 429 responses are retried with exponential backoff by the OpenAI SDK transport, bounded by the explicit `[provider] max_retries` budget (default 2 — pinned in v0.7.3 M3, audit N2/F6). Once exhausted, the segment is marked failed.
 
 No rate limiting on `weaver` invocations themselves. The user controls their own machine.
 
@@ -314,7 +314,7 @@ Scenarios where users hit unexpected costs:
 
 | Scenario | Trigger | Mitigation |
 |----------|---------|------------|
-| Retry storm on flaky cloud provider | Network issues + `max_retries = 5` | Cap total retries per run, not per segment |
+| Retry storm on flaky cloud provider | Network issues + a high `[provider] max_retries` | Explicit per-connection retry budget (default 2); repair/JSON-repair calls counted in the run summary |
 | Very long source segments | Single segment > 10k tokens | Per-segment token cap with explicit error if exceeded |
 | Accidentally pointing at expensive model | User config error | Pre-flight estimate shows cost prominently |
 | Translating thousands of segments without realizing | User confusion | `weaver inspect` shows segment count and cost estimate before `translate` |

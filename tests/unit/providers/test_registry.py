@@ -57,3 +57,18 @@ def test_build_provider_accepts_valid_numbers() -> None:
     # Ollama needs no API key, so a valid numeric config builds end to end.
     provider = build_provider({"type": "ollama", "temperature": 0.7, "timeout_seconds": 30})
     assert provider.name == "ollama"  # brand preserved (audit A3)
+
+
+def test_build_provider_rejects_non_integer_max_retries() -> None:
+    with pytest.raises(ConfigError, match="must be an integer"):
+        build_provider({"type": "ollama", "max_retries": "many"})
+
+
+def test_build_provider_rejects_negative_max_retries() -> None:
+    with pytest.raises(ConfigError, match=">= 0"):
+        build_provider({"type": "ollama", "max_retries": -1})
+
+
+def test_build_provider_accepts_max_retries() -> None:
+    provider = build_provider({"type": "ollama", "max_retries": 0})
+    assert provider.name == "ollama"

@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
 import pytest
 
 from weaver.core.segment import compute_source_hash
-from weaver.errors import ProviderUnavailable
+from weaver.errors import ProviderResponseError, ProviderUnavailable
 from weaver.providers.base import LLMProvider, ProviderStatus
 from weaver.providers.fake import FakeProvider
-from weaver.providers.types import GlossaryTerm
+from weaver.providers.types import Completion, GlossaryTerm, TranslationResponse
 from weaver.services.translation import (
     MAX_CONTEXT_SEGMENTS,
+    MAX_CONTEXT_TOKENS,
     MAX_GLOSSARY_TERMS_PER_SEGMENT,
     build_context,
+    estimate_tokens,
     preflight_provider_chain,
     translate_one_segment,
 )
@@ -118,6 +121,44 @@ def test_build_context_rejects_unknown_honorific_policy() -> None:
         )
 
 
+def test_estimate_tokens_counts_cjk_near_one_token_per_char() -> None:
+    # Audit N7: the flat chars//4 estimate undercounted Japanese ~3x.
+    assert estimate_tokens("あ" * 100) == 100
+    assert estimate_tokens("漢" * 100) == 100
+    assert estimate_tokens("ｶ" * 100) == 100  # half-width katakana (FF00–FFEF)
+
+
+def test_estimate_tokens_keeps_quarter_ratio_for_latin_text() -> None:
+    assert estimate_tokens("a" * 100) == 25
+    assert estimate_tokens("") == 0
+
+
+def test_estimate_tokens_mixed_text_sums_both_classes() -> None:
+    # 8 CJK chars (≈ 8 tokens) + 8 Latin/ASCII chars (≈ 2 tokens).
+    assert estimate_tokens("吾輩は猫である。x" + "abcdefg") == 10
+
+
+def test_window_budget_trims_japanese_windows_by_real_cost() -> None:
+    # 5 pairs of (300 JP chars ≈ 300 tokens, 200 EN chars ≈ 50 tokens) is
+    # ~1750 honest tokens; the 1000-token budget keeps only the 2 most recent
+    # pairs. The old flat estimator priced this window at 625 "tokens" and
+    # would have kept all 5.
+    window = [("あ" * 300, "a" * 200) for _ in range(5)]
+
+    ctx = build_context(
+        normalized_source_text="次。",
+        glossary_terms=[],
+        previous_segments=window,
+    )
+
+    assert len(ctx.previous_segments) == 2
+    kept_cost = sum(
+        estimate_tokens(source) + estimate_tokens(translation)
+        for source, translation in ctx.previous_segments
+    )
+    assert kept_cost <= MAX_CONTEXT_TOKENS
+
+
 def test_build_context_drops_window_segments_when_over_token_budget() -> None:
     long_source = "あ" * 2000
     long_translation = "a" * 2000
@@ -192,7 +233,7 @@ def test_fallback_rescues_segment_when_primary_fails(tmp_path: Path) -> None:
     fallback = FakeProvider(fail_rate=0.0, seed=2)
     cold: dict[str, float] = {}
 
-    translated, reused, inp, out = translate_one_segment(
+    outcome = translate_one_segment(
         connection=conn,
         segment=seg,
         source_text="hello",
@@ -207,8 +248,8 @@ def test_fallback_rescues_segment_when_primary_fails(tmp_path: Path) -> None:
         enforce_repair=False,
     )
 
-    assert translated, "fallback should have rescued the segment"
-    assert not reused, "should not be a TM reuse"
+    assert outcome.translated, "fallback should have rescued the segment"
+    assert not outcome.reused_from_memory, "should not be a TM reuse"
     row = conn.execute(
         "SELECT status, provider, model FROM segments s "
         "JOIN translations t ON t.segment_id = s.id "
@@ -228,7 +269,7 @@ def test_fallback_cold_mark_prevents_reuse_within_window(tmp_path: Path) -> None
     fallback = FakeProvider(fail_rate=0.0, seed=2)
     cold: dict[str, float] = {}
 
-    translated, _, _, _ = translate_one_segment(
+    outcome = translate_one_segment(
         connection=conn,
         segment=seg,
         source_text="hello",
@@ -243,7 +284,7 @@ def test_fallback_cold_mark_prevents_reuse_within_window(tmp_path: Path) -> None
         enforce_repair=False,
     )
 
-    assert translated
+    assert outcome.translated
     assert cold.get("fake", 0.0) > 0.0, "fallback should be cold-marked"
     conn.close()
 
@@ -253,7 +294,7 @@ def test_all_candidates_fail_marks_segment_failed(tmp_path: Path) -> None:
     primary = FakeProvider(fail_rate=1.0, seed=1)
     fallback = FakeProvider(fail_rate=1.0, seed=2)
 
-    translated, reused, inp, out = translate_one_segment(
+    outcome = translate_one_segment(
         connection=conn,
         segment=seg,
         source_text="hello",
@@ -267,8 +308,8 @@ def test_all_candidates_fail_marks_segment_failed(tmp_path: Path) -> None:
         enforce_repair=False,
     )
 
-    assert not translated
-    assert not reused
+    assert not outcome.translated
+    assert not outcome.reused_from_memory
     status = conn.execute("SELECT status FROM segments WHERE id = ?", (seg.id,)).fetchone()[
         "status"
     ]
@@ -290,7 +331,7 @@ def test_tm_short_circuit_stays_ahead_of_fallback(tmp_path: Path) -> None:
     primary = FakeProvider(fail_rate=1.0, seed=1)
     fallback = FakeProvider(fail_rate=0.0, seed=2)
 
-    translated, reused, inp, out = translate_one_segment(
+    outcome = translate_one_segment(
         connection=conn,
         segment=seg,
         source_text="hello",
@@ -305,10 +346,10 @@ def test_tm_short_circuit_stays_ahead_of_fallback(tmp_path: Path) -> None:
         cold={},
     )
 
-    assert translated, "TM hit should return translated"
-    assert reused, "TM reuse — no provider call"
-    assert inp is None, "no input tokens when reused from TM"
-    assert out is None, "no output tokens when reused from TM"
+    assert outcome.translated, "TM hit should return translated"
+    assert outcome.reused_from_memory, "TM reuse — no provider call"
+    assert outcome.input_tokens is None, "no input tokens when reused from TM"
+    assert outcome.output_tokens is None, "no output tokens when reused from TM"
     row = conn.execute(
         "SELECT provider, model FROM translations "
         "WHERE segment_id = ? ORDER BY attempt DESC LIMIT 1",
@@ -331,7 +372,7 @@ def test_provider_call_runs_outside_write_transaction(tmp_path: Path) -> None:
             in_txn_during_call.append(conn.in_transaction)
             return super().translate(request)
 
-    translated, reused, _, _ = translate_one_segment(
+    outcome = translate_one_segment(
         connection=conn,
         segment=seg,
         source_text="hello",
@@ -344,7 +385,7 @@ def test_provider_call_runs_outside_write_transaction(tmp_path: Path) -> None:
         enforce_repair=False,
     )
 
-    assert translated and not reused
+    assert outcome.translated and not outcome.reused_from_memory
     assert in_txn_during_call == [False], "provider ran while holding the write lock"
     status = conn.execute("SELECT status FROM segments WHERE id = ?", (seg.id,)).fetchone()[
         "status"
@@ -381,6 +422,216 @@ def test_unexpected_provider_exception_restores_prior_status(tmp_path: Path) -> 
         "status"
     ]
     assert status == "pending", "segment must return to its pre-run status"
+    conn.close()
+
+
+# --- enforcement provenance tests (v0.7.3 M3, audit A4/A5) ------------------
+
+
+class _UsageProvider(LLMProvider):
+    """Reports token usage; primary omits the glossary target, repair supplies it."""
+
+    name = "stub"
+
+    def __init__(
+        self,
+        *,
+        repair_text: str = '{"translation": "A line containing Bonjour."}',
+        fail_repair: bool = False,
+    ) -> None:
+        self.complete_calls = 0
+        self._repair_text = repair_text
+        self._fail_repair = fail_repair
+
+    def translate(self, request):  # noqa: ANN001, ANN201 — test double
+        return TranslationResponse(
+            translation="A line without the term.",
+            notes=(),
+            uncertain_terms=(),
+            raw_response="{}",
+            input_tokens=100,
+            output_tokens=40,
+        )
+
+    def complete(self, prompt, *, system=None, max_output_tokens):  # noqa: ANN001, ANN201
+        self.complete_calls += 1
+        if self._fail_repair:
+            raise ProviderResponseError(
+                "Synthetic repair failure. "
+                "Likely cause: test double configured to fail. "
+                "Next command: none."
+            )
+        return Completion(
+            text=self._repair_text,
+            input_tokens=55,
+            output_tokens=20,
+            raw_response=self._repair_text,
+        )
+
+    def healthcheck(self) -> ProviderStatus:
+        return ProviderStatus(
+            healthy=True, provider_name=self.name, model="stub", message=None, latency_ms=0
+        )
+
+
+_BONJOUR_TERM = GlossaryTerm(source="hello", target="Bonjour")
+
+
+def _provenance_row(conn: sqlite3.Connection, segment_id: str) -> sqlite3.Row:
+    return conn.execute(
+        "SELECT text, input_tokens, output_tokens, enforcement_violations, "
+        "repair_attempted, repair_outcome, repair_input_tokens, repair_output_tokens "
+        "FROM translations WHERE segment_id = ? ORDER BY attempt DESC LIMIT 1",
+        (segment_id,),
+    ).fetchone()
+
+
+def test_enforce_repair_off_still_runs_detection_and_persists_verdict(tmp_path: Path) -> None:
+    # Audit A4a: detection is free and always runs; the flag gates only the
+    # token-costing repair re-ask.
+    conn, seg, proj = _db_with_segment(tmp_path / "test.db")
+    provider = _UsageProvider()
+
+    outcome = translate_one_segment(
+        connection=conn,
+        segment=seg,
+        source_text="hello",
+        normalized_source_text="hello",
+        project=proj,
+        glossary_terms=(_BONJOUR_TERM,),
+        honorific_policy="preserve",
+        provider=provider,
+        provider_model="stub-1",
+        enforce_repair=False,
+    )
+
+    assert outcome.translated
+    assert not outcome.repair_call_made
+    assert provider.complete_calls == 0, "enforce_repair=False must issue zero repair calls"
+    row = _provenance_row(conn, seg.id)
+    violations = json.loads(row["enforcement_violations"])
+    assert violations, "the missing glossary target must be persisted as a finding"
+    assert row["repair_attempted"] == 0
+    assert row["repair_outcome"] is None
+    assert row["input_tokens"] == 100
+    conn.close()
+
+
+def test_clean_translation_persists_empty_verdict_not_null(tmp_path: Path) -> None:
+    conn, seg, proj = _db_with_segment(tmp_path / "test.db")
+
+    outcome = translate_one_segment(
+        connection=conn,
+        segment=seg,
+        source_text="hello",
+        normalized_source_text="hello",
+        project=proj,
+        glossary_terms=(),
+        honorific_policy="preserve",
+        provider=FakeProvider(),
+        provider_model="fake-1",
+        enforce_repair=True,
+    )
+
+    assert outcome.translated
+    row = _provenance_row(conn, seg.id)
+    assert row["enforcement_violations"] == "[]", "evaluated-clean must be distinct from NULL"
+    conn.close()
+
+
+def test_repair_accepted_splits_primary_and_repair_tokens(tmp_path: Path) -> None:
+    # Audit A5: the row keeps the primary call's tokens; the repair spend has its
+    # own columns; the outcome totals reconcile with the row by construction.
+    conn, seg, proj = _db_with_segment(tmp_path / "test.db")
+    provider = _UsageProvider()
+
+    outcome = translate_one_segment(
+        connection=conn,
+        segment=seg,
+        source_text="hello",
+        normalized_source_text="hello",
+        project=proj,
+        glossary_terms=(_BONJOUR_TERM,),
+        honorific_policy="preserve",
+        provider=provider,
+        provider_model="stub-1",
+        enforce_repair=True,
+    )
+
+    assert outcome.translated
+    assert outcome.repair_call_made
+    assert outcome.input_tokens == 155
+    assert outcome.output_tokens == 60
+    row = _provenance_row(conn, seg.id)
+    assert "Bonjour" in row["text"], "the repaired text must be committed"
+    assert row["input_tokens"] == 100
+    assert row["output_tokens"] == 40
+    assert row["repair_input_tokens"] == 55
+    assert row["repair_output_tokens"] == 20
+    assert row["repair_attempted"] == 1
+    assert row["repair_outcome"] == "accepted"
+    assert json.loads(row["enforcement_violations"]) == []
+    assert row["input_tokens"] + row["repair_input_tokens"] == outcome.input_tokens
+    assert row["output_tokens"] + row["repair_output_tokens"] == outcome.output_tokens
+    conn.close()
+
+
+def test_repair_failure_keeps_primary_and_records_failed_outcome(tmp_path: Path) -> None:
+    conn, seg, proj = _db_with_segment(tmp_path / "test.db")
+    provider = _UsageProvider(fail_repair=True)
+
+    outcome = translate_one_segment(
+        connection=conn,
+        segment=seg,
+        source_text="hello",
+        normalized_source_text="hello",
+        project=proj,
+        glossary_terms=(_BONJOUR_TERM,),
+        honorific_policy="preserve",
+        provider=provider,
+        provider_model="stub-1",
+        enforce_repair=True,
+    )
+
+    assert outcome.translated
+    assert outcome.repair_call_made
+    assert outcome.input_tokens == 100, "a failed repair reports no usage to add"
+    row = _provenance_row(conn, seg.id)
+    assert row["text"] == "A line without the term."
+    assert row["repair_outcome"] == "failed"
+    assert row["repair_input_tokens"] is None
+    assert json.loads(row["enforcement_violations"]), "residual violation stays visible"
+    conn.close()
+
+
+def test_repair_that_regresses_is_discarded_with_original_verdict(tmp_path: Path) -> None:
+    conn, seg, proj = _db_with_segment(tmp_path / "test.db")
+    # The "repair" still misses the target AND introduces untranslated Japanese:
+    # strictly worse, so it must be discarded.
+    provider = _UsageProvider(repair_text='{"translation": "まだ日本語のままの行です。"}')
+
+    outcome = translate_one_segment(
+        connection=conn,
+        segment=seg,
+        source_text="hello",
+        normalized_source_text="hello",
+        project=proj,
+        glossary_terms=(_BONJOUR_TERM,),
+        honorific_policy="preserve",
+        provider=provider,
+        provider_model="stub-1",
+        enforce_repair=True,
+    )
+
+    assert outcome.translated
+    row = _provenance_row(conn, seg.id)
+    assert row["text"] == "A line without the term.", "regressed repair must be discarded"
+    assert row["repair_outcome"] == "discarded"
+    # The repair call was spent regardless; its cost stays visible.
+    assert row["repair_input_tokens"] == 55
+    assert outcome.input_tokens == 155
+    violations = json.loads(row["enforcement_violations"])
+    assert len(violations) == 1, "verdict describes the committed (original) text"
     conn.close()
 
 

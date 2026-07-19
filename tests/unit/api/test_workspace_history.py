@@ -5,7 +5,41 @@ GET /projects/{name}/chapters/{chapter_id}/segments/{segment_id}/translations
 
 from __future__ import annotations
 
+from contextlib import closing
+from pathlib import Path
+
 from fastapi.testclient import TestClient
+
+from weaver.storage.db import connect_database, transaction
+from weaver.storage.translations import record_translation
+
+
+def _seed_ai_attempt_with_provenance(
+    tmp_path: Path, name: str, segment_id: str, *, source_hash_of: str
+) -> None:
+    """Record an AI attempt with enforcement provenance directly in storage."""
+
+    db_path = tmp_path / ".weaver" / name / "weaver.db"
+    with closing(connect_database(db_path)) as connection:
+        row = connection.execute(
+            "SELECT source_hash FROM segments WHERE id = ?", (source_hash_of,)
+        ).fetchone()
+        with transaction(connection):
+            record_translation(
+                connection,
+                segment_id=segment_id,
+                text="A repaired line.",
+                source_hash=str(row["source_hash"]),
+                provider="stub",
+                model="stub-1",
+                input_tokens=100,
+                output_tokens=40,
+                enforcement_violations=["Glossary term missing its target."],
+                repair_attempted=True,
+                repair_outcome="discarded",
+                repair_input_tokens=55,
+                repair_output_tokens=20,
+            )
 
 
 def _first_segment(client: TestClient) -> tuple[str, str, str]:
@@ -63,8 +97,36 @@ def test_history_attempt_shape(client_with_projects: TestClient) -> None:
         "provider",
         "model",
         "created_at",
+        "enforcement_violations",
+        "repair_attempted",
+        "repair_outcome",
     } <= attempt.keys()
     assert attempt["provider"] == "manual"
+
+
+def test_history_manual_save_reads_as_not_evaluated(client_with_projects: TestClient) -> None:
+    # A manual save never went through the enforcement gate: its verdict must be
+    # null ("not evaluated"), not an empty list ("evaluated clean") — audit A4.
+    name, chapter_id, segment_id = _first_segment(client_with_projects)
+    _save(client_with_projects, name, chapter_id, segment_id, "v1")
+    attempt = _history(client_with_projects, name, chapter_id, segment_id).json()["attempts"][0]
+    assert attempt["enforcement_violations"] is None
+    assert attempt["repair_attempted"] is False
+    assert attempt["repair_outcome"] is None
+
+
+def test_history_surfaces_enforcement_provenance(
+    client_with_projects: TestClient, tmp_path: Path
+) -> None:
+    name, chapter_id, segment_id = _first_segment(client_with_projects)
+    _seed_ai_attempt_with_provenance(tmp_path, name, segment_id, source_hash_of=segment_id)
+
+    attempt = _history(client_with_projects, name, chapter_id, segment_id).json()["attempts"][-1]
+    assert attempt["enforcement_violations"] == ["Glossary term missing its target."]
+    assert attempt["repair_attempted"] is True
+    assert attempt["repair_outcome"] == "discarded"
+    assert attempt["input_tokens"] == 100
+    assert attempt["repair_input_tokens"] == 55
 
 
 def test_workspace_still_returns_latest_only(client_with_projects: TestClient) -> None:

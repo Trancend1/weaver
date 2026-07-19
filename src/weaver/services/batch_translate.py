@@ -103,6 +103,8 @@ class BatchChapterOutcome:
     input_tokens: int
     output_tokens: int
     cancelled: bool
+    repair_calls: int = 0
+    json_repair_calls: int = 0
 
 
 @dataclass(frozen=True)
@@ -149,6 +151,9 @@ class BatchTranslationResult:
     duration_seconds: float
     chapters: tuple[BatchChapterOutcome, ...] = field(default_factory=tuple)
     preflight_warning: str | None = None
+    # Hidden round-trips made visible (audit F6), aggregated across chapters.
+    repair_calls: int = 0
+    json_repair_calls: int = 0
 
 
 BatchProgressCallback = Callable[[BatchProgressSnapshot], None]
@@ -320,6 +325,8 @@ def run_batch_translation(
     skipped = 0
     input_tokens = 0
     output_tokens = 0
+    repair_calls = 0
+    json_repair_calls = 0
     cancelled = False
     current_chapter_id: str | None = None
     outcomes: list[BatchChapterOutcome] = []
@@ -373,6 +380,8 @@ def run_batch_translation(
         skipped += result.skipped
         input_tokens += result.input_tokens
         output_tokens += result.output_tokens
+        repair_calls += result.repair_calls
+        json_repair_calls += result.json_repair_calls
         chapters_done += 1
         outcomes.append(_outcome_from_result(result))
         if progress_callback is not None:
@@ -403,6 +412,8 @@ def run_batch_translation(
         duration_seconds=(finished - started).total_seconds(),
         chapters=tuple(outcomes),
         preflight_warning=plan.preflight_warning,
+        repair_calls=repair_calls,
+        json_repair_calls=json_repair_calls,
     )
 
 
@@ -468,4 +479,6 @@ def _outcome_from_result(result: ChapterTranslationResult) -> BatchChapterOutcom
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
         cancelled=result.cancelled,
+        repair_calls=result.repair_calls,
+        json_repair_calls=result.json_repair_calls,
     )

@@ -11,7 +11,7 @@ from weaver.core.slop_seed import DEFAULT_BANNED_PHRASES
 from weaver.errors import GlossaryConflictError, ProviderResponseError
 from weaver.providers.base import LLMProvider, ProviderStatus
 from weaver.providers.fake import FakeProvider
-from weaver.providers.types import TranslationRequest, TranslationResponse
+from weaver.providers.types import Completion, TranslationRequest, TranslationResponse
 from weaver.services.project import initialize_project
 from weaver.services.translation import build_translation_profile, translate_project
 from weaver.storage.db import connect_database, transaction
@@ -221,6 +221,134 @@ def test_uncertain_term_already_approved_is_not_recorded(tmp_path, monkeypatch) 
             ).fetchone()[0]
         )
     assert discovered == 0  # already handled -> never re-proposed as a discovery
+
+
+class _RepairUsageProvider(LLMProvider):
+    """Every primary result carries JP residue (violates E1) and token usage;
+    every repair completion is clean and also carries usage."""
+
+    name = "stub"
+
+    def __init__(self) -> None:
+        self.complete_calls = 0
+
+    def translate(self, request: TranslationRequest) -> TranslationResponse:
+        return TranslationResponse(
+            translation="まだ日本語のままの行です。",
+            notes=(),
+            uncertain_terms=(),
+            raw_response="{}",
+            input_tokens=10,
+            output_tokens=5,
+        )
+
+    def complete(self, prompt, *, system=None, max_output_tokens):  # noqa: ANN001, ANN201
+        self.complete_calls += 1
+        text = '{"translation": "A clean english line."}'
+        return Completion(text=text, input_tokens=7, output_tokens=3, raw_response=text)
+
+    def healthcheck(self) -> ProviderStatus:
+        return ProviderStatus(
+            healthy=True, provider_name=self.name, model="stub", message=None, latency_ms=0
+        )
+
+
+def test_run_summary_reconciles_exactly_with_row_tokens_including_repair(
+    tmp_path, monkeypatch
+) -> None:
+    # Audit A5 acceptance: sum(rows) == summary, repair included, on a fixture
+    # where every segment triggers one repair re-ask.
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    provider = _RepairUsageProvider()
+
+    summary = translate_project(init.project_toml, provider=provider)
+
+    assert summary.translated_segments == 6
+    assert summary.repair_calls == 6
+    assert summary.json_repair_calls == 0
+    assert summary.input_tokens == 6 * (10 + 7)
+    assert summary.output_tokens == 6 * (5 + 3)
+    with sqlite3.connect(init.database_path) as connection:
+        row = connection.execute(
+            "SELECT "
+            "SUM(COALESCE(input_tokens, 0) + COALESCE(repair_input_tokens, 0)) AS total_in, "
+            "SUM(COALESCE(output_tokens, 0) + COALESCE(repair_output_tokens, 0)) AS total_out, "
+            "SUM(repair_attempted) AS repairs, "
+            "COUNT(*) AS rows_n "
+            "FROM translations"
+        ).fetchone()
+    assert row[0] == summary.input_tokens
+    assert row[1] == summary.output_tokens
+    assert row[2] == summary.repair_calls
+    assert row[3] == 6
+
+
+class _JsonRepairFlaggingProvider(LLMProvider):
+    """Simulates a provider that needed its internal JSON-parse repair call."""
+
+    name = "stub"
+
+    def translate(self, request: TranslationRequest) -> TranslationResponse:
+        return TranslationResponse(
+            translation="A clean english line.",
+            notes=(),
+            uncertain_terms=(),
+            raw_response="{}",
+            input_tokens=12,
+            output_tokens=6,
+            json_repair_used=True,
+        )
+
+    def complete(self, prompt, *, system=None, max_output_tokens):  # pragma: no cover
+        raise NotImplementedError
+
+    def healthcheck(self) -> ProviderStatus:
+        return ProviderStatus(
+            healthy=True, provider_name=self.name, model="stub", message=None, latency_ms=0
+        )
+
+
+def test_run_summary_counts_provider_json_repair_calls(tmp_path, monkeypatch) -> None:
+    # Audit F6: the provider-internal JSON-parse repair round-trip becomes a
+    # visible count on the run summary instead of a silent extra network call.
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+
+    summary = translate_project(init.project_toml, provider=_JsonRepairFlaggingProvider())
+
+    assert summary.translated_segments == 6
+    assert summary.json_repair_calls == 6
+    assert summary.repair_calls == 0
+
+
+def test_enforce_repair_off_run_persists_findings_with_zero_repair_calls(
+    tmp_path, monkeypatch
+) -> None:
+    # Audit A4a acceptance: enforce_repair=false -> detection still runs and
+    # persists findings; zero repair calls are issued.
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    text = init.project_toml.read_text(encoding="utf-8")
+    init.project_toml.write_text(
+        text.replace("[translation]", "[translation]\nenforce_repair = false", 1),
+        encoding="utf-8",
+    )
+    provider = _RepairUsageProvider()
+
+    summary = translate_project(init.project_toml, provider=provider)
+
+    assert summary.translated_segments == 6
+    assert summary.repair_calls == 0
+    assert provider.complete_calls == 0
+    with sqlite3.connect(init.database_path) as connection:
+        rows = connection.execute(
+            "SELECT enforcement_violations, repair_attempted FROM translations"
+        ).fetchall()
+    assert len(rows) == 6
+    for violations_json, repair_attempted in rows:
+        assert violations_json is not None and violations_json != "[]"
+        assert repair_attempted == 0
 
 
 def test_build_translation_profile_absent_is_none() -> None:

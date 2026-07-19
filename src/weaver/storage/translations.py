@@ -2,21 +2,37 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+# Valid ``repair_outcome`` values (mirrors the schema CHECK constraint).
+REPAIR_OUTCOMES = frozenset({"accepted", "discarded", "failed"})
+
 
 @dataclass(frozen=True)
 class TranslationAttempt:
-    """One recorded translation attempt for a segment."""
+    """One recorded translation attempt for a segment.
+
+    ``enforcement_violations`` is ``None`` when the attempt was never evaluated
+    by the enforcement gate (pre-v14 rows, memory reuse, manual saves) — render
+    it as "not evaluated", not as clean. An empty tuple means evaluated clean.
+    """
 
     attempt: int
     text: str
     provider: str
     model: str
     created_at: str
+    enforcement_violations: tuple[str, ...] | None = None
+    repair_attempted: bool = False
+    repair_outcome: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    repair_input_tokens: int | None = None
+    repair_output_tokens: int | None = None
 
 
 def record_translation(
@@ -30,6 +46,11 @@ def record_translation(
     raw_response: str | None = None,
     input_tokens: int | None = None,
     output_tokens: int | None = None,
+    enforcement_violations: Sequence[str] | None = None,
+    repair_attempted: bool = False,
+    repair_outcome: str | None = None,
+    repair_input_tokens: int | None = None,
+    repair_output_tokens: int | None = None,
 ) -> int:
     """Store a translation attempt for one segment.
 
@@ -41,13 +62,27 @@ def record_translation(
         provider: Provider name.
         model: Provider model name.
         raw_response: Optional provider raw response.
-        input_tokens: Provider-reported input token count, if available.
-        output_tokens: Provider-reported output token count, if available.
+        input_tokens: Provider-reported input token count of the primary call.
+        output_tokens: Provider-reported output token count of the primary call.
+        enforcement_violations: Enforcement verdict on the committed text
+            (ADR 019 E1). ``None`` = not evaluated; empty = evaluated clean.
+        repair_attempted: Whether the bounded repair re-ask (E2) was issued.
+        repair_outcome: How the repair ended — ``accepted`` / ``discarded`` /
+            ``failed``; ``None`` when no repair was attempted.
+        repair_input_tokens: Repair call input token spend, if any.
+        repair_output_tokens: Repair call output token spend, if any.
 
     Returns:
         Attempt number assigned to the translation.
+
+    Raises:
+        ValueError: If ``repair_outcome`` is not a recognized value.
     """
 
+    if repair_outcome is not None and repair_outcome not in REPAIR_OUTCOMES:
+        raise ValueError(
+            f"repair_outcome must be one of {sorted(REPAIR_OUTCOMES)}, got {repair_outcome!r}"
+        )
     row = connection.execute(
         """
         SELECT COALESCE(MAX(attempt), 0) + 1 AS next_attempt
@@ -69,9 +104,14 @@ def record_translation(
           created_at,
           raw_response,
           input_tokens,
-          output_tokens
+          output_tokens,
+          enforcement_violations,
+          repair_attempted,
+          repair_outcome,
+          repair_input_tokens,
+          repair_output_tokens
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             segment_id,
@@ -84,6 +124,15 @@ def record_translation(
             raw_response,
             input_tokens,
             output_tokens,
+            (
+                None
+                if enforcement_violations is None
+                else json.dumps(list(enforcement_violations), ensure_ascii=False)
+            ),
+            1 if repair_attempted else 0,
+            repair_outcome,
+            repair_input_tokens,
+            repair_output_tokens,
         ),
     )
     return attempt
@@ -131,7 +180,10 @@ def list_translation_attempts(
 
     rows = connection.execute(
         """
-        SELECT attempt, text, provider, model, created_at
+        SELECT
+          attempt, text, provider, model, created_at,
+          enforcement_violations, repair_attempted, repair_outcome,
+          input_tokens, output_tokens, repair_input_tokens, repair_output_tokens
         FROM translations
         WHERE segment_id = ?
         ORDER BY attempt ASC
@@ -145,9 +197,38 @@ def list_translation_attempts(
             provider=str(row["provider"]),
             model=str(row["model"]),
             created_at=str(row["created_at"]),
+            enforcement_violations=_decode_violations(row["enforcement_violations"]),
+            repair_attempted=bool(row["repair_attempted"]),
+            repair_outcome=(None if row["repair_outcome"] is None else str(row["repair_outcome"])),
+            input_tokens=_optional_int(row["input_tokens"]),
+            output_tokens=_optional_int(row["output_tokens"]),
+            repair_input_tokens=_optional_int(row["repair_input_tokens"]),
+            repair_output_tokens=_optional_int(row["repair_output_tokens"]),
         )
         for row in rows
     ]
+
+
+def _decode_violations(raw: object) -> tuple[str, ...] | None:
+    """Decode the stored violations JSON; None (not evaluated) passes through.
+
+    A malformed value (external write) degrades to "not evaluated" rather than
+    failing the whole history read — the committed text is unaffected.
+    """
+
+    if raw is None:
+        return None
+    try:
+        decoded = json.loads(str(raw))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(decoded, list):
+        return None
+    return tuple(str(item) for item in decoded)
+
+
+def _optional_int(value: int | None) -> int | None:
+    return None if value is None else int(value)
 
 
 def list_previous_translated_segments(

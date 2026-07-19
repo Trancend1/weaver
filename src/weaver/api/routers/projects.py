@@ -350,6 +350,15 @@ def get_segment_translation_history(
                 provider=a.provider,
                 model=a.model,
                 created_at=a.created_at,
+                enforcement_violations=(
+                    None if a.enforcement_violations is None else list(a.enforcement_violations)
+                ),
+                repair_attempted=a.repair_attempted,
+                repair_outcome=a.repair_outcome,
+                input_tokens=a.input_tokens,
+                output_tokens=a.output_tokens,
+                repair_input_tokens=a.repair_input_tokens,
+                repair_output_tokens=a.repair_output_tokens,
             )
             for a in history.attempts
         ],

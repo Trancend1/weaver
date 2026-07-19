@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import codecs
 import posixpath
 from collections import defaultdict
 from collections.abc import Iterable
@@ -1424,6 +1425,7 @@ def _opf_path(book: EpubBook) -> str | None:
 
 def _read_chapter(item: EpubItem, order: int, book_identifier: str | None) -> ChapterIR:
     href = item.get_name()
+    _ensure_chapter_bytes_decodable(item)
     root = ElementTree.fromstring(item.get_content())
     chapter_id = compute_chapter_id(book_identifier=book_identifier, spine_href=href)
     blocks = [
@@ -1437,6 +1439,36 @@ def _read_chapter(item: EpubItem, order: int, book_identifier: str | None) -> Ch
         order=order,
         blocks=blocks,
     )
+
+
+def _ensure_chapter_bytes_decodable(item: EpubItem) -> None:
+    """Reject spine content whose raw bytes are not decodable text (audit N5).
+
+    Whether lxml's recover-mode "repairs" binary garbage into a parseable
+    document depends on the libxml2 version bundled with the platform wheel,
+    so the per-chapter skip decision must not hang on it: on one platform the
+    garbage raised a parse error, on another it imported silently as
+    translatable text. EPUB content documents are UTF-8 or UTF-16 by spec —
+    undecodable raw bytes are never a real chapter and must surface as a
+    skipped-chapter issue regardless of what the repair produced.
+
+    Raises:
+        ElementTree.ParseError: When the raw bytes decode as neither UTF-8 nor
+            (with a leading BOM) UTF-16 — caught by ``read_epub``'s
+            per-chapter degradation loop like any other parse failure.
+    """
+
+    raw = getattr(item, "content", None)
+    if not isinstance(raw, bytes | bytearray):
+        return
+    data = bytes(raw)
+    encoding = "utf-16" if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)) else "utf-8"
+    try:
+        data.decode(encoding)
+    except UnicodeDecodeError as exc:
+        raise ElementTree.ParseError(
+            f"chapter bytes are not decodable {encoding} text: {exc}"
+        ) from exc
 
 
 def _item_media_type(item: EpubItem) -> str:

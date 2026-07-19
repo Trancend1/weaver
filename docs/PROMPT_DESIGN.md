@@ -161,7 +161,7 @@ Example (2-segment window):
 
 If the segment is the first in a chapter: omit the `<context>` block.
 
-**Maximum context tokens:** Target ≤ 600 tokens for the context block. If the rolling window exceeds this due to long segments, truncate to fewer previous segments. Never truncate a segment mid-sentence.
+**Maximum context tokens:** Target ≤ 1,000 tokens for the context block, measured with the CJK-aware estimator (CJK characters ≈ 1 token each, other characters ≈ ¼ token — audit N7; the pre-v0.7.3 flat `chars // 4` estimate undercounted Japanese ~3×). If the rolling window exceeds this due to long segments, truncate to fewer previous segments. Never truncate a segment mid-sentence.
 
 #### `{source_text}`
 
@@ -353,9 +353,9 @@ Target token counts per segment translation call:
 | System prompt | ~120 tokens | 200 tokens |
 | Policy block | ~10 tokens | 20 tokens |
 | Glossary block | ~60 tokens | 200 tokens (20 terms × ~10 tokens each) |
-| Context block | ~300 tokens | 600 tokens |
+| Context block | ~700 tokens | 1,000 tokens |
 | Source segment | ~150 tokens | 1,000 tokens |
-| **Total input** | **~640 tokens** | **~2,020 tokens** |
+| **Total input** | **~1,040 tokens** | **~2,420 tokens** |
 | Output (translation) | ~200 tokens | 1,500 tokens |
 
 If a source segment exceeds 1,000 tokens (rare for prose paragraphs; possible for dense passages), the segment is flagged during `weaver init` with a warning. It is still translated but the context window may be compressed to stay under provider limits.
@@ -391,7 +391,7 @@ These budgets exist to control cost and latency, not to work around context limi
 - Use `google-generativeai` SDK, `GenerativeModel("gemini-1.5-flash")`.
 - Set `generation_config={"temperature": 0.3, "response_mime_type": "application/json"}` — Gemini natively supports JSON-only response mode.
 - Free tier: 15 requests/minute, 1 million tokens/day — sufficient for serial translation of a full novel.
-- Rate limit handling: on 429, backoff 60 seconds and retry. Mark segment failed only after `max_retries` exhausted.
+- Rate limit handling: 429s are retried with backoff by the OpenAI SDK transport within the explicit `[provider] max_retries` budget (default 2 — v0.7.3 M3, audit N2); once exhausted the segment is marked failed.
 - **Recommended first-choice for hardware-limited developers and users who want zero-cost translation.**
 
 ### FakeProvider

@@ -115,6 +115,10 @@ class ChapterTranslationResult:
     output_tokens: int
     cancelled: bool
     preflight_warning: str | None = None
+    # Hidden round-trips made visible (audit F6): enforcement repair re-asks
+    # (E2) and provider-internal JSON-parse repairs issued during this run.
+    repair_calls: int = 0
+    json_repair_calls: int = 0
 
 
 def prepare_chapter_translation(
@@ -259,6 +263,8 @@ def run_translation(
     failed = 0
     input_tokens = 0
     output_tokens = 0
+    repair_calls = 0
+    json_repair_calls = 0
     cancelled = False
     # Per-run cold-mark shared across this plan's segments (ADR 018 D4): a failed
     # engine is skipped for a short window, never circuit-broken.
@@ -273,7 +279,7 @@ def run_translation(
             if segment is None:
                 continue
             normalized = normalize_japanese_text(segment.source_text)
-            ok, reused_flag, response_input_tokens, response_output_tokens = translate_one_segment(
+            outcome = translate_one_segment(
                 connection=connection,
                 segment=segment,
                 source_text=segment.source_text,
@@ -291,22 +297,26 @@ def run_translation(
                 enforce_repair=plan.enforce_repair,
                 profile=plan.profile,
             )
-            if ok:
+            if outcome.translated:
                 translated += 1
-                input_tokens += response_input_tokens or 0
-                output_tokens += response_output_tokens or 0
+                input_tokens += outcome.input_tokens or 0
+                output_tokens += outcome.output_tokens or 0
             else:
                 failed += 1
-            if reused_flag:
+            if outcome.reused_from_memory:
                 reused += 1
+            if outcome.repair_call_made:
+                repair_calls += 1
+            if outcome.json_repair_used:
+                json_repair_calls += 1
             if progress_callback is not None:
                 progress_callback(
                     index,
                     selected,
                     segment,
-                    ok,
-                    response_input_tokens,
-                    response_output_tokens,
+                    outcome.translated,
+                    outcome.input_tokens,
+                    outcome.output_tokens,
                 )
 
     return ChapterTranslationResult(
@@ -320,6 +330,8 @@ def run_translation(
         output_tokens=output_tokens,
         cancelled=cancelled,
         preflight_warning=plan.preflight_warning,
+        repair_calls=repair_calls,
+        json_repair_calls=json_repair_calls,
     )
 
 

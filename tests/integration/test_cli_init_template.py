@@ -39,6 +39,20 @@ def test_init_with_web_novel_template(tmp_path, monkeypatch) -> None:
     assert data["qa"]["minimum_length_ratio"] == 0.2
 
 
+def test_init_template_has_no_dead_max_retries_key(tmp_path, monkeypatch) -> None:
+    # Audit N2: `[translation] max_retries` was written by init but never read
+    # anywhere. Retries are transport-level and live on the provider/connection
+    # config (`[provider] max_retries`), so the dead key must not come back.
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(app, ["init", str(FIXTURE_EPUB)])
+    assert result.exit_code == 0, result.output
+
+    project_toml = tmp_path / ".weaver" / "aozora_sample" / "project.toml"
+    data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+    assert "max_retries" not in data["translation"]
+
+
 def test_init_with_unknown_template_fails(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()

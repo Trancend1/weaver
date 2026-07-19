@@ -638,3 +638,119 @@ def test_fresh_database_includes_glossary_candidates_index(tmp_path) -> None:
         }
 
     assert "idx_glossary_candidates_project" in indexes
+
+
+_V14_PROVENANCE_COLUMNS = {
+    "enforcement_violations",
+    "repair_attempted",
+    "repair_outcome",
+    "repair_input_tokens",
+    "repair_output_tokens",
+}
+
+
+def _seed_v13_with_translations(db_path) -> sqlite3.Connection:
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+    connection.executescript(
+        """
+        CREATE TABLE projects (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          source_path TEXT NOT NULL,
+          source_lang TEXT NOT NULL,
+          target_lang TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          schema_version INTEGER NOT NULL,
+          uuid TEXT
+        );
+        CREATE TABLE translations (
+          segment_id TEXT,
+          attempt INTEGER NOT NULL,
+          text TEXT NOT NULL,
+          source_hash TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          model TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          raw_response TEXT,
+          input_tokens INTEGER,
+          output_tokens INTEGER,
+          PRIMARY KEY (segment_id, attempt)
+        );
+        """
+    )
+    connection.execute("PRAGMA user_version = 13")
+    connection.commit()
+    return connection
+
+
+def _translations_columns(connection: sqlite3.Connection) -> set[str]:
+    return {
+        str(row["name"]) for row in connection.execute("PRAGMA table_info(translations)").fetchall()
+    }
+
+
+def test_apply_migrations_v14_adds_enforcement_provenance_columns(tmp_path) -> None:
+    connection = _seed_v13_with_translations(tmp_path / "legacy_v13.db")
+    connection.execute(
+        "INSERT INTO translations "
+        "(segment_id, attempt, text, source_hash, provider, model, created_at) "
+        "VALUES ('seg-1', 1, 'One.', 'hash-1', 'fake', 'fake-1', '2026-01-01T00:00:00+00:00')"
+    )
+    connection.commit()
+
+    apply_migrations(connection, target_version=SCHEMA_VERSION)
+
+    columns = _translations_columns(connection)
+    row = connection.execute(
+        "SELECT enforcement_violations, repair_attempted, repair_outcome, "
+        "repair_input_tokens, repair_output_tokens, text "
+        "FROM translations WHERE segment_id = 'seg-1'"
+    ).fetchone()
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    connection.close()
+
+    assert columns >= _V14_PROVENANCE_COLUMNS
+    # Existing data preserved; pre-v14 rows read as "not evaluated".
+    assert row["text"] == "One."
+    assert row["enforcement_violations"] is None
+    assert row["repair_attempted"] == 0
+    assert row["repair_outcome"] is None
+    assert row["repair_input_tokens"] is None
+    assert row["repair_output_tokens"] is None
+    assert version == SCHEMA_VERSION
+
+
+def test_apply_migrations_v14_is_idempotent(tmp_path) -> None:
+    connection = _seed_v13_with_translations(tmp_path / "legacy_v13.db")
+
+    apply_migrations(connection, target_version=SCHEMA_VERSION)
+    apply_migrations(connection, target_version=SCHEMA_VERSION)
+    columns = _translations_columns(connection)
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    connection.close()
+
+    assert columns >= _V14_PROVENANCE_COLUMNS
+    assert version == SCHEMA_VERSION
+
+
+def test_apply_migrations_v14_rejects_invalid_repair_outcome(tmp_path) -> None:
+    connection = _seed_v13_with_translations(tmp_path / "legacy_v13.db")
+    apply_migrations(connection, target_version=SCHEMA_VERSION)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        connection.execute(
+            "INSERT INTO translations "
+            "(segment_id, attempt, text, source_hash, provider, model, created_at, "
+            " repair_outcome) "
+            "VALUES ('seg-1', 1, 'One.', 'hash-1', 'fake', 'fake-1', "
+            "'2026-01-01T00:00:00+00:00', 'bogus')"
+        )
+    connection.close()
+
+
+def test_fresh_database_includes_enforcement_provenance_columns(tmp_path) -> None:
+    with initialize_database(tmp_path / "fresh.db") as connection:
+        columns = _translations_columns(connection)
+
+    assert columns >= _V14_PROVENANCE_COLUMNS

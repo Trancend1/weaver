@@ -361,7 +361,6 @@ quality = "balanced"
 honorifics = "preserve"
 context_window_segments = 5
 timeout_seconds = 180
-max_retries = 2
 
 [glossary]
 candidate_path = "{project_dir}/glossary_candidates.tsv"

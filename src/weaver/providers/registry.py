@@ -171,6 +171,7 @@ def _build_openai_chat(config: Mapping[str, Any]) -> LLMProvider:
             ),
             api_key_env=api_key_env,
             name=_clean(config.get("type")) or "openai_chat",
+            max_retries=read_int(config, "max_retries", OpenAIChatConfig.max_retries, minimum=0),
         ),
         api_key=_resolve_key_value(api_key_env),
     )

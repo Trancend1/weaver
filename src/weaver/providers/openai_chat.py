@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from weaver.errors import (
@@ -25,6 +25,10 @@ from weaver.providers.types import Completion, TranslationRequest, TranslationRe
 
 DEFAULT_TEMPERATURE = 0.3
 DEFAULT_TIMEOUT_SECONDS = 180.0
+# Explicit SDK retry budget (audit F6/N2). 2 mirrors the openai SDK's own
+# default, but pinning it here makes the hidden transport retries a visible,
+# per-connection configurable number instead of a silent SDK behavior.
+DEFAULT_MAX_RETRIES = 2
 
 # Dummy key used when a keyless endpoint (e.g. local Ollama) is configured.
 # The OpenAI client requires a non-empty string; the upstream ignores it.
@@ -46,6 +50,7 @@ class OpenAIChatConfig:
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     api_key_env: str = ""
     name: str = "openai_chat"
+    max_retries: int = DEFAULT_MAX_RETRIES
 
 
 class OpenAIChatProvider(LLMProvider):
@@ -83,6 +88,7 @@ class OpenAIChatProvider(LLMProvider):
                 api_key=resolved_key or "",
                 base_url=self._config.base_url,
                 timeout_seconds=self._config.timeout_seconds,
+                max_retries=self._config.max_retries,
             )
         )
 
@@ -115,11 +121,18 @@ class OpenAIChatProvider(LLMProvider):
                 ]
             )
             repair_content = _extract_content(repair)
-            return parse_response(
+            # Both round-trips were spent: report their summed usage and flag
+            # the repair so callers can count the hidden call (audit F6).
+            parsed = parse_response(
                 repair_content,
-                input_tokens=_usage(repair, "prompt_tokens"),
-                output_tokens=_usage(repair, "completion_tokens"),
+                input_tokens=_sum_usage(
+                    _usage(first, "prompt_tokens"), _usage(repair, "prompt_tokens")
+                ),
+                output_tokens=_sum_usage(
+                    _usage(first, "completion_tokens"), _usage(repair, "completion_tokens")
+                ),
             )
+            return replace(parsed, json_repair_used=True)
 
     def complete(
         self, prompt: str, *, system: str | None = None, max_output_tokens: int
@@ -191,7 +204,9 @@ class OpenAIChatProvider(LLMProvider):
         )
 
 
-def _build_openai_client(*, api_key: str, base_url: str, timeout_seconds: float) -> Any:
+def _build_openai_client(
+    *, api_key: str, base_url: str, timeout_seconds: float, max_retries: int = DEFAULT_MAX_RETRIES
+) -> Any:
     try:
         from openai import OpenAI
     except ImportError as exc:
@@ -200,7 +215,9 @@ def _build_openai_client(*, api_key: str, base_url: str, timeout_seconds: float)
             "Likely cause: provider dependencies were not installed. "
             "Next command: reinstall weaver to pull provider dependencies."
         ) from exc
-    return OpenAI(api_key=api_key, base_url=base_url, timeout=timeout_seconds)
+    return OpenAI(
+        api_key=api_key, base_url=base_url, timeout=timeout_seconds, max_retries=max_retries
+    )
 
 
 def _extract_content(completion: Any) -> str:
@@ -221,6 +238,14 @@ def _extract_content(completion: Any) -> str:
             "Next command: rerun translation."
         )
     return content
+
+
+def _sum_usage(first: int | None, second: int | None) -> int | None:
+    """Sum two optional usage counts; None only when neither call reported."""
+
+    if first is None and second is None:
+        return None
+    return (first or 0) + (second or 0)
 
 
 def _usage(completion: Any, key: str) -> int | None:
