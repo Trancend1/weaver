@@ -50,6 +50,31 @@ def test_read_epub_on_clean_fixture_reports_no_issues() -> None:
     assert read_epub(FIXTURE_EPUB).read_issues == ()
 
 
+def test_undecodable_chapter_is_skipped_even_when_lxml_repair_succeeds(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # CI-parity guard: whether lxml recover-mode "repairs" binary garbage into a
+    # parseable document depends on the bundled libxml2 version (Linux wheels
+    # ship a newer one than Windows). The skip decision must come from the raw
+    # bytes being undecodable, never from platform-dependent repair behavior —
+    # otherwise garbage imports silently as translatable text on some machines.
+    from ebooklib import epub as ebooklib_epub
+
+    repaired = (
+        b"<?xml version='1.0' encoding='utf-8'?>"
+        b"<html xmlns='http://www.w3.org/1999/xhtml'><body><p>repaired</p></body></html>"
+    )
+    monkeypatch.setattr(
+        ebooklib_epub.EpubHtml, "get_content", lambda self, *args, **kwargs: repaired
+    )
+
+    document = read_epub(_epub_with_one_malformed_chapter(tmp_path))
+
+    assert len(document.read_issues) == 1
+    assert MALFORMED_CHAPTER in document.read_issues[0]
+    assert [chapter.href for chapter in document.chapters] == ["text/chapter01.xhtml"]
+
+
 def test_init_with_malformed_chapter_imports_rest_and_surfaces_issue(
     tmp_path: Path, monkeypatch
 ) -> None:
