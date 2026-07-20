@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 
@@ -294,3 +295,35 @@ def test_worker_exception_propagates_and_closes_connections() -> None:
         )
 
     assert all(connection.closed for connection in opened)
+
+
+def test_secondary_worker_exceptions_are_logged_not_discarded(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def work(connection: _FakeConnection, item: int) -> int:
+        # Two different failures, so a dropped one is unmistakable.
+        if item == 2:
+            raise ValueError("first-failure")
+        if item == 5:
+            raise KeyError("second-failure")
+        time.sleep(0.01)
+        return item
+
+    # Dispatch order decides which failure wins, not completion timing.
+    with (
+        caplog.at_level(logging.ERROR, logger="weaver.services.segment_runner"),
+        pytest.raises(ValueError, match="first-failure"),
+    ):
+        run_segment_window(
+            items=list(range(8)),
+            max_concurrent=2,
+            connection_factory=_FakeConnection,
+            work=work,
+            on_complete=lambda ordinal, total, item, result: None,
+        )
+
+    logged = [record for record in caplog.records if record.levelno == logging.ERROR]
+    assert len(logged) == 1
+    assert "5" in logged[0].getMessage()
+    assert logged[0].exc_info is not None
+    assert isinstance(logged[0].exc_info[1], KeyError)

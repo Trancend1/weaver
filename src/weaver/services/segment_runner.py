@@ -10,11 +10,14 @@ executor, no threads — reproducing pre-M4 behavior bit-for-bit.
 
 from __future__ import annotations
 
+import logging
 import threading
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import closing
 from typing import Protocol, TypeVar
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class _Closeable(Protocol):
@@ -48,6 +51,15 @@ def run_segment_window(
 
     Returns:
         True when the run stopped early because `should_cancel` fired.
+
+    Raises:
+        Exception: Whatever `work` or `on_complete` raised. When
+            `max_concurrent > 1`, a worker failure does not halt dispatch —
+            only `should_cancel` gates it — so items queued after a failing one
+            still run to completion and still fire `on_complete`, committing
+            real writes. The first failure in dispatch order is re-raised; any
+            others are logged at error level. Callers must not read a raise as
+            "nothing else happened". The sequential path stops dispatch outright.
     """
 
     total = len(items)
@@ -129,14 +141,28 @@ def _run_concurrent(
 
     try:
         with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
-            futures: list[Future[None]] = []
+            dispatched: list[tuple[TItem, Future[None]]] = []
             for item in items:
                 if should_cancel is not None and should_cancel():
                     cancelled = True
                     break
-                futures.append(executor.submit(worker, item))
-            for future in futures:
-                future.result()
+                dispatched.append((item, executor.submit(worker, item)))
+            # Query every future: dispatch does not stop on failure, so later
+            # items may fail too and their exceptions would otherwise be
+            # discarded unretrieved. `exception()` blocks like `result()`.
+            failures: list[tuple[TItem, BaseException]] = []
+            for item, future in dispatched:
+                error = future.exception()
+                if error is not None:
+                    failures.append((item, error))
+        for failed_item, suppressed in failures[1:]:
+            _LOGGER.error(
+                "Segment worker failed for item %r; re-raising the first failure only.",
+                failed_item,
+                exc_info=suppressed,
+            )
+        if failures:
+            raise failures[0][1]
     finally:
         for connection in connections:
             connection.close()
