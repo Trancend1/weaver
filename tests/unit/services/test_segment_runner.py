@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import threading
 
+import pytest
+
 from weaver.services.segment_runner import run_segment_window
 
 
@@ -63,6 +65,7 @@ def test_sequential_window_opens_one_connection() -> None:
 
 def test_cancellation_stops_dispatch() -> None:
     seen: list[int] = []
+    completed: list[tuple[int, int]] = []
     cancel = threading.Event()
 
     def work(connection: _FakeConnection, item: int) -> int:
@@ -76,12 +79,13 @@ def test_cancellation_stops_dispatch() -> None:
         max_concurrent=1,
         connection_factory=_FakeConnection,
         work=work,
-        on_complete=lambda ordinal, total, item, result: None,
+        on_complete=lambda ordinal, total, item, result: completed.append((ordinal, item)),
         should_cancel=cancel.is_set,
     )
 
     assert cancelled is True
     assert seen == [1, 2]
+    assert completed == [(1, 1), (2, 2)]
 
 
 def test_no_cancellation_reports_false() -> None:
@@ -104,4 +108,40 @@ def test_connection_is_closed_after_run() -> None:
         work=lambda connection, item: item,
         on_complete=lambda ordinal, total, item, result: None,
     )
+    assert connection.closed is True
+
+
+def test_connection_is_closed_when_work_raises() -> None:
+    connection = _FakeConnection()
+
+    def work(conn: _FakeConnection, item: int) -> int:
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        run_segment_window(
+            items=[1],
+            max_concurrent=1,
+            connection_factory=lambda: connection,
+            work=work,
+            on_complete=lambda ordinal, total, item, result: None,
+        )
+
+    assert connection.closed is True
+
+
+def test_connection_is_closed_when_on_complete_raises() -> None:
+    connection = _FakeConnection()
+
+    def on_complete(ordinal: int, total: int, item: int, result: int) -> None:
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        run_segment_window(
+            items=[1],
+            max_concurrent=1,
+            connection_factory=lambda: connection,
+            work=lambda conn, item: item,
+            on_complete=on_complete,
+        )
+
     assert connection.closed is True
