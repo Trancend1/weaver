@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 
 import pytest
 
@@ -145,3 +146,151 @@ def test_connection_is_closed_when_on_complete_raises() -> None:
         )
 
     assert connection.closed is True
+
+
+def test_concurrent_window_opens_one_connection_per_worker() -> None:
+    opened: list[_FakeConnection] = []
+    lock = threading.Lock()
+
+    def factory() -> _FakeConnection:
+        connection = _FakeConnection()
+        with lock:
+            opened.append(connection)
+        return connection
+
+    def work(connection: _FakeConnection, item: int) -> int:
+        # Keep every worker busy so the executor is forced to spin up the full
+        # window: it reuses an idle thread instead of spawning a new one.
+        time.sleep(0.02)
+        return item
+
+    run_segment_window(
+        items=list(range(12)),
+        max_concurrent=3,
+        connection_factory=factory,
+        work=work,
+        on_complete=lambda ordinal, total, item, result: None,
+    )
+
+    assert len(opened) == 3
+    assert all(connection.closed for connection in opened)
+
+
+def test_concurrent_window_processes_every_item() -> None:
+    seen: list[int] = []
+    lock = threading.Lock()
+
+    def work(connection: _FakeConnection, item: int) -> int:
+        time.sleep(0.01)
+        with lock:
+            seen.append(item)
+        return item
+
+    run_segment_window(
+        items=list(range(20)),
+        max_concurrent=4,
+        connection_factory=_FakeConnection,
+        work=work,
+        on_complete=lambda ordinal, total, item, result: None,
+    )
+
+    assert sorted(seen) == list(range(20))
+
+
+def test_completion_ordinals_are_dense_and_serialized() -> None:
+    ordinals: list[int] = []
+    concurrent_entries = 0
+    max_concurrent_entries = 0
+    lock = threading.Lock()
+
+    def on_complete(ordinal: int, total: int, item: int, result: int) -> None:
+        nonlocal concurrent_entries, max_concurrent_entries
+        with lock:
+            concurrent_entries += 1
+            max_concurrent_entries = max(max_concurrent_entries, concurrent_entries)
+        ordinals.append(ordinal)
+        time.sleep(0.001)
+        with lock:
+            concurrent_entries -= 1
+
+    run_segment_window(
+        items=list(range(20)),
+        max_concurrent=4,
+        connection_factory=_FakeConnection,
+        work=lambda connection, item: item,
+        on_complete=on_complete,
+    )
+
+    assert sorted(ordinals) == list(range(1, 21))
+    assert max_concurrent_entries == 1
+
+
+def test_concurrent_window_actually_overlaps() -> None:
+    def work(connection: _FakeConnection, item: int) -> int:
+        time.sleep(0.05)
+        return item
+
+    start = time.perf_counter()
+    run_segment_window(
+        items=list(range(8)),
+        max_concurrent=4,
+        connection_factory=_FakeConnection,
+        work=work,
+        on_complete=lambda ordinal, total, item, result: None,
+    )
+    elapsed = time.perf_counter() - start
+
+    # 8 items x 50 ms sequential = 400 ms; 4 workers should land near 100 ms.
+    assert elapsed < 0.25
+
+
+def test_concurrent_cancellation_stops_dispatch() -> None:
+    seen: list[int] = []
+    lock = threading.Lock()
+    cancel = threading.Event()
+
+    def work(connection: _FakeConnection, item: int) -> int:
+        with lock:
+            seen.append(item)
+        if item == 1:
+            cancel.set()
+        return item
+
+    cancelled = run_segment_window(
+        items=list(range(50)),
+        max_concurrent=2,
+        connection_factory=_FakeConnection,
+        work=work,
+        on_complete=lambda ordinal, total, item, result: None,
+        should_cancel=cancel.is_set,
+    )
+
+    assert cancelled is True
+    assert len(seen) < 50
+
+
+def test_worker_exception_propagates_and_closes_connections() -> None:
+    opened: list[_FakeConnection] = []
+    lock = threading.Lock()
+
+    def factory() -> _FakeConnection:
+        connection = _FakeConnection()
+        with lock:
+            opened.append(connection)
+        return connection
+
+    def work(connection: _FakeConnection, item: int) -> int:
+        if item == 3:
+            raise RuntimeError("boom")
+        return item
+
+    with pytest.raises(RuntimeError, match="boom"):
+        run_segment_window(
+            items=list(range(10)),
+            max_concurrent=2,
+            connection_factory=factory,
+            work=work,
+            on_complete=lambda ordinal, total, item, result: None,
+        )
+
+    assert all(connection.closed for connection in opened)

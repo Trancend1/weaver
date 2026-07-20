@@ -10,7 +10,9 @@ executor, no threads — reproducing pre-M4 behavior bit-for-bit.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import closing
 from typing import Protocol, TypeVar
 
@@ -58,7 +60,15 @@ def run_segment_window(
             on_complete=on_complete,
             should_cancel=should_cancel,
         )
-    raise NotImplementedError("concurrent path lands in Task 4")
+    return _run_concurrent(
+        items=items,
+        total=total,
+        max_concurrent=max_concurrent,
+        connection_factory=connection_factory,
+        work=work,
+        on_complete=on_complete,
+        should_cancel=should_cancel,
+    )
 
 
 def _run_sequential(
@@ -77,3 +87,57 @@ def _run_sequential(
             result = work(connection, item)
             on_complete(ordinal, total, item, result)
     return False
+
+
+def _run_concurrent(
+    *,
+    items: Sequence[TItem],
+    total: int,
+    max_concurrent: int,
+    connection_factory: Callable[[], TConnection],
+    work: Callable[[TConnection, TItem], TResult],
+    on_complete: Callable[[int, int, TItem, TResult], None],
+    should_cancel: Callable[[], bool] | None,
+) -> bool:
+    """Bounded window: one persistent connection per worker thread.
+
+    Connections are thread-local because sqlite3 connections are not shareable
+    across threads. `on_complete` is serialized under `progress_lock` so the
+    completion ordinal stays dense and callbacks never run concurrently.
+    """
+
+    local = threading.local()
+    connections: list[TConnection] = []
+    connections_lock = threading.Lock()
+    progress_lock = threading.Lock()
+    completed = 0
+    cancelled = False
+
+    def worker(item: TItem) -> None:
+        nonlocal completed
+        connection: TConnection | None = getattr(local, "connection", None)
+        if connection is None:
+            connection = connection_factory()
+            local.connection = connection
+            with connections_lock:
+                connections.append(connection)
+        result = work(connection, item)
+        with progress_lock:
+            completed += 1
+            ordinal = completed
+            on_complete(ordinal, total, item, result)
+
+    try:
+        with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+            futures: list[Future[None]] = []
+            for item in items:
+                if should_cancel is not None and should_cancel():
+                    cancelled = True
+                    break
+                futures.append(executor.submit(worker, item))
+            for future in futures:
+                future.result()
+    finally:
+        for connection in connections:
+            connection.close()
+    return cancelled
