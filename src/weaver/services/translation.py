@@ -108,6 +108,7 @@ def resolve_max_concurrent(translation_config: Mapping[str, Any]) -> int:
         )
     return value
 
+
 # How long a connection stays cold-marked after a per-segment failure within one
 # run (ADR 018 D4 — a simple try-next window, not a circuit breaker).
 _FALLBACK_COLD_SECONDS = 30.0
