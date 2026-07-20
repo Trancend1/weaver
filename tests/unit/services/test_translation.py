@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from weaver.core.segment import compute_source_hash
-from weaver.errors import ProviderResponseError, ProviderUnavailable
+from weaver.errors import ConfigError, ProviderResponseError, ProviderUnavailable
 from weaver.providers.base import LLMProvider, ProviderStatus
 from weaver.providers.fake import FakeProvider
 from weaver.providers.types import Completion, GlossaryTerm, TranslationResponse
@@ -20,6 +20,7 @@ from weaver.services.translation import (
     build_context,
     estimate_tokens,
     preflight_provider_chain,
+    resolve_max_concurrent,
     translate_one_segment,
 )
 from weaver.storage.db import initialize_database
@@ -694,3 +695,24 @@ def test_preflight_dead_primary_and_dead_fallback_aborts() -> None:
         preflight_provider_chain(primary, [(fallback, "m2")])
 
     assert "no configured fallback passed its healthcheck" in str(exc_info.value)
+
+
+def test_absent_max_concurrent_defaults_to_one() -> None:
+    assert resolve_max_concurrent({}) == 1
+
+
+def test_valid_values_accepted() -> None:
+    for value in (1, 2, 3, 4):
+        assert resolve_max_concurrent({"max_concurrent": value}) == value
+
+
+@pytest.mark.parametrize("value", [0, 5, -1, 100])
+def test_out_of_range_rejected(value: int) -> None:
+    with pytest.raises(ConfigError, match="max_concurrent"):
+        resolve_max_concurrent({"max_concurrent": value})
+
+
+@pytest.mark.parametrize("value", ["3", 2.5, True, None])
+def test_non_integer_rejected(value: object) -> None:
+    with pytest.raises(ConfigError, match="max_concurrent"):
+        resolve_max_concurrent({"max_concurrent": value})

@@ -6,7 +6,7 @@ import contextlib
 import logging
 import sqlite3
 import time
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,6 +69,44 @@ MEMORY_PROVIDER = "memory"
 MEMORY_MODEL = "memory"
 
 VALID_HONORIFIC_POLICIES = frozenset({"preserve", "localize", "hybrid"})
+
+# Bounded translate concurrency (ADR 020). Absent = 1 = today's sequential
+# behavior bit-for-bit. The cap is fixed at 4 — no autoscaling (D9 fence).
+MAX_CONCURRENT_LIMIT = 4
+
+
+def resolve_max_concurrent(translation_config: Mapping[str, Any]) -> int:
+    """Read and validate `[translation] max_concurrent`.
+
+    Args:
+        translation_config: The parsed `[translation]` table.
+
+    Returns:
+        The worker-window size, 1 when the key is absent.
+
+    Raises:
+        ConfigError: When the value is not an integer in 1..4.
+    """
+
+    if "max_concurrent" not in translation_config:
+        return 1
+    value = translation_config["max_concurrent"]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigError(
+            f"Invalid max_concurrent value `{value!r}` (expected type: integer). "
+            "Likely cause: project.toml [translation] max_concurrent was hand-edited. "
+            "Next command: edit project.toml and set an integer between 1 and "
+            f"{MAX_CONCURRENT_LIMIT}."
+        )
+    if not 1 <= value <= MAX_CONCURRENT_LIMIT:
+        raise ConfigError(
+            f"Invalid max_concurrent value `{value}` "
+            f"(expected: between 1 and {MAX_CONCURRENT_LIMIT}). "
+            "Likely cause: project.toml [translation] max_concurrent is out of range. "
+            "Next command: edit project.toml and set a value between 1 and "
+            f"{MAX_CONCURRENT_LIMIT}."
+        )
+    return value
 
 # How long a connection stays cold-marked after a per-segment failure within one
 # run (ADR 018 D4 — a simple try-next window, not a circuit breaker).
