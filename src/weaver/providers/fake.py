@@ -72,6 +72,9 @@ class FakeProvider(LLMProvider):
         )
         input_tokens = output_tokens = None
         if self._report_token_usage:
+            # Synthetic fixture approximating a JP-input/EN-output length ratio;
+            # deliberately not an accurate estimator and never used in production
+            # cost accounting (see services/translation.py for the real one).
             input_tokens = max(1, len(request.normalized_source_text))
             output_tokens = max(1, len(translation) // 4)
         return TranslationResponse(
