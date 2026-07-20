@@ -335,7 +335,7 @@ def test_sequential_window_visits_every_item_in_order() -> None:
     run_segment_window(
         items=[1, 2, 3],
         max_concurrent=1,
-        connection_factory=lambda: object(),
+        connection_factory=_FakeConnection,
         work=work,
         on_complete=lambda ordinal, total, item, result: completed.append(
             (ordinal, total, item, result)
@@ -380,7 +380,7 @@ def test_cancellation_stops_dispatch() -> None:
     cancelled = run_segment_window(
         items=[1, 2, 3, 4, 5],
         max_concurrent=1,
-        connection_factory=lambda: object(),
+        connection_factory=_FakeConnection,
         work=work,
         on_complete=lambda ordinal, total, item, result: None,
         should_cancel=cancel.is_set,
@@ -394,7 +394,7 @@ def test_no_cancellation_reports_false() -> None:
     cancelled = run_segment_window(
         items=[1, 2],
         max_concurrent=1,
-        connection_factory=lambda: object(),
+        connection_factory=_FakeConnection,
         work=lambda connection, item: item,
         on_complete=lambda ordinal, total, item, result: None,
     )
@@ -534,6 +534,8 @@ pre-M4 behavior exactly. The concurrent path follows."
 
 - [ ] **Step 1: Write the failing tests**
 
+> **Connection doubles must be closeable.** The runner closes every connection it opens, unconditionally — `connection_factory` is typed `Callable[[], TConnection]` with `TConnection` bound to a `_Closeable` Protocol. Use the `_FakeConnection` double established in Task 3, never `object()`; a bare `object()` is both a type error and an `AttributeError` at close time.
+
 Append to `tests/unit/services/test_segment_runner.py`:
 
 ```python
@@ -541,11 +543,11 @@ import time
 
 
 def test_concurrent_window_opens_one_connection_per_worker() -> None:
-    opened: list[object] = []
+    opened: list[_FakeConnection] = []
     lock = threading.Lock()
 
-    def factory() -> object:
-        connection = object()
+    def factory() -> _FakeConnection:
+        connection = _FakeConnection()
         with lock:
             opened.append(connection)
         return connection
@@ -559,6 +561,7 @@ def test_concurrent_window_opens_one_connection_per_worker() -> None:
     )
 
     assert len(opened) == 3
+    assert all(connection.closed for connection in opened)
 
 
 def test_concurrent_window_processes_every_item() -> None:
@@ -574,7 +577,7 @@ def test_concurrent_window_processes_every_item() -> None:
     run_segment_window(
         items=list(range(20)),
         max_concurrent=4,
-        connection_factory=lambda: object(),
+        connection_factory=_FakeConnection,
         work=work,
         on_complete=lambda ordinal, total, item, result: None,
     )
@@ -601,7 +604,7 @@ def test_completion_ordinals_are_dense_and_serialized() -> None:
     run_segment_window(
         items=list(range(20)),
         max_concurrent=4,
-        connection_factory=lambda: object(),
+        connection_factory=_FakeConnection,
         work=lambda connection, item: item,
         on_complete=on_complete,
     )
@@ -619,7 +622,7 @@ def test_concurrent_window_actually_overlaps() -> None:
     run_segment_window(
         items=list(range(8)),
         max_concurrent=4,
-        connection_factory=lambda: object(),
+        connection_factory=_FakeConnection,
         work=work,
         on_complete=lambda ordinal, total, item, result: None,
     )

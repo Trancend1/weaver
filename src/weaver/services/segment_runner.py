@@ -11,9 +11,15 @@ executor, no threads — reproducing pre-M4 behavior bit-for-bit.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import TypeVar
+from contextlib import closing
+from typing import Protocol, TypeVar
 
-TConnection = TypeVar("TConnection")
+
+class _Closeable(Protocol):
+    def close(self) -> None: ...
+
+
+TConnection = TypeVar("TConnection", bound=_Closeable)
 TItem = TypeVar("TItem")
 TResult = TypeVar("TResult")
 
@@ -64,15 +70,10 @@ def _run_sequential(
     on_complete: Callable[[int, int, TItem, TResult], None],
     should_cancel: Callable[[], bool] | None,
 ) -> bool:
-    connection = connection_factory()
-    try:
+    with closing(connection_factory()) as connection:
         for ordinal, item in enumerate(items, start=1):
             if should_cancel is not None and should_cancel():
                 return True
             result = work(connection, item)
             on_complete(ordinal, total, item, result)
-        return False
-    finally:
-        close = getattr(connection, "close", None)
-        if close is not None:
-            close()
+    return False

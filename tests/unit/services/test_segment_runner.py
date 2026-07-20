@@ -7,10 +7,20 @@ import threading
 from weaver.services.segment_runner import run_segment_window
 
 
+class _FakeConnection:
+    """Minimal closeable double standing in for a sqlite3.Connection."""
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
 def test_sequential_window_visits_every_item_in_order() -> None:
     seen: list[int] = []
 
-    def work(connection: object, item: int) -> str:
+    def work(connection: _FakeConnection, item: int) -> str:
         seen.append(item)
         return f"done-{item}"
 
@@ -19,7 +29,7 @@ def test_sequential_window_visits_every_item_in_order() -> None:
     run_segment_window(
         items=[1, 2, 3],
         max_concurrent=1,
-        connection_factory=lambda: object(),
+        connection_factory=_FakeConnection,
         work=work,
         on_complete=lambda ordinal, total, item, result: completed.append(
             (ordinal, total, item, result)
@@ -33,10 +43,10 @@ def test_sequential_window_visits_every_item_in_order() -> None:
 
 
 def test_sequential_window_opens_one_connection() -> None:
-    opened: list[object] = []
+    opened: list[_FakeConnection] = []
 
-    def factory() -> object:
-        connection = object()
+    def factory() -> _FakeConnection:
+        connection = _FakeConnection()
         opened.append(connection)
         return connection
 
@@ -55,7 +65,7 @@ def test_cancellation_stops_dispatch() -> None:
     seen: list[int] = []
     cancel = threading.Event()
 
-    def work(connection: object, item: int) -> int:
+    def work(connection: _FakeConnection, item: int) -> int:
         seen.append(item)
         if item == 2:
             cancel.set()
@@ -64,7 +74,7 @@ def test_cancellation_stops_dispatch() -> None:
     cancelled = run_segment_window(
         items=[1, 2, 3, 4, 5],
         max_concurrent=1,
-        connection_factory=lambda: object(),
+        connection_factory=_FakeConnection,
         work=work,
         on_complete=lambda ordinal, total, item, result: None,
         should_cancel=cancel.is_set,
@@ -78,7 +88,7 @@ def test_no_cancellation_reports_false() -> None:
     cancelled = run_segment_window(
         items=[1, 2],
         max_concurrent=1,
-        connection_factory=lambda: object(),
+        connection_factory=_FakeConnection,
         work=lambda connection, item: item,
         on_complete=lambda ordinal, total, item, result: None,
     )
@@ -86,19 +96,12 @@ def test_no_cancellation_reports_false() -> None:
 
 
 def test_connection_is_closed_after_run() -> None:
-    class Recorder:
-        def __init__(self) -> None:
-            self.closed = False
-
-        def close(self) -> None:
-            self.closed = True
-
-    recorder = Recorder()
+    connection = _FakeConnection()
     run_segment_window(
         items=[1],
         max_concurrent=1,
-        connection_factory=lambda: recorder,
+        connection_factory=lambda: connection,
         work=lambda connection, item: item,
         on_complete=lambda ordinal, total, item, result: None,
     )
-    assert recorder.closed is True
+    assert connection.closed is True
