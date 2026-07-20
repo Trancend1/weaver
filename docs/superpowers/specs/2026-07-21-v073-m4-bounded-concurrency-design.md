@@ -16,17 +16,23 @@ write transaction, so concurrent in-flight calls no longer imply holding the WAL
 
 ## Current shape
 
-All three drivers share an identical loop:
+There are **two** segment loops, not three:
 
-| Driver | Loop |
-| --- | --- |
-| `services/translation.py:427-494` | `translate_project` |
-| `services/workspace_translate.py:273-320` | `run_translation` |
-| `services/batch_translate.py:353-373` | batch driver |
+| Driver | Loop | Shape |
+| --- | --- | --- |
+| `services/translation.py:427-494` | `translate_project` | own segment loop |
+| `services/workspace_translate.py:273-320` | `run_translation` | own segment loop |
+| `services/batch_translate.py:367-375` | batch driver | **chapter** loop; delegates each chapter to `run_translation` |
 
-Each opens one connection for the whole run (`with closing(connect_database(...))`), iterates
-segments, calls `translate_one_segment(connection=..., cold=run_cold, ...)`, accumulates
-counters, and invokes `progress_callback(index, total, segment, translated, in_tok, out_tok)`.
+Both segment loops open one connection for the whole run
+(`with closing(connect_database(...))`), iterate segments, call
+`translate_one_segment(connection=..., cold=run_cold, ...)`, accumulate counters, and invoke
+`progress_callback(index, total, segment, translated, in_tok, out_tok)`.
+
+`batch_translate` has no segment loop of its own — it iterates chapters and calls
+`run_translation` per chapter, so it inherits concurrency for free with no changes. Its
+`on_segment` callback (`batch_translate.py:352-366`) only increments counters, so it is
+insensitive to dispatch order once the callback is serialized (§6).
 
 `FakeProvider` (`providers/fake.py`) returns instantly with `usage=None` — there is no honest
 concurrency test or bench without a latency knob.
@@ -35,9 +41,13 @@ concurrency test or bench without a latency knob.
 
 ### 1. Shared bounded-window runner
 
-New module `services/segment_runner.py` exposing one bounded-window runner used by **all three**
-drivers. The alternative — implementing concurrency separately in each driver — triplicates the
-most race-prone code in the codebase across three files.
+New module `services/segment_runner.py` exposing one bounded-window runner used by **both**
+segment loops. The alternative — implementing concurrency separately in each driver — duplicates
+the most race-prone code in the codebase.
+
+Aggregation stays in each driver's own closure: `translate_project` reads final counts from the
+database while `run_translation` counts `failed` inline, and the runner must not homogenize that
+difference.
 
 The runner takes the segment list, a per-worker connection factory, and a per-segment closure;
 it returns aggregated counters. `translate_one_segment` itself is **unchanged** — the concurrency
