@@ -512,6 +512,14 @@ def translate_project_command(
         "--first-N",
         help="Translate only the first N selected segments for a fast-fail sanity check.",
     ),
+    max_concurrent: int | None = typer.Option(
+        None,
+        "--max-concurrent",
+        help=(
+            "Overlap 1-4 provider calls for this run, overriding "
+            "[translation] max_concurrent. Default 1 (strictly sequential)."
+        ),
+    ),
 ) -> None:
     """Translate project segments through the configured provider."""
 
@@ -534,6 +542,7 @@ def translate_project_command(
             verbose=verbose,
             first_n=first_n,
             provider_override=provider_override,
+            max_concurrent=max_concurrent,
         )
 
 
@@ -545,6 +554,7 @@ def _translate_one_project(
     verbose: bool,
     first_n: int | None,
     provider_override: dict[str, str] | None,
+    max_concurrent: int | None,
 ) -> None:
     try:
         if dry_run:
@@ -554,6 +564,7 @@ def _translate_one_project(
                 dry_run=True,
                 first_n=first_n,
                 provider_override=provider_override,
+                max_concurrent=max_concurrent,
             )
         else:
             with Progress(
@@ -591,6 +602,7 @@ def _translate_one_project(
                     progress_callback=advance,
                     first_n=first_n,
                     provider_override=provider_override,
+                    max_concurrent=max_concurrent,
                 )
     except WeaverError as exc:
         _exit_with_error(exc)

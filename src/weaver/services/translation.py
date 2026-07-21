@@ -92,20 +92,51 @@ def resolve_max_concurrent(translation_config: Mapping[str, Any]) -> int:
 
     if "max_concurrent" not in translation_config:
         return 1
-    value = translation_config["max_concurrent"]
+    return _validate_max_concurrent(
+        translation_config["max_concurrent"],
+        likely_cause="project.toml [translation] max_concurrent was hand-edited",
+        next_command="edit project.toml and set",
+    )
+
+
+def resolve_max_concurrent_override(value: int) -> int:
+    """Validate a caller-supplied `max_concurrent` that overrides the config.
+
+    Shares one range check with :func:`resolve_max_concurrent` so the CLI and
+    `project.toml` can never drift apart; only the guidance differs, because
+    telling someone who passed a flag to edit project.toml is wrong.
+
+    Args:
+        value: The requested worker-window size.
+
+    Returns:
+        The validated worker-window size.
+
+    Raises:
+        ConfigError: When the value is not an integer in 1..4.
+    """
+
+    return _validate_max_concurrent(
+        value,
+        likely_cause="--max-concurrent was given a value outside the supported range",
+        next_command="rerun with --max-concurrent set to",
+    )
+
+
+def _validate_max_concurrent(value: Any, *, likely_cause: str, next_command: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ConfigError(
             f"Invalid max_concurrent value `{value!r}` (expected type: integer). "
-            "Likely cause: project.toml [translation] max_concurrent was hand-edited. "
-            "Next command: edit project.toml and set an integer between 1 and "
+            f"Likely cause: {likely_cause}. "
+            f"Next command: {next_command} an integer between 1 and "
             f"{MAX_CONCURRENT_LIMIT}."
         )
     if not 1 <= value <= MAX_CONCURRENT_LIMIT:
         raise ConfigError(
             f"Invalid max_concurrent value `{value}` "
             f"(expected: between 1 and {MAX_CONCURRENT_LIMIT}). "
-            "Likely cause: project.toml [translation] max_concurrent is out of range. "
-            "Next command: edit project.toml and set a value between 1 and "
+            f"Likely cause: {likely_cause}. "
+            f"Next command: {next_command} a value between 1 and "
             f"{MAX_CONCURRENT_LIMIT}."
         )
     return value
@@ -390,6 +421,7 @@ def translate_project(
     provider_override: dict[str, Any] | None = None,
     progress_callback: ProgressCallback | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    max_concurrent: int | None = None,
 ) -> TranslationRunSummary:
     """Translate selected project segments through the configured provider.
 
@@ -427,6 +459,9 @@ def translate_project(
             completion, and any segment dequeued after the flag flips is
             discarded unprocessed. CLI passes None (no behavior change); the web
             cockpit passes the JobManager cancel flag.
+        max_concurrent: Optional worker-window size overriding
+            `[translation] max_concurrent` for this run only (ADR 020). None
+            means use the configured value, or 1 when unset.
 
     Returns:
         TranslationRunSummary with current database counts and token totals.
@@ -446,6 +481,13 @@ def translate_project(
     engine_chain = resolve_chain(project_toml, TaskType.translate, data=data)
     provider_config = _merge_provider_config(engine_chain[0].provider_config, provider_override)
     translation_config = data["translation"]
+    # Resolved before the dry-run early return so `--dry-run` rejects a bad
+    # window size instead of passing and failing only on the real run.
+    window_size = (
+        resolve_max_concurrent(translation_config)
+        if max_concurrent is None
+        else resolve_max_concurrent_override(max_concurrent)
+    )
     persist_raw_response = raw_response_logging_enabled(data)
     enforce_repair = enforce_repair_enabled(data)
     profile = build_translation_profile(data)
@@ -524,8 +566,6 @@ def translate_project(
             selected = selected[:first_n]
         total_selected = len(selected)
 
-        max_concurrent = resolve_max_concurrent(translation_config)
-
         def _translate(
             worker_connection: sqlite3.Connection, segment: SegmentRecord
         ) -> SegmentTranslationOutcome:
@@ -584,7 +624,7 @@ def translate_project(
 
         run_segment_window(
             items=selected,
-            max_concurrent=max_concurrent,
+            max_concurrent=window_size,
             connection_factory=lambda: connect_database(db_path),
             work=_translate,
             on_complete=_accumulate,
