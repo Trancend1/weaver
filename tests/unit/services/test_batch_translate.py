@@ -207,6 +207,40 @@ def test_empty_volume_is_done_zero(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
+def test_batch_inherits_max_concurrent_from_the_plan(tmp_path: Path) -> None:
+    # batch_translate has no segment loop of its own: it delegates each chapter
+    # to run_translation, which carries max_concurrent on the chapter plan
+    # (ADR 020). Inheritance must be proven, not assumed — identical counters at
+    # 1 and 3 workers over the same structure.
+    structure = [
+        [("v1c1", ["pending", "pending", "pending"]), ("v1c2", ["pending", "pending"])],
+        [("v2c1", ["pending", "pending"])],
+    ]
+    results = []
+    for workers in (1, 3):
+        project_dir = tmp_path / f"workers-{workers}"
+        project_dir.mkdir()
+        project_toml = _seed(project_dir, structure)
+        project_toml.write_text(
+            project_toml.read_text(encoding="utf-8") + f"max_concurrent = {workers}\n",
+            encoding="utf-8",
+        )
+        plan = prepare_batch_translation(project_toml, scope="novel")
+        # Without this the test passes vacuously: batch builds TranslationPlan
+        # directly, so a missing hand-off leaves every chapter at the default 1.
+        assert [chapter.max_concurrent for chapter in plan.chapter_plans] == [workers] * 3
+        results.append(run_batch_translation(plan))
+
+    sequential, concurrent = results
+    assert sequential.segments_total == concurrent.segments_total == 7
+    assert sequential.translated == concurrent.translated == 7
+    assert sequential.failed == concurrent.failed == 0
+    assert sequential.reused_from_memory == concurrent.reused_from_memory
+    assert sequential.chapters_done == concurrent.chapters_done == 3
+    assert concurrent.cancelled is False
+    assert {c.chapter_id for c in concurrent.chapters} == {"v1c1", "v1c2", "v2c1"}
+
+
 def test_run_aggregates_counts_across_chapters(tmp_path: Path) -> None:
     project_toml = _seed(
         tmp_path,
