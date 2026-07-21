@@ -41,6 +41,15 @@
     <div class="job-controls">
       <form hx-post="/ui/projects/{{ ws.project_name }}/chapters/{{ ws.chapter_id }}/translate"
             hx-target="#job-panel" hx-swap="outerHTML" class="inline-form form-row">
+        <label>Parallel calls
+          <select name="max_concurrent">
+            <option value="" selected>project setting</option>
+            <option value="1">1 (sequential)</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+          </select>
+        </label>
         <button type="submit">Translate untranslated / empty segments</button>
         <span class="htmx-indicator calm-loader" role="status">Starting translation</span>
       </form>

@@ -12,6 +12,7 @@ the job registry lives in ``weaver.api.jobs``.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -41,6 +42,7 @@ from weaver.errors import (
     WeaverError,
 )
 from weaver.services.project_discovery import find_project
+from weaver.services.translation import resolve_max_concurrent_override
 from weaver.services.workspace_translate import (
     TranslationPlan,
     prepare_chapter_translation,
@@ -72,6 +74,7 @@ def _start_job(
     mode: str = "skip_existing",
     provider: str | None,
     model: str | None,
+    max_concurrent: int | None = None,
 ) -> TranslationJobResponse:
     base = _base_dir(request)
     dp = find_project(base, name)
@@ -79,6 +82,16 @@ def _start_job(
         raise HTTPException(status_code=404, detail=f"Project '{name}' not found.")
     if dp.error:
         raise HTTPException(status_code=422, detail=dp.error)
+
+    # Validated before the plan is built: cheap input checks should not sit
+    # behind a provider healthcheck, or a bad window size would be reported as
+    # a provider problem.
+    try:
+        window_size = (
+            None if max_concurrent is None else resolve_max_concurrent_override(max_concurrent)
+        )
+    except WeaverError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
         plan = prepare_chapter_translation(
@@ -89,6 +102,10 @@ def _start_job(
             cwd=base,
             provider_override=_provider_override(provider, model),
         )
+        if window_size is not None:
+            # Per-run override of `[translation] max_concurrent` (ADR 020);
+            # project.toml is not touched.
+            plan = replace(plan, max_concurrent=window_size)
     except (ChapterNotFoundError, SegmentNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:

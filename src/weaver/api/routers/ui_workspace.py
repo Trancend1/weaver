@@ -133,7 +133,12 @@ def workspace_history(
 
 
 @router.post("/ui/projects/{name}/chapters/{chapter_id}/translate", response_class=HTMLResponse)
-def ui_translate(name: str, chapter_id: str, request: Request) -> HTMLResponse:
+def ui_translate(
+    name: str,
+    chapter_id: str,
+    request: Request,
+    max_concurrent: int | None = Form(None),
+) -> HTMLResponse:
     """Start a translate job for a chapter's untranslated segments (HTMX panel)."""
     try:
         started = _start_translate_job(
@@ -144,6 +149,7 @@ def ui_translate(name: str, chapter_id: str, request: Request) -> HTMLResponse:
             mode="skip_existing",
             provider=None,
             model=None,
+            max_concurrent=max_concurrent,
         )
     except HTTPException as exc:
         return _job_error(request, str(exc.detail), panel_id="job-panel")
