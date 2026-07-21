@@ -133,7 +133,9 @@ def _run_concurrent(
     are recorded per-item into a fixed-size, index-addressed slot so the
     re-raised failure is always the earliest-**dispatched** (original list
     order) one, regardless of which worker thread actually raises first --
-    `test_secondary_worker_exceptions_are_logged_not_discarded` pins this.
+    `test_earliest_dispatched_failure_wins_over_earlier_wall_clock_failure`
+    pins this by making the earliest-dispatched item fail LAST in wall-clock,
+    which a completion-ordered failure list gets wrong.
     """
 
     work_queue: queue.SimpleQueue[tuple[int, TItem] | None] = queue.SimpleQueue()

@@ -370,6 +370,35 @@ def test_partial_connection_factory_failure_propagates_and_closes_the_rest() -> 
     assert len(processed) == 12 - 1
 
 
+def test_earliest_dispatched_failure_wins_over_earlier_wall_clock_failure() -> None:
+    """Index-addressed failure slots, not append order, decide what is re-raised.
+
+    Item 0 is dispatched first but raises LAST in wall-clock; item 1 is
+    dispatched second and raises FIRST. A wall-clock-ordered failure list would
+    re-raise item 1's KeyError, so this test is the pin for the dispatch-order
+    contract that `_run_concurrent` documents.
+    """
+    later_failed = threading.Event()
+
+    def work(connection: _FakeConnection, item: int) -> int:
+        if item == 0:
+            assert later_failed.wait(timeout=10.0), "item 1 never failed"
+            raise ValueError("earliest-dispatched")
+        if item == 1:
+            later_failed.set()
+            raise KeyError("later-dispatched")
+        return item
+
+    with pytest.raises(ValueError, match="earliest-dispatched"):
+        run_segment_window(
+            items=list(range(6)),
+            max_concurrent=2,
+            connection_factory=_FakeConnection,
+            work=work,
+            on_complete=lambda ordinal, total, item, result: None,
+        )
+
+
 def test_secondary_worker_exceptions_are_logged_not_discarded(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
