@@ -47,6 +47,7 @@ from weaver.services.project_paths import resolve_database_path
 from weaver.services.routing import Candidate, resolve_chain
 from weaver.services.translation import (
     VALID_HONORIFIC_POLICIES,
+    ColdMarks,
     ProgressCallback,
     build_translation_profile,
     enforce_repair_enabled,
@@ -268,7 +269,7 @@ def run_translation(
     cancelled = False
     # Per-run cold-mark shared across this plan's segments (ADR 018 D4): a failed
     # engine is skipped for a short window, never circuit-broken.
-    run_cold: dict[str, float] = {}
+    run_cold = ColdMarks()
 
     with closing(connect_database(plan.db_path)) as connection:
         for index, segment_id in enumerate(plan.target_segment_ids, start=1):

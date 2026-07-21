@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import sqlite3
+import threading
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import closing
@@ -114,6 +115,29 @@ def resolve_max_concurrent(translation_config: Mapping[str, Any]) -> int:
 _FALLBACK_COLD_SECONDS = 30.0
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class ColdMarks:
+    """Per-run fallback cold-mark map, safe for the M4 worker window.
+
+    ADR 018 D4: a failed engine is skipped for a short window, never
+    circuit-broken. The lock is defensive — today's two call sites are single
+    dict operations, atomic under CPython — but it keeps the invariant explicit
+    if this ever becomes a read-modify-write.
+    """
+
+    def __init__(self) -> None:
+        self._until: dict[str, float] = {}
+        self._lock = threading.Lock()
+
+    def is_cold(self, engine_name: str, *, now: float) -> bool:
+        with self._lock:
+            return self._until.get(engine_name, 0.0) > now
+
+    def mark(self, engine_name: str, until: float) -> None:
+        with self._lock:
+            self._until[engine_name] = until
+
 
 ProgressCallback = Callable[[int, int, SegmentRecord, bool, int | None, int | None], None]
 
@@ -436,7 +460,7 @@ def translate_project(
     # missing-key fallback must not abort the run; the primary still translates).
     # Skipped when a provider is injected directly (test path).
     fallback_engines: list[tuple[LLMProvider, str]] = []
-    run_cold: dict[str, float] = {}
+    run_cold = ColdMarks()
     if provider is None:
         for candidate in engine_chain[1:]:
             try:
@@ -608,7 +632,7 @@ def translate_one_segment(
     use_translation_memory: bool = True,
     persist_raw_response: bool = False,
     fallbacks: Sequence[tuple[LLMProvider, str]] = (),
-    cold: dict[str, float] | None = None,
+    cold: ColdMarks | None = None,
     enforce_repair: bool = True,
     profile: TranslationProfile | None = None,
 ) -> SegmentTranslationOutcome:
@@ -711,7 +735,7 @@ def translate_one_segment(
         # currently cold, try them anyway rather than failing the segment blind.
         candidates: list[tuple[LLMProvider, str]] = [(provider, provider_model), *fallbacks]
         now = time.monotonic()
-        warm = [c for c in candidates if cold is None or cold.get(c[0].name, 0.0) <= now]
+        warm = [c for c in candidates if cold is None or not cold.is_cold(c[0].name, now=now)]
         for cand_provider, cand_model in warm or candidates:
             request = TranslationRequest(
                 segment_id=segment.id,
@@ -726,7 +750,7 @@ def translate_one_segment(
                 response = cand_provider.translate(request)
             except ProviderError:
                 if cold is not None:
-                    cold[cand_provider.name] = now + _FALLBACK_COLD_SECONDS
+                    cold.mark(cand_provider.name, now + _FALLBACK_COLD_SECONDS)
                 continue
 
             # Enforcement gate (ADR 019 E1+E2): glossary/character/anti-slop must
