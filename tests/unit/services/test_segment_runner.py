@@ -297,6 +297,79 @@ def test_worker_exception_propagates_and_closes_connections() -> None:
     assert all(connection.closed for connection in opened)
 
 
+def test_connection_factory_failure_propagates_when_every_open_fails() -> None:
+    """A run where no work happened must raise, never return a clean summary."""
+    attempts: list[int] = []
+    lock = threading.Lock()
+
+    def factory() -> _FakeConnection:
+        with lock:
+            attempts.append(1)
+        raise RuntimeError("cannot open database")
+
+    processed: list[int] = []
+
+    def work(connection: _FakeConnection, item: int) -> int:
+        with lock:
+            processed.append(item)
+        return item
+
+    with pytest.raises(RuntimeError, match="cannot open database"):
+        run_segment_window(
+            items=list(range(10)),
+            max_concurrent=3,
+            connection_factory=factory,
+            work=work,
+            on_complete=lambda ordinal, total, item, result: None,
+        )
+
+    assert processed == []
+    # Every worker retires after its own failed open instead of re-failing on
+    # each dequeued item.
+    assert len(attempts) == 3
+
+
+def test_partial_connection_factory_failure_propagates_and_closes_the_rest() -> None:
+    """A window that silently shrinks is still a failure the caller must see."""
+    opened: list[_FakeConnection] = []
+    lock = threading.Lock()
+    calls = 0
+
+    def factory() -> _FakeConnection:
+        nonlocal calls
+        with lock:
+            calls += 1
+            index = calls
+        if index == 1:
+            raise RuntimeError("cannot open database")
+        connection = _FakeConnection()
+        with lock:
+            opened.append(connection)
+        return connection
+
+    processed: list[int] = []
+
+    def work(connection: _FakeConnection, item: int) -> int:
+        time.sleep(0.01)
+        with lock:
+            processed.append(item)
+        return item
+
+    with pytest.raises(RuntimeError, match="cannot open database"):
+        run_segment_window(
+            items=list(range(12)),
+            max_concurrent=3,
+            connection_factory=factory,
+            work=work,
+            on_complete=lambda ordinal, total, item, result: None,
+        )
+
+    # The surviving workers drain the rest of the queue and still close cleanly.
+    assert opened
+    assert all(connection.closed for connection in opened)
+    assert len(processed) == 12 - 1
+
+
 def test_secondary_worker_exceptions_are_logged_not_discarded(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

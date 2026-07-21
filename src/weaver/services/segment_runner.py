@@ -43,7 +43,9 @@ def run_segment_window(
     Args:
         items: Segments to process, in dispatch order.
         max_concurrent: Worker-window size (1 = sequential, caller-validated).
-        connection_factory: Opens one SQLite connection; called once per worker.
+        connection_factory: Opens one SQLite connection. Called at most once per
+            worker, lazily on that worker's first dispatched item, so a worker
+            that never receives an item never opens a connection.
         work: Receives a worker-owned connection and one item.
         on_complete: Called as `(ordinal, total, item, result)` where `ordinal`
             is the 1-based completion ordinal. Never entered concurrently.
@@ -53,8 +55,9 @@ def run_segment_window(
         True when the run stopped early because `should_cancel` fired.
 
     Raises:
-        Exception: Whatever `work` or `on_complete` raised. When
-            `max_concurrent > 1`, a worker failure does not halt dispatch —
+        Exception: Whatever `connection_factory`, `work`, or `on_complete`
+            raised. When `max_concurrent > 1`, a worker failure does not halt
+            dispatch —
             only `should_cancel` gates it — so items queued after a failing one
             still run to completion and still fire `on_complete`, committing
             real writes. The first failure in dispatch order is re-raised; any
@@ -114,7 +117,7 @@ def _run_concurrent(
     """Bounded window: one dedicated worker thread per slot, one connection per thread.
 
     Uses a hand-rolled worker pool rather than `ThreadPoolExecutor` on purpose:
-    each worker thread opens exactly one connection and closes it itself, in a
+    each worker thread opens at most one connection and closes it itself, in a
     `finally`, before its function returns — DB-API connections (sqlite3
     included) may only be closed by the thread that created them, and
     `ThreadPoolExecutor` gives no way to address a specific pooled thread for a
@@ -147,7 +150,7 @@ def _run_concurrent(
 
     def run_worker() -> None:
         nonlocal completed
-        connection = connection_factory()
+        connection: TConnection | None = None
         try:
             while True:
                 queued = work_queue.get()
@@ -158,6 +161,17 @@ def _run_concurrent(
                     cancelled.set()
                     return
                 try:
+                    if connection is None:
+                        # Opened lazily, inside the per-item try, so a
+                        # `connection_factory()` failure is attributed to the
+                        # item that was already dispatched to this worker and
+                        # travels the same `failures` path as a work() failure.
+                        # Opening it above the loop would leave the exception
+                        # captured by nothing: the worker would die, the window
+                        # would silently shrink, and a run where every factory
+                        # call failed would return normally with zero items
+                        # processed (CLAUDE.md 4.3 gate 5).
+                        connection = connection_factory()
                     result = work(connection, item)
                     with progress_lock:
                         completed += 1
@@ -165,11 +179,19 @@ def _run_concurrent(
                         on_complete(ordinal, total, item, result)
                 except BaseException as exc:  # noqa: BLE001 - mirrors
                     # concurrent.futures.thread._WorkItem.run: capture whatever
-                    # work()/on_complete() raised so it can be inspected in
-                    # dispatch order below; never silently dropped.
+                    # the factory/work()/on_complete() raised so it can be
+                    # inspected in dispatch order below; never silently dropped.
                     failures[index] = (item, exc)
+                    if connection is None:
+                        # The factory failed: this worker has nothing to work
+                        # with, so it retires instead of re-failing every item
+                        # it dequeues. Its share of the queue is drained by the
+                        # surviving workers (items precede every stop signal),
+                        # and the recorded failure is re-raised after join.
+                        return
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
 
     threads = [threading.Thread(target=run_worker) for _ in range(worker_count)]
     for thread in threads:
