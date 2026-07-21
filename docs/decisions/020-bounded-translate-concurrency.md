@@ -2,9 +2,11 @@
 
 ## Status
 
-**Proposed (2026-07-05).** Drafted at Gate A of the v0.7.3 performance release; must be
-**Accepted before Milestone M4 implementation** of the
-[v0.7.3 execution plan](../superpowers/specs/2026-07-05-v073-performance-execution-plan.md).
+**Accepted (2026-07-21).** Drafted at Gate A of the v0.7.3 performance release (Proposed
+2026-07-05); accepted at Gate B of Milestone M4 of the
+[v0.7.3 execution plan](../superpowers/specs/2026-07-05-v073-performance-execution-plan.md)
+with the three decision points below settled. Implementation design:
+[M4 design](../superpowers/specs/2026-07-21-v073-m4-bounded-concurrency-design.md).
 Companion to ADR 018 (per-segment routing/fallback) and ADR 019 (enforcement loop). Unlocked by
 the v0.7.2 audit H3 fix (commit `dee710f`): provider network calls now run **outside** any SQLite
 write transaction, so multiple in-flight provider calls no longer imply holding the WAL write
@@ -42,10 +44,15 @@ Add a **bounded in-process worker window** to the translate loops:
    window already capped at ≤ 5 segments / 1000 CJK-aware estimated tokens (v0.7.3 M3, audit N7), the quality dilution is bounded and only
    occurs when the user opts in. Dispatch stays in block order; an optional capped window-gap
    policy is Decision Point 1 below.
-5. **Shared state:** the `run_cold` fallback cold-mark dict goes behind a lock (or becomes a
-   thread-safe wrapper); progress counters keep flowing through the existing throttled job-store
-   flush (≤ 1/s). TM upserts on identical `(project_id, source_hash)` are last-writer-wins by
-   construction; `protect_manual` must be verified to hold under the race.
+5. **Shared state:** the `run_cold` fallback cold-mark dict goes behind a `threading.Lock`. This
+   is defensive, not a bug fix: current usage is two single dict operations (`cold.get` and
+   `cold[name] = ...`), which are atomic under CPython's GIL, so the live race is benign
+   (last-writer-wins on near-identical values). The lock makes the invariant explicit and
+   survives a future edit that turns this into a read-modify-write — it must not be described as
+   closing a state-corruption hole. Progress counters keep flowing through the existing throttled
+   job-store flush (≤ 1/s), with `index` redefined as the completion ordinal and the callback
+   serialized under a lock. TM upserts on identical `(project_id, source_hash)` are
+   last-writer-wins by construction; `protect_manual` must be verified to hold under the race.
 6. **Cancellation/failure:** the cancel event is checked per segment (existing pattern); a
    worker failure must not orphan `in_progress` rows beyond what `reset_in_progress_segments`
    already reclaims.
@@ -79,14 +86,16 @@ seconds, `busy_timeout = 10000`); provider-side rate limits surfacing as `Provid
 - Failure stays visible: per-segment failures mark `failed` exactly as today; concurrency never
   retries beyond the existing bounded chain.
 
-## Decision points to settle at Gate B (before M4 code)
+## Decision points settled at Gate B (2026-07-21, owner)
 
-1. **Window-gap policy** — plain last-N-committed window vs block-order dispatch with a capped
-   gap (e.g. a worker may not run more than W segments ahead of the oldest uncommitted one).
-2. **Connection lifecycle** — per-worker persistent connection for the run vs per-segment open;
-   measure open+migration-check cost first.
-3. **Cold-mark structure** — `threading.Lock` around the existing dict vs a small thread-safe
-   value object.
+1. **Window-gap policy** — **plain last-N-committed window.** In-flight neighbors stay invisible.
+   Block-order dispatch with a capped gap was rejected: added coordination and reduced throughput
+   for an unmeasured quality gain, on a window already capped at ≤ 5 segments / 1000 tokens.
+2. **Connection lifecycle** — **per-worker persistent connection** for the run. M1 established
+   that connection-open count is material; per-segment open would pay open + migration-check on
+   every segment.
+3. **Cold-mark structure** — **`threading.Lock` around the existing dict** (Decision Rule 1:
+   prefer existing architecture over a new abstraction). See Decision 5 for its actual scope.
 
 ## Related files
 

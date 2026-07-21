@@ -288,3 +288,80 @@ def test_context_fragment_404_for_unknown_chapter(ws_client: TestClient) -> None
     name = _name(ws_client)
     r = ws_client.get(f"/ui/projects/{name}/chapters/nope/segments/ghost/context")
     assert r.status_code == 404
+
+
+# --- bounded concurrency (ADR 020) ------------------------------------------
+
+
+def _use_fake_provider(client: TestClient, name: str) -> None:
+    base: Path = client.app.state.base_dir  # type: ignore[attr-defined]
+    project_toml = base / ".weaver" / name / "project.toml"
+    text = project_toml.read_text(encoding="utf-8")
+    text = text.replace('type = ""', 'type = "fake"')
+    text = text.replace('model = ""', 'model = "fake-1"\npattern = "EN: {source}"')
+    project_toml.write_text(text, encoding="utf-8")
+
+
+def test_translate_form_offers_max_concurrent(ws_client: TestClient) -> None:
+    # A 1-4 select, so an out-of-range value is not reachable through the UI at
+    # all; the default keeps the project's configured value rather than
+    # silently overriding it.
+    name = _name(ws_client)
+    chapter_id = _first_chapter_id(ws_client, name)
+
+    page = ws_client.get(f"/ui/projects/{name}/chapters/{chapter_id}").text
+
+    assert 'name="max_concurrent"' in page
+    assert '<option value="" selected>' in page
+    for workers in (1, 2, 3, 4):
+        assert f'<option value="{workers}">' in page
+    assert '<option value="5">' not in page
+
+
+def test_translate_carries_max_concurrent_to_the_plan(
+    ws_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A 200 alone would pass even if the field were ignored, so spy on the plan
+    # the job actually runs.
+    from weaver.api.routers import translate as translate_router
+
+    seen: list[int] = []
+    real_run = translate_router.run_translation
+
+    def _spy(plan, **kwargs):
+        seen.append(plan.max_concurrent)
+        return real_run(plan, **kwargs)
+
+    monkeypatch.setattr(translate_router, "run_translation", _spy)
+    name = _name(ws_client)
+    chapter_id = _first_chapter_id(ws_client, name)
+    _use_fake_provider(ws_client, name)
+
+    r = ws_client.post(
+        f"/ui/projects/{name}/chapters/{chapter_id}/translate",
+        data={"max_concurrent": "3"},
+    )
+
+    assert r.status_code == 200
+    assert "job-panel" in r.text
+    job_id = re.search(r"/jobs/([0-9a-f-]+)", r.text)
+    assert job_id is not None, r.text
+    job = ws_client.app.state.jobs.get(job_id.group(1))  # type: ignore[attr-defined]
+    assert job is not None
+    job.wait(timeout=10)
+    assert seen == [3]
+
+
+def test_translate_rejects_out_of_range_max_concurrent(ws_client: TestClient) -> None:
+    # The select cannot produce this, but a hand-rolled POST can — it must be a
+    # visible validation error, not a 500.
+    name = _name(ws_client)
+    chapter_id = _first_chapter_id(ws_client, name)
+
+    r = ws_client.post(
+        f"/ui/projects/{name}/chapters/{chapter_id}/translate",
+        data={"max_concurrent": "9"},
+    )
+
+    assert r.status_code == 200  # HTMX panel swap carries the error inline
+    assert "max_concurrent" in r.text

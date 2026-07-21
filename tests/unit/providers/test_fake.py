@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from weaver.errors import ProviderResponseError
@@ -101,3 +103,44 @@ def _count_failures(provider: FakeProvider, *, attempts: int) -> int:
         except ProviderResponseError:
             failures += 1
     return failures
+
+
+def test_latency_seconds_delays_translate() -> None:
+    provider = FakeProvider(latency_seconds=0.05)
+    start = time.perf_counter()
+    provider.translate(_request())
+    assert time.perf_counter() - start >= 0.05
+
+
+def test_latency_seconds_defaults_to_zero() -> None:
+    provider = FakeProvider()
+    start = time.perf_counter()
+    provider.translate(_request())
+    assert time.perf_counter() - start < 0.05
+
+
+def test_latency_seconds_delays_complete() -> None:
+    provider = FakeProvider(latency_seconds=0.05)
+    start = time.perf_counter()
+    provider.complete("any prompt", max_output_tokens=64)
+    assert time.perf_counter() - start >= 0.05
+
+
+def test_negative_latency_rejected() -> None:
+    with pytest.raises(ValueError, match="latency_seconds"):
+        FakeProvider(latency_seconds=-1.0)
+
+
+def test_synthetic_usage_reported_when_enabled() -> None:
+    provider = FakeProvider(report_token_usage=True)
+    response = provider.translate(_request())
+    assert response.input_tokens is not None
+    assert response.output_tokens is not None
+    assert response.input_tokens > 0
+    assert response.output_tokens > 0
+
+
+def test_usage_is_none_by_default() -> None:
+    response = FakeProvider().translate(_request())
+    assert response.input_tokens is None
+    assert response.output_tokens is None

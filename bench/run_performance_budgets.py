@@ -17,8 +17,10 @@ from typer.testing import CliRunner
 
 from bench.generate_synthetic_fixture import generate_synthetic_epub
 from weaver.cli.main import app
+from weaver.providers.fake import FakeProvider
 from weaver.readers.epub import read_epub
 from weaver.services.glossary import extract_glossary_candidates
+from weaver.services.translation import translate_project
 from weaver.services.workspace_providers import build_workspace_providers
 from weaver.services.workspace_queue import build_workspace_queue
 from weaver.storage.db import connect_database, connect_readonly_database
@@ -95,6 +97,9 @@ def run_benchmarks(
     results.append(_budget("resume scan on startup", 5.0, resume_seconds, "10,000 reset rows"))
 
     _rewrite_project_for_fake(project_toml)
+    # Probed on copies made before the main translate run consumes the pending
+    # segments, so the budgets below still measure a full 10,000-segment run.
+    results.append(_measure_concurrency_scaling(workdir))
     translate_seconds = _measure_cli(
         runner,
         ["translate", project_toml_arg],
@@ -269,6 +274,59 @@ def _measure_window_flat_cost(db_path: Path) -> BudgetResult:
     )
 
 
+_CONCURRENCY_OP = "translate concurrency scaling"
+_CONCURRENCY_MIN_SPEEDUP = 2.4
+# 24 rather than a smaller batch: `translate_project` does fixed per-run setup
+# (source read, glossary load, segment selection) that is identical on both
+# sides and therefore drags the ratio toward 1. More segments amortize it, so
+# the number reported is closer to the concurrency the window actually buys.
+_CONCURRENCY_SEGMENTS = 24
+_CONCURRENCY_LATENCY_SECONDS = 0.3
+
+
+def _measure_concurrency_scaling(workdir: Path) -> BudgetResult:
+    """Measure the wall-clock speedup of a 3-worker window vs sequential (ADR 020).
+
+    The v0.7.3 exit criterion is >= 2.4x at ``max_concurrent = 3``. A
+    latency-simulating provider is required: with the zero-latency fake the run
+    is dominated by SQLite writes and would measure scheduling overhead rather
+    than the provider overlap that concurrency actually buys.
+
+    Each side runs on its own copy of the freshly-initialized project so the two
+    measurements start from identical state and neither consumes the pending
+    segments the later budgets need.
+    """
+
+    elapsed: dict[int, float] = {}
+    for workers in (1, 3):
+        probe_dir = workdir / f".tmp_concurrency_{workers}"
+        shutil.copytree(workdir / ".weaver", probe_dir / ".weaver")
+        probe_toml = probe_dir / PROJECT_TOML
+        elapsed[workers] = _measure(
+            lambda toml=probe_toml, cwd=probe_dir, n=workers: translate_project(
+                toml,
+                cwd=cwd,
+                first_n=_CONCURRENCY_SEGMENTS,
+                provider=FakeProvider(latency_seconds=_CONCURRENCY_LATENCY_SECONDS),
+                max_concurrent=n,
+            )
+        )
+        shutil.rmtree(probe_dir)
+
+    speedup = elapsed[1] / elapsed[3] if elapsed[3] > 0 else 0.0
+    return BudgetResult(
+        operation=_CONCURRENCY_OP,
+        target_seconds=_CONCURRENCY_MIN_SPEEDUP,
+        elapsed_seconds=speedup,
+        passed=speedup >= _CONCURRENCY_MIN_SPEEDUP,
+        note=(
+            f"{_CONCURRENCY_SEGMENTS} segments at {_CONCURRENCY_LATENCY_SECONDS:g}s "
+            f"provider latency: {elapsed[1]:.2f}s sequential vs {elapsed[3]:.2f}s "
+            "at 3 workers"
+        ),
+    )
+
+
 def _avg_window_query(
     connection: sqlite3.Connection, chapter_id: str, *, iterations: int = 100
 ) -> float:
@@ -354,6 +412,8 @@ def _format_budget(result: BudgetResult) -> str:
         return "< 50 ms/segment"
     if result.operation == _FLAT_COST_OP:
         return f"< {result.target_seconds:g}x growth"
+    if result.operation == _CONCURRENCY_OP:
+        return f">= {result.target_seconds:g}x speedup"
     return f"< {result.target_seconds:g} s"
 
 
@@ -362,7 +422,7 @@ def _format_measured(result: BudgetResult) -> str:
         return "-"
     if result.operation == "weaver translate fake provider":
         return f"{result.elapsed_seconds * 1000:.2f} ms/segment"
-    if result.operation == _FLAT_COST_OP:
+    if result.operation in (_FLAT_COST_OP, _CONCURRENCY_OP):
         return f"{result.elapsed_seconds:.2f}x"
     return f"{result.elapsed_seconds:.2f} s"
 

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import sqlite3
+import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from weaver.core.connection_registry import Connection, register_connection
 from weaver.errors import ChapterNotFoundError, ProviderUnavailable, SegmentNotFoundError
+from weaver.providers.fake import FakeProvider
 from weaver.services.config_writer import set_routing
 from weaver.services.project import initialize_project
 from weaver.services.workspace_edit import save_segment_translation
@@ -367,3 +370,104 @@ def test_routing_fallback_chain_lands_on_the_plan(tmp_path, monkeypatch) -> None
     assert plan.provider_model == "fake-1"
     assert [model for _provider, model in plan.fallback_engines] == ["fake-2"]
     assert plan.fallback_engines[0][0].name == "fake"
+
+
+def _set_max_concurrent(project_toml: Path, value: int) -> None:
+    text = project_toml.read_text(encoding="utf-8")
+    assert "max_concurrent" not in text  # guard against a stale template default
+    text = text.replace("timeout_seconds = 180", f"timeout_seconds = 180\nmax_concurrent = {value}")
+    project_toml.write_text(text, encoding="utf-8")
+
+
+def test_plan_carries_max_concurrent_from_config(tmp_path, monkeypatch) -> None:
+    # max_concurrent travels on the plan (ADR 020) so batch_translate inherits
+    # concurrency without its own segment loop; absent config means 1.
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    _set_fake_provider(init.project_toml)
+    chapter_id = _first_chapter_id(init.database_path)
+
+    assert prepare_chapter_translation(init.project_toml, chapter_id).max_concurrent == 1
+
+    _set_max_concurrent(init.project_toml, 3)
+
+    assert prepare_chapter_translation(init.project_toml, chapter_id).max_concurrent == 3
+
+
+def test_run_translation_honours_max_concurrent(tmp_path) -> None:
+    # A 3-worker window must beat sequential wall-clock by a wide margin while
+    # producing identical counters (the conservative 0.6 factor keeps the unit
+    # test robust against CI scheduling jitter; the >= 2.4x exit criterion is
+    # measured by the bench harness, not here).
+    sequential_dir = tmp_path / "sequential"
+    concurrent_dir = tmp_path / "concurrent"
+    sequential_dir.mkdir()
+    concurrent_dir.mkdir()
+
+    sequential_init = initialize_project(FIXTURE_EPUB, cwd=sequential_dir)
+    concurrent_init = initialize_project(FIXTURE_EPUB, cwd=concurrent_dir)
+    _set_fake_provider(sequential_init.project_toml)
+    _set_fake_provider(concurrent_init.project_toml)
+    _set_max_concurrent(concurrent_init.project_toml, 3)
+
+    latency_seconds = 0.2
+    results = []
+    elapsed = []
+    for init, cwd in (
+        (sequential_init, sequential_dir),
+        (concurrent_init, concurrent_dir),
+    ):
+        chapter_id = _first_chapter_id(init.database_path)
+        plan = prepare_chapter_translation(init.project_toml, chapter_id, cwd=cwd)
+        plan = replace(plan, provider=FakeProvider(latency_seconds=latency_seconds))
+        start = time.perf_counter()
+        results.append(run_translation(plan))
+        elapsed.append(time.perf_counter() - start)
+
+    sequential_result, concurrent_result = results
+    sequential_elapsed, concurrent_elapsed = elapsed
+
+    assert concurrent_elapsed < sequential_elapsed * 0.6
+    assert concurrent_result.translated == sequential_result.translated
+    assert concurrent_result.reused_from_memory == sequential_result.reused_from_memory
+    assert concurrent_result.failed == sequential_result.failed
+    assert sequential_result.failed == 0
+    assert concurrent_result.cancelled is False
+    # Counting alone is not enough: the concurrent path must leave the same
+    # database state, with no duplicate attempt rows from two workers racing.
+    for init, result in (
+        (sequential_init, sequential_result),
+        (concurrent_init, concurrent_result),
+    ):
+        assert _count_translations(init.database_path) == result.translated
+        chapter_id = _first_chapter_id(init.database_path)
+        for segment_id in _chapter_segment_ids(init.database_path, chapter_id):
+            assert _status(init.database_path, segment_id) == "translated"
+
+
+def test_run_translation_skips_missing_segments_under_concurrency(tmp_path, monkeypatch) -> None:
+    # A target id with no segment row is skipped: no counter moves and no
+    # progress callback fires — same as the sequential path.
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    _set_fake_provider(init.project_toml)
+    chapter_id = _first_chapter_id(init.database_path)
+    real_ids = _chapter_segment_ids(init.database_path, chapter_id)
+
+    plan = prepare_chapter_translation(init.project_toml, chapter_id)
+    plan = replace(
+        plan,
+        max_concurrent=3,
+        target_segment_ids=(*plan.target_segment_ids, "ghost-segment-id"),
+    )
+    seen: list[str] = []
+
+    def _record(index, total, segment, translated, input_tokens, output_tokens) -> None:
+        seen.append(segment.id)
+
+    result = run_translation(plan, progress_callback=_record)
+
+    assert result.selected == len(real_ids) + 1
+    assert result.translated == len(real_ids)
+    assert result.failed == 0
+    assert sorted(seen) == sorted(real_ids)

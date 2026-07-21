@@ -5,8 +5,9 @@ from __future__ import annotations
 import contextlib
 import logging
 import sqlite3
+import threading
 import time
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +31,7 @@ from weaver.readers import read_source
 from weaver.services.enforcement import evaluate_translation, repair_translation
 from weaver.services.glossary import raise_on_glossary_conflicts
 from weaver.services.routing import resolve_chain
+from weaver.services.segment_runner import run_segment_window
 from weaver.storage.characters import list_characters
 from weaver.storage.db import connect_database, transaction
 from weaver.storage.glossary import list_glossary_terms, record_uncertain_glossary_candidate
@@ -70,11 +72,104 @@ MEMORY_MODEL = "memory"
 
 VALID_HONORIFIC_POLICIES = frozenset({"preserve", "localize", "hybrid"})
 
+# Bounded translate concurrency (ADR 020). Absent = 1 = today's sequential
+# behavior bit-for-bit. The cap is fixed at 4 — no autoscaling (D9 fence).
+MAX_CONCURRENT_LIMIT = 4
+
+
+def resolve_max_concurrent(translation_config: Mapping[str, Any]) -> int:
+    """Read and validate `[translation] max_concurrent`.
+
+    Args:
+        translation_config: The parsed `[translation]` table.
+
+    Returns:
+        The worker-window size, 1 when the key is absent.
+
+    Raises:
+        ConfigError: When the value is not an integer in 1..4.
+    """
+
+    if "max_concurrent" not in translation_config:
+        return 1
+    return _validate_max_concurrent(
+        translation_config["max_concurrent"],
+        likely_cause="project.toml [translation] max_concurrent was hand-edited",
+        next_command="edit project.toml and set",
+    )
+
+
+def resolve_max_concurrent_override(value: int) -> int:
+    """Validate a caller-supplied `max_concurrent` that overrides the config.
+
+    Shares one range check with :func:`resolve_max_concurrent` so the CLI and
+    `project.toml` can never drift apart; only the guidance differs, because
+    telling someone who passed a flag to edit project.toml is wrong.
+
+    Args:
+        value: The requested worker-window size.
+
+    Returns:
+        The validated worker-window size.
+
+    Raises:
+        ConfigError: When the value is not an integer in 1..4.
+    """
+
+    return _validate_max_concurrent(
+        value,
+        likely_cause="--max-concurrent was given a value outside the supported range",
+        next_command="rerun with --max-concurrent set to",
+    )
+
+
+def _validate_max_concurrent(value: Any, *, likely_cause: str, next_command: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigError(
+            f"Invalid max_concurrent value `{value!r}` (expected type: integer). "
+            f"Likely cause: {likely_cause}. "
+            f"Next command: {next_command} an integer between 1 and "
+            f"{MAX_CONCURRENT_LIMIT}."
+        )
+    if not 1 <= value <= MAX_CONCURRENT_LIMIT:
+        raise ConfigError(
+            f"Invalid max_concurrent value `{value}` "
+            f"(expected: between 1 and {MAX_CONCURRENT_LIMIT}). "
+            f"Likely cause: {likely_cause}. "
+            f"Next command: {next_command} a value between 1 and "
+            f"{MAX_CONCURRENT_LIMIT}."
+        )
+    return value
+
+
 # How long a connection stays cold-marked after a per-segment failure within one
 # run (ADR 018 D4 — a simple try-next window, not a circuit breaker).
 _FALLBACK_COLD_SECONDS = 30.0
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class ColdMarks:
+    """Per-run fallback cold-mark map, safe for the M4 worker window.
+
+    ADR 018 D4: a failed engine is skipped for a short window, never
+    circuit-broken. The lock is defensive — today's two call sites are single
+    dict operations, atomic under CPython — but it keeps the invariant explicit
+    if this ever becomes a read-modify-write.
+    """
+
+    def __init__(self) -> None:
+        self._until: dict[str, float] = {}
+        self._lock = threading.Lock()
+
+    def is_cold(self, engine_name: str, *, now: float) -> bool:
+        with self._lock:
+            return self._until.get(engine_name, 0.0) > now
+
+    def mark(self, engine_name: str, until: float) -> None:
+        with self._lock:
+            self._until[engine_name] = until
+
 
 ProgressCallback = Callable[[int, int, SegmentRecord, bool, int | None, int | None], None]
 
@@ -326,6 +421,7 @@ def translate_project(
     provider_override: dict[str, Any] | None = None,
     progress_callback: ProgressCallback | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    max_concurrent: int | None = None,
 ) -> TranslationRunSummary:
     """Translate selected project segments through the configured provider.
 
@@ -345,18 +441,38 @@ def translate_project(
         first_n: When set, translate only the first N selected segments. The
             remaining segments stay in their current status. Composes with
             ``retry_failed`` and ``dry_run``.
-        progress_callback: Optional callback invoked after each selected segment
-            with `(index, total, segment, translated, input_tokens,
-            output_tokens)`. In dry-run mode the callback receives
+        progress_callback: Optional callback invoked after each completed
+            segment with `(ordinal, total, segment, translated, input_tokens,
+            output_tokens)`. `ordinal` is a 1-based *completion* ordinal, not a
+            position in the selection: under `[translation] max_concurrent > 1`
+            segments complete out of source order, so `ordinal` says how many
+            segments have finished, not which one this is. The runner serializes
+            the callback (never two at once), but under `max_concurrent > 1` it
+            runs on a worker thread, so callbacks must be thread-safe and must
+            not assume the calling thread. In dry-run mode the callback receives
             `translated=False` and the per-segment estimated input tokens.
-        should_cancel: Optional predicate checked before each segment. When it
-            returns True the loop stops cleanly, leaving already-translated
-            segments committed and the rest in their prior status (cooperative
-            cancel, ADR `0019`). CLI passes None (no behavior change); the web
+        should_cancel: Optional predicate checked before each segment is
+            dispatched. When it returns True the run stops cleanly, leaving
+            already-translated segments committed and the rest in their prior
+            status (cooperative cancel, ADR `0019`). Under `max_concurrent > 1`
+            up to `max_concurrent` segments are already in flight and run to
+            completion, and any segment dequeued after the flag flips is
+            discarded unprocessed. CLI passes None (no behavior change); the web
             cockpit passes the JobManager cancel flag.
+        max_concurrent: Optional worker-window size overriding
+            `[translation] max_concurrent` for this run only (ADR 020). None
+            means use the configured value, or 1 when unset.
 
     Returns:
         TranslationRunSummary with current database counts and token totals.
+
+    Raises:
+        Exception: Whatever a segment raised, via `run_segment_window`. Under
+            `max_concurrent > 1` a segment failure does not halt dispatch — only
+            `should_cancel` does — so segments queued after a failing one still
+            translate and still commit real writes before the earliest-dispatched
+            failure is re-raised. A raise here does not mean the run stopped at
+            that segment; read the database for the actual state.
     """
 
     base_dir = cwd or Path.cwd()
@@ -365,6 +481,13 @@ def translate_project(
     engine_chain = resolve_chain(project_toml, TaskType.translate, data=data)
     provider_config = _merge_provider_config(engine_chain[0].provider_config, provider_override)
     translation_config = data["translation"]
+    # Resolved before the dry-run early return so `--dry-run` rejects a bad
+    # window size instead of passing and failing only on the real run.
+    window_size = (
+        resolve_max_concurrent(translation_config)
+        if max_concurrent is None
+        else resolve_max_concurrent_override(max_concurrent)
+    )
     persist_raw_response = raw_response_logging_enabled(data)
     enforce_repair = enforce_repair_enabled(data)
     profile = build_translation_profile(data)
@@ -397,7 +520,7 @@ def translate_project(
     # missing-key fallback must not abort the run; the primary still translates).
     # Skipped when a provider is injected directly (test path).
     fallback_engines: list[tuple[LLMProvider, str]] = []
-    run_cold: dict[str, float] = {}
+    run_cold = ColdMarks()
     if provider is None:
         for candidate in engine_chain[1:]:
             try:
@@ -443,9 +566,9 @@ def translate_project(
             selected = selected[:first_n]
         total_selected = len(selected)
 
-        for index, segment in enumerate(selected, start=1):
-            if should_cancel is not None and should_cancel():
-                break
+        def _translate(
+            worker_connection: sqlite3.Connection, segment: SegmentRecord
+        ) -> SegmentTranslationOutcome:
             block = block_by_id.get(segment.id)
             if block is None:
                 raise ConfigError(
@@ -453,9 +576,8 @@ def translate_project(
                     "Likely cause: project state and source file are out of sync. "
                     "Next command: rerun `weaver init <input.epub>` for this source."
                 )
-
-            outcome = translate_one_segment(
-                connection=connection,
+            return translate_one_segment(
+                connection=worker_connection,
                 segment=segment,
                 source_text=block.source_text,
                 normalized_source_text=block.normalized_source_text,
@@ -471,6 +593,15 @@ def translate_project(
                 enforce_repair=enforce_repair,
                 profile=profile,
             )
+
+        def _accumulate(
+            ordinal: int,
+            total: int,
+            segment: SegmentRecord,
+            outcome: SegmentTranslationOutcome,
+        ) -> None:
+            nonlocal translated_count, reused_count, input_tokens, output_tokens
+            nonlocal repair_calls, json_repair_calls
             if outcome.translated:
                 translated_count += 1
                 input_tokens += outcome.input_tokens or 0
@@ -483,13 +614,22 @@ def translate_project(
                 json_repair_calls += 1
             if progress_callback is not None:
                 progress_callback(
-                    index,
-                    total_selected,
+                    ordinal,
+                    total,
                     segment,
                     outcome.translated,
                     outcome.input_tokens,
                     outcome.output_tokens,
                 )
+
+        run_segment_window(
+            items=selected,
+            max_concurrent=window_size,
+            connection_factory=lambda: connect_database(db_path),
+            work=_translate,
+            on_complete=_accumulate,
+            should_cancel=should_cancel,
+        )
 
         counts = _read_segment_counts(connection)
 
@@ -569,7 +709,7 @@ def translate_one_segment(
     use_translation_memory: bool = True,
     persist_raw_response: bool = False,
     fallbacks: Sequence[tuple[LLMProvider, str]] = (),
-    cold: dict[str, float] | None = None,
+    cold: ColdMarks | None = None,
     enforce_repair: bool = True,
     profile: TranslationProfile | None = None,
 ) -> SegmentTranslationOutcome:
@@ -672,7 +812,7 @@ def translate_one_segment(
         # currently cold, try them anyway rather than failing the segment blind.
         candidates: list[tuple[LLMProvider, str]] = [(provider, provider_model), *fallbacks]
         now = time.monotonic()
-        warm = [c for c in candidates if cold is None or cold.get(c[0].name, 0.0) <= now]
+        warm = [c for c in candidates if cold is None or not cold.is_cold(c[0].name, now=now)]
         for cand_provider, cand_model in warm or candidates:
             request = TranslationRequest(
                 segment_id=segment.id,
@@ -687,7 +827,7 @@ def translate_one_segment(
                 response = cand_provider.translate(request)
             except ProviderError:
                 if cold is not None:
-                    cold[cand_provider.name] = now + _FALLBACK_COLD_SECONDS
+                    cold.mark(cand_provider.name, now + _FALLBACK_COLD_SECONDS)
                 continue
 
             # Enforcement gate (ADR 019 E1+E2): glossary/character/anti-slop must

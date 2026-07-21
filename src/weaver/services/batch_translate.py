@@ -42,7 +42,7 @@ from weaver.core.config import load_project_config
 from weaver.errors import ChapterNotFoundError, VolumeNotFoundError
 from weaver.providers import build_provider
 from weaver.services.project_paths import resolve_database_path
-from weaver.services.translation import preflight_provider_chain
+from weaver.services.translation import preflight_provider_chain, resolve_max_concurrent
 from weaver.services.workspace_translate import (
     TRANSLATE_MODES,
     ChapterTranslationResult,
@@ -252,6 +252,10 @@ def prepare_batch_translation(
     persist_raw_response = raw_response_logging_enabled(data)
     enforce_repair = enforce_repair_enabled(data)
     profile = build_translation_profile(data)
+    # Batch builds chapter plans directly (not via prepare_chapter_translation),
+    # so the worker-window size has to be resolved here too or every chapter
+    # would silently fall back to the sequential default (ADR 020).
+    max_concurrent = resolve_max_concurrent(data["translation"])
     chapter_plans = tuple(
         TranslationPlan(
             project_toml=project_toml,
@@ -272,6 +276,7 @@ def prepare_batch_translation(
             profile=profile,
             fallback_engines=fallback_engines,
             preflight_warning=preflight_warning,
+            max_concurrent=max_concurrent,
         )
         for chapter_id, target_segment_ids, requested_count in collected
     )

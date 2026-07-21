@@ -45,14 +45,18 @@ from weaver.providers.types import CharacterContext, TranslationProfile
 from weaver.services.glossary import raise_on_glossary_conflicts
 from weaver.services.project_paths import resolve_database_path
 from weaver.services.routing import Candidate, resolve_chain
+from weaver.services.segment_runner import run_segment_window
 from weaver.services.translation import (
     VALID_HONORIFIC_POLICIES,
+    ColdMarks,
     ProgressCallback,
+    SegmentTranslationOutcome,
     build_translation_profile,
     enforce_repair_enabled,
     load_character_contexts,
     preflight_provider_chain,
     raw_response_logging_enabled,
+    resolve_max_concurrent,
     translate_one_segment,
 )
 from weaver.storage.db import connect_database, connect_readonly_database
@@ -99,6 +103,9 @@ class TranslationPlan:
     # Non-None when the primary failed its pre-flight healthcheck and a healthy
     # fallback carries the run (audit A1); surfaced on the result.
     preflight_warning: str | None = None
+    # Bounded worker-window size (ADR 020). Carried on the plan rather than as a
+    # `run_translation` parameter so `batch_translate` inherits it unchanged.
+    max_concurrent: int = 1
 
 
 @dataclass(frozen=True)
@@ -229,6 +236,7 @@ def prepare_chapter_translation(
         persist_raw_response=raw_response_logging_enabled(data),
         enforce_repair=enforce_repair_enabled(data),
         profile=build_translation_profile(data),
+        max_concurrent=resolve_max_concurrent(data["translation"]),
     )
 
 
@@ -244,17 +252,39 @@ def run_translation(
     :func:`weaver.services.translation.translate_one_segment`), so other
     writers are never blocked while a segment is in flight.
 
+    Segments run through :func:`weaver.services.segment_runner.run_segment_window`
+    with ``plan.max_concurrent`` workers (ADR 020; default 1 = strictly
+    sequential on the calling thread). A target id with no segment row is
+    skipped: it moves no counter and fires no progress callback.
+
     Args:
         plan: A :class:`TranslationPlan` from :func:`prepare_chapter_translation`.
-        should_cancel: Optional predicate checked before each segment; when it
-            returns True the loop stops cleanly, leaving translated segments
-            committed and the rest in their prior status.
-        progress_callback: Optional callback invoked after each attempted segment
-            with ``(index, total, segment, translated, input_tokens,
-            output_tokens)``.
+        should_cancel: Optional predicate checked before each segment is
+            dispatched. When it returns True the run stops cleanly, leaving
+            translated segments committed and the rest in their prior status,
+            and ``cancelled`` is set on the result. Under ``max_concurrent > 1``
+            up to ``max_concurrent`` segments are already in flight and run to
+            completion, and any segment dequeued after the flag flips is
+            discarded unprocessed.
+        progress_callback: Optional callback invoked after each completed segment
+            with ``(ordinal, total, segment, translated, input_tokens,
+            output_tokens)``. ``ordinal`` is a 1-based *completion* ordinal, not
+            a position in ``target_segment_ids``: under ``max_concurrent > 1``
+            segments complete out of order. The runner serializes the callback
+            (never two at once), but under ``max_concurrent > 1`` it runs on a
+            worker thread, so callbacks must be thread-safe.
 
     Returns:
         A :class:`ChapterTranslationResult` with per-run counts and token totals.
+
+    Raises:
+        Exception: Whatever a segment raised, via ``run_segment_window``. Under
+            ``max_concurrent > 1`` a segment failure does not halt dispatch —
+            only ``should_cancel`` does — so segments queued after a failing one
+            still translate and still commit real writes before the
+            earliest-dispatched failure is re-raised. A raise here does not mean
+            the run stopped at that segment, and no result object is returned;
+            read the database for the actual state.
     """
 
     selected = len(plan.target_segment_ids)
@@ -265,59 +295,82 @@ def run_translation(
     output_tokens = 0
     repair_calls = 0
     json_repair_calls = 0
-    cancelled = False
     # Per-run cold-mark shared across this plan's segments (ADR 018 D4): a failed
     # engine is skipped for a short window, never circuit-broken.
-    run_cold: dict[str, float] = {}
+    run_cold = ColdMarks()
 
-    with closing(connect_database(plan.db_path)) as connection:
-        for index, segment_id in enumerate(plan.target_segment_ids, start=1):
-            if should_cancel is not None and should_cancel():
-                cancelled = True
-                break
-            segment = get_segment(connection, segment_id)
-            if segment is None:
-                continue
-            normalized = normalize_japanese_text(segment.source_text)
-            outcome = translate_one_segment(
-                connection=connection,
-                segment=segment,
-                source_text=segment.source_text,
-                normalized_source_text=normalized,
-                project=plan.project,
-                glossary_terms=plan.glossary_terms,
-                honorific_policy=plan.honorific_policy,
-                provider=plan.provider,
-                provider_model=plan.provider_model,
-                characters=plan.characters,
-                use_translation_memory=plan.use_translation_memory,
-                persist_raw_response=plan.persist_raw_response,
-                fallbacks=plan.fallback_engines,
-                cold=run_cold,
-                enforce_repair=plan.enforce_repair,
-                profile=plan.profile,
+    def _translate(
+        worker_connection: sqlite3.Connection, segment_id: str
+    ) -> tuple[SegmentRecord, SegmentTranslationOutcome] | None:
+        segment = get_segment(worker_connection, segment_id)
+        if segment is None:
+            # A target id with no row: skipped, exactly as before — it moves no
+            # counter and fires no progress callback.
+            return None
+        normalized = normalize_japanese_text(segment.source_text)
+        outcome = translate_one_segment(
+            connection=worker_connection,
+            segment=segment,
+            source_text=segment.source_text,
+            normalized_source_text=normalized,
+            project=plan.project,
+            glossary_terms=plan.glossary_terms,
+            honorific_policy=plan.honorific_policy,
+            provider=plan.provider,
+            provider_model=plan.provider_model,
+            characters=plan.characters,
+            use_translation_memory=plan.use_translation_memory,
+            persist_raw_response=plan.persist_raw_response,
+            fallbacks=plan.fallback_engines,
+            cold=run_cold,
+            enforce_repair=plan.enforce_repair,
+            profile=plan.profile,
+        )
+        return segment, outcome
+
+    def _accumulate(
+        ordinal: int,
+        total: int,
+        segment_id: str,
+        result: tuple[SegmentRecord, SegmentTranslationOutcome] | None,
+    ) -> None:
+        nonlocal translated, reused, failed, input_tokens, output_tokens
+        nonlocal repair_calls, json_repair_calls
+        if result is None:
+            return
+        segment, outcome = result
+        if outcome.translated:
+            translated += 1
+            input_tokens += outcome.input_tokens or 0
+            output_tokens += outcome.output_tokens or 0
+        else:
+            # Unlike translate_project, which reads final counts from the
+            # database, this path counts failures inline.
+            failed += 1
+        if outcome.reused_from_memory:
+            reused += 1
+        if outcome.repair_call_made:
+            repair_calls += 1
+        if outcome.json_repair_used:
+            json_repair_calls += 1
+        if progress_callback is not None:
+            progress_callback(
+                ordinal,
+                total,
+                segment,
+                outcome.translated,
+                outcome.input_tokens,
+                outcome.output_tokens,
             )
-            if outcome.translated:
-                translated += 1
-                input_tokens += outcome.input_tokens or 0
-                output_tokens += outcome.output_tokens or 0
-            else:
-                failed += 1
-            if outcome.reused_from_memory:
-                reused += 1
-            if outcome.repair_call_made:
-                repair_calls += 1
-            if outcome.json_repair_used:
-                json_repair_calls += 1
-            if progress_callback is not None:
-                progress_callback(
-                    index,
-                    selected,
-                    segment,
-                    outcome.translated,
-                    outcome.input_tokens,
-                    outcome.output_tokens,
-                )
+
+    cancelled = run_segment_window(
+        items=plan.target_segment_ids,
+        max_concurrent=plan.max_concurrent,
+        connection_factory=lambda: connect_database(plan.db_path),
+        work=_translate,
+        on_complete=_accumulate,
+        should_cancel=should_cancel,
+    )
 
     return ChapterTranslationResult(
         chapter_id=plan.chapter_id,

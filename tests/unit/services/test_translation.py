@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from pathlib import Path
 
 import pytest
 
 from weaver.core.segment import compute_source_hash
-from weaver.errors import ProviderResponseError, ProviderUnavailable
+from weaver.errors import ConfigError, ProviderResponseError, ProviderUnavailable
 from weaver.providers.base import LLMProvider, ProviderStatus
 from weaver.providers.fake import FakeProvider
 from weaver.providers.types import Completion, GlossaryTerm, TranslationResponse
@@ -17,9 +18,11 @@ from weaver.services.translation import (
     MAX_CONTEXT_SEGMENTS,
     MAX_CONTEXT_TOKENS,
     MAX_GLOSSARY_TERMS_PER_SEGMENT,
+    ColdMarks,
     build_context,
     estimate_tokens,
     preflight_provider_chain,
+    resolve_max_concurrent,
     translate_one_segment,
 )
 from weaver.storage.db import initialize_database
@@ -231,7 +234,7 @@ def test_fallback_rescues_segment_when_primary_fails(tmp_path: Path) -> None:
     conn, seg, proj = _db_with_segment(tmp_path / "test.db")
     primary = FakeProvider(fail_rate=1.0, seed=1)
     fallback = FakeProvider(fail_rate=0.0, seed=2)
-    cold: dict[str, float] = {}
+    cold = ColdMarks()
 
     outcome = translate_one_segment(
         connection=conn,
@@ -267,7 +270,7 @@ def test_fallback_cold_mark_prevents_reuse_within_window(tmp_path: Path) -> None
     conn, seg, proj = _db_with_segment(tmp_path / "test.db")
     primary = FakeProvider(fail_rate=1.0, seed=1)
     fallback = FakeProvider(fail_rate=0.0, seed=2)
-    cold: dict[str, float] = {}
+    cold = ColdMarks()
 
     outcome = translate_one_segment(
         connection=conn,
@@ -285,7 +288,7 @@ def test_fallback_cold_mark_prevents_reuse_within_window(tmp_path: Path) -> None
     )
 
     assert outcome.translated
-    assert cold.get("fake", 0.0) > 0.0, "fallback should be cold-marked"
+    assert cold.is_cold("fake", now=0.0), "fallback should be cold-marked"
     conn.close()
 
 
@@ -343,7 +346,7 @@ def test_tm_short_circuit_stays_ahead_of_fallback(tmp_path: Path) -> None:
         provider_model="failer",
         fallbacks=[(fallback, "saver")],
         enforce_repair=False,
-        cold={},
+        cold=ColdMarks(),
     )
 
     assert outcome.translated, "TM hit should return translated"
@@ -694,3 +697,56 @@ def test_preflight_dead_primary_and_dead_fallback_aborts() -> None:
         preflight_provider_chain(primary, [(fallback, "m2")])
 
     assert "no configured fallback passed its healthcheck" in str(exc_info.value)
+
+
+def test_absent_max_concurrent_defaults_to_one() -> None:
+    assert resolve_max_concurrent({}) == 1
+
+
+def test_valid_values_accepted() -> None:
+    for value in (1, 2, 3, 4):
+        assert resolve_max_concurrent({"max_concurrent": value}) == value
+
+
+@pytest.mark.parametrize("value", [0, 5, -1, 100])
+def test_out_of_range_rejected(value: int) -> None:
+    with pytest.raises(ConfigError, match="max_concurrent"):
+        resolve_max_concurrent({"max_concurrent": value})
+
+
+@pytest.mark.parametrize("value", ["3", 2.5, True, None])
+def test_non_integer_rejected(value: object) -> None:
+    with pytest.raises(ConfigError, match="max_concurrent"):
+        resolve_max_concurrent({"max_concurrent": value})
+
+
+def test_cold_marks_are_safe_under_concurrent_access() -> None:
+    marks = ColdMarks()
+    errors: list[BaseException] = []
+
+    def hammer() -> None:
+        try:
+            for _ in range(500):
+                marks.mark("engine-a", 1.0)
+                marks.is_cold("engine-a", now=0.0)
+        except BaseException as exc:  # pragma: no cover - diagnostic
+            errors.append(exc)
+
+    threads = [threading.Thread(target=hammer) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert marks.is_cold("engine-a", now=0.0) is True
+    assert marks.is_cold("engine-b", now=0.0) is False
+
+
+def test_cold_marks_boundary_at_exact_equality_is_not_cold() -> None:
+    """`until == now` must mean usable, matching the original `<=` predicate."""
+    marks = ColdMarks()
+    marks.mark("engine-a", 5.0)
+
+    assert marks.is_cold("engine-a", now=5.0) is False
+    assert marks.is_cold("engine-a", now=4.999999) is True
