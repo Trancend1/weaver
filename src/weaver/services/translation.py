@@ -31,6 +31,7 @@ from weaver.readers import read_source
 from weaver.services.enforcement import evaluate_translation, repair_translation
 from weaver.services.glossary import raise_on_glossary_conflicts
 from weaver.services.routing import resolve_chain
+from weaver.services.segment_runner import run_segment_window
 from weaver.storage.characters import list_characters
 from weaver.storage.db import connect_database, transaction
 from weaver.storage.glossary import list_glossary_terms, record_uncertain_glossary_candidate
@@ -506,9 +507,11 @@ def translate_project(
             selected = selected[:first_n]
         total_selected = len(selected)
 
-        for index, segment in enumerate(selected, start=1):
-            if should_cancel is not None and should_cancel():
-                break
+        max_concurrent = resolve_max_concurrent(translation_config)
+
+        def _translate(
+            worker_connection: sqlite3.Connection, segment: SegmentRecord
+        ) -> SegmentTranslationOutcome:
             block = block_by_id.get(segment.id)
             if block is None:
                 raise ConfigError(
@@ -516,9 +519,8 @@ def translate_project(
                     "Likely cause: project state and source file are out of sync. "
                     "Next command: rerun `weaver init <input.epub>` for this source."
                 )
-
-            outcome = translate_one_segment(
-                connection=connection,
+            return translate_one_segment(
+                connection=worker_connection,
                 segment=segment,
                 source_text=block.source_text,
                 normalized_source_text=block.normalized_source_text,
@@ -534,6 +536,15 @@ def translate_project(
                 enforce_repair=enforce_repair,
                 profile=profile,
             )
+
+        def _accumulate(
+            ordinal: int,
+            total: int,
+            segment: SegmentRecord,
+            outcome: SegmentTranslationOutcome,
+        ) -> None:
+            nonlocal translated_count, reused_count, input_tokens, output_tokens
+            nonlocal repair_calls, json_repair_calls
             if outcome.translated:
                 translated_count += 1
                 input_tokens += outcome.input_tokens or 0
@@ -546,13 +557,22 @@ def translate_project(
                 json_repair_calls += 1
             if progress_callback is not None:
                 progress_callback(
-                    index,
-                    total_selected,
+                    ordinal,
+                    total,
                     segment,
                     outcome.translated,
                     outcome.input_tokens,
                     outcome.output_tokens,
                 )
+
+        run_segment_window(
+            items=selected,
+            max_concurrent=max_concurrent,
+            connection_factory=lambda: connect_database(db_path),
+            work=_translate,
+            on_complete=_accumulate,
+            should_cancel=should_cancel,
+        )
 
         counts = _read_segment_counts(connection)
 

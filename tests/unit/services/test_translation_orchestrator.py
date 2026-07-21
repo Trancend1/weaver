@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from pathlib import Path
 
 import pytest
@@ -655,3 +656,83 @@ def _first_segment_text(db_path: Path) -> str:
                 "SELECT source_text FROM segments ORDER BY block_order LIMIT 1"
             ).fetchone()[0]
         )
+
+
+def _segment_ids_in_order(db_path: Path) -> list[str]:
+    # Matches `list_segments_for_translation`'s selection order (chapter spine
+    # order, then block order within the chapter) rather than raw block_order.
+    with sqlite3.connect(db_path) as connection:
+        return [
+            str(row[0])
+            for row in connection.execute(
+                """
+                SELECT s.id
+                FROM segments s
+                JOIN chapters c ON c.id = s.chapter_id
+                ORDER BY c.spine_order, s.block_order
+                """
+            ).fetchall()
+        ]
+
+
+def _set_max_concurrent(project_toml: Path, value: int) -> None:
+    text = project_toml.read_text(encoding="utf-8")
+    assert "max_concurrent" not in text  # guard against a stale template default
+    text = text.replace("timeout_seconds = 180", f"timeout_seconds = 180\nmax_concurrent = {value}")
+    project_toml.write_text(text, encoding="utf-8")
+
+
+def test_translate_project_default_is_sequential(tmp_path, monkeypatch) -> None:
+    # max_concurrent absent (ADR 020 default 1): one worker connection, and the
+    # provider observes segments strictly in source (block_order) order.
+    monkeypatch.chdir(tmp_path)
+    init = initialize_project(FIXTURE_EPUB)
+    provider = CapturingProvider()
+
+    summary = translate_project(init.project_toml, provider=provider)
+
+    assert summary.translated_segments == 6
+    assert summary.failed_segments == 0
+    assert summary.pending_segments == 0
+    assert _count_status(init.database_path, "translated") == 6
+    assert _count_translations(init.database_path) == 6
+    assert [request.segment_id for request in provider.requests] == _segment_ids_in_order(
+        init.database_path
+    )
+
+
+def test_translate_project_honours_max_concurrent(tmp_path) -> None:
+    # max_concurrent = 3 with a latency-simulating provider must beat sequential
+    # wall-clock by a wide margin (ADR 020 / v0.7.3 exit criterion: >= 2.4x on the
+    # bench harness; here we assert a conservative >= 1/0.6 speedup to keep the
+    # unit test robust against CI scheduling jitter).
+    sequential_dir = tmp_path / "sequential"
+    concurrent_dir = tmp_path / "concurrent"
+    sequential_dir.mkdir()
+    concurrent_dir.mkdir()
+
+    sequential_init = initialize_project(FIXTURE_EPUB, cwd=sequential_dir)
+    concurrent_init = initialize_project(FIXTURE_EPUB, cwd=concurrent_dir)
+    _set_max_concurrent(concurrent_init.project_toml, 3)
+
+    latency_seconds = 0.2
+
+    sequential_start = time.perf_counter()
+    sequential_summary = translate_project(
+        sequential_init.project_toml,
+        cwd=sequential_dir,
+        provider=FakeProvider(latency_seconds=latency_seconds),
+    )
+    sequential_elapsed = time.perf_counter() - sequential_start
+
+    concurrent_start = time.perf_counter()
+    concurrent_summary = translate_project(
+        concurrent_init.project_toml,
+        cwd=concurrent_dir,
+        provider=FakeProvider(latency_seconds=latency_seconds),
+    )
+    concurrent_elapsed = time.perf_counter() - concurrent_start
+
+    assert sequential_summary.translated_segments == 6
+    assert concurrent_summary.translated_segments == 6
+    assert concurrent_elapsed < sequential_elapsed * 0.6

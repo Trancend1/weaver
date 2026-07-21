@@ -125,7 +125,15 @@ def transaction(connection: sqlite3.Connection) -> Iterator[None]:
     """
 
     try:
-        connection.execute("BEGIN")
+        # IMMEDIATE (not the default DEFERRED) acquires the write lock at BEGIN
+        # time. Under DEFERRED, two connections can each grab a SHARED read
+        # lock and then race to upgrade to a write lock; SQLite reports that
+        # upgrade race as an immediate SQLITE_BUSY ("database is locked")
+        # WITHOUT ever invoking the busy_timeout handler (ADR 020 M4: this only
+        # surfaces once more than one connection writes concurrently, i.e.
+        # `max_concurrent > 1`). IMMEDIATE serializes writers through the
+        # normal busy_timeout wait instead.
+        connection.execute("BEGIN IMMEDIATE")
         yield
     except sqlite3.Error:
         connection.rollback()

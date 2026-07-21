@@ -11,9 +11,9 @@ executor, no threads — reproducing pre-M4 behavior bit-for-bit.
 from __future__ import annotations
 
 import logging
+import queue
 import threading
 from collections.abc import Callable, Sequence
-from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import closing
 from typing import Protocol, TypeVar
 
@@ -111,59 +111,79 @@ def _run_concurrent(
     on_complete: Callable[[int, int, TItem, TResult], None],
     should_cancel: Callable[[], bool] | None,
 ) -> bool:
-    """Bounded window: one persistent connection per worker thread.
+    """Bounded window: one dedicated worker thread per slot, one connection per thread.
 
-    Connections are thread-local because sqlite3 connections are not shareable
-    across threads. `on_complete` is serialized under `progress_lock` so the
-    completion ordinal stays dense and callbacks never run concurrently.
+    Uses a hand-rolled worker pool rather than `ThreadPoolExecutor` on purpose:
+    each worker thread opens exactly one connection and closes it itself, in a
+    `finally`, before its function returns — DB-API connections (sqlite3
+    included) may only be closed by the thread that created them, and
+    `ThreadPoolExecutor` gives no way to address a specific pooled thread for a
+    "close yourself" follow-up job, so closing can never be delegated back to
+    the coordinator thread once a worker has opened its connection. (Verified:
+    `threading.local.__del__`-based auto-close on thread exit is NOT a
+    reliable substitute — it does not run deterministically before
+    `Thread.join()` returns.)
+
+    `on_complete` fires in completion order (whichever item's `work()` call
+    finishes first, first) under `progress_lock`, so the ordinal stays dense
+    and callbacks never run concurrently — same contract as before. Failures
+    are recorded per-item into a fixed-size, index-addressed slot so the
+    re-raised failure is always the earliest-**dispatched** (original list
+    order) one, regardless of which worker thread actually raises first --
+    `test_secondary_worker_exceptions_are_logged_not_discarded` pins this.
     """
 
-    local = threading.local()
-    connections: list[TConnection] = []
-    connections_lock = threading.Lock()
+    work_queue: queue.SimpleQueue[tuple[int, TItem] | None] = queue.SimpleQueue()
+    for index, item in enumerate(items):
+        work_queue.put((index, item))
+    worker_count = max(1, min(max_concurrent, total)) if total else 0
+    for _ in range(worker_count):
+        work_queue.put(None)  # one stop signal per worker thread
+
     progress_lock = threading.Lock()
     completed = 0
-    cancelled = False
+    cancelled = threading.Event()
+    failures: list[tuple[TItem, BaseException] | None] = [None] * total
 
-    def worker(item: TItem) -> None:
+    def run_worker() -> None:
         nonlocal completed
-        connection: TConnection | None = getattr(local, "connection", None)
-        if connection is None:
-            connection = connection_factory()
-            local.connection = connection
-            with connections_lock:
-                connections.append(connection)
-        result = work(connection, item)
-        with progress_lock:
-            completed += 1
-            ordinal = completed
-            on_complete(ordinal, total, item, result)
-
-    try:
-        with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
-            dispatched: list[tuple[TItem, Future[None]]] = []
-            for item in items:
+        connection = connection_factory()
+        try:
+            while True:
+                queued = work_queue.get()
+                if queued is None:
+                    return
+                index, item = queued
                 if should_cancel is not None and should_cancel():
-                    cancelled = True
-                    break
-                dispatched.append((item, executor.submit(worker, item)))
-            # Query every future: dispatch does not stop on failure, so later
-            # items may fail too and their exceptions would otherwise be
-            # discarded unretrieved. `exception()` blocks like `result()`.
-            failures: list[tuple[TItem, BaseException]] = []
-            for item, future in dispatched:
-                error = future.exception()
-                if error is not None:
-                    failures.append((item, error))
-        for failed_item, suppressed in failures[1:]:
-            _LOGGER.error(
-                "Segment worker failed for item %r; re-raising the first failure only.",
-                failed_item,
-                exc_info=suppressed,
-            )
-        if failures:
-            raise failures[0][1]
-    finally:
-        for connection in connections:
+                    cancelled.set()
+                    return
+                try:
+                    result = work(connection, item)
+                    with progress_lock:
+                        completed += 1
+                        ordinal = completed
+                        on_complete(ordinal, total, item, result)
+                except BaseException as exc:  # noqa: BLE001 - mirrors
+                    # concurrent.futures.thread._WorkItem.run: capture whatever
+                    # work()/on_complete() raised so it can be inspected in
+                    # dispatch order below; never silently dropped.
+                    failures[index] = (item, exc)
+        finally:
             connection.close()
-    return cancelled
+
+    threads = [threading.Thread(target=run_worker) for _ in range(worker_count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    real_failures = [entry for entry in failures if entry is not None]
+    for failed_item, suppressed in real_failures[1:]:
+        _LOGGER.error(
+            "Segment worker failed for item %r; re-raising the first failure only.",
+            failed_item,
+            exc_info=suppressed,
+        )
+    if real_failures:
+        raise real_failures[0][1]
+    return cancelled.is_set()
