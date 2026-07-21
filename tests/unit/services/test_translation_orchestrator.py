@@ -557,6 +557,26 @@ def _count_translations(db_path: Path) -> int:
         return int(connection.execute("SELECT COUNT(*) FROM translations").fetchone()[0])
 
 
+def _duplicate_attempt_rows(db_path: Path) -> list[tuple[str, int, int]]:
+    """Return `(segment_id, attempt, count)` for any attempt written twice.
+
+    Two workers racing `record_translation()`'s `SELECT MAX(attempt)` + INSERT
+    would both compute the same next attempt number for one segment.
+    """
+    with sqlite3.connect(db_path) as connection:
+        return [
+            (str(row[0]), int(row[1]), int(row[2]))
+            for row in connection.execute(
+                """
+                SELECT segment_id, attempt, COUNT(*) AS n
+                FROM translations
+                GROUP BY segment_id, attempt
+                HAVING n > 1
+                """
+            ).fetchall()
+        ]
+
+
 def _count_persisted_raw_responses(db_path: Path) -> int:
     with sqlite3.connect(db_path) as connection:
         return int(
@@ -736,3 +756,16 @@ def test_translate_project_honours_max_concurrent(tmp_path) -> None:
     assert sequential_summary.translated_segments == 6
     assert concurrent_summary.translated_segments == 6
     assert concurrent_elapsed < sequential_elapsed * 0.6
+    # Counting 6 is not enough: the concurrent path must leave exactly the same
+    # database state as the sequential one, with no duplicate attempt rows from
+    # two workers racing the same segment.
+    for summary, init in (
+        (sequential_summary, sequential_init),
+        (concurrent_summary, concurrent_init),
+    ):
+        assert summary.failed_segments == 0
+        assert summary.pending_segments == 0
+        assert _count_status(init.database_path, "translated") == 6
+        assert _count_status(init.database_path, "pending") == 0
+        assert _count_translations(init.database_path) == 6
+        assert _duplicate_attempt_rows(init.database_path) == []

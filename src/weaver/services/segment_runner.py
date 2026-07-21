@@ -118,8 +118,9 @@ def _run_concurrent(
 
     Uses a hand-rolled worker pool rather than `ThreadPoolExecutor` on purpose:
     each worker thread opens at most one connection and closes it itself, in a
-    `finally`, before its function returns — DB-API connections (sqlite3
-    included) may only be closed by the thread that created them, and
+    `finally`, before its function returns — `sqlite3.connect()` defaults to
+    `check_same_thread=True`, which rejects *any* use of the connection
+    (`close()` included) from a thread other than the one that created it, and
     `ThreadPoolExecutor` gives no way to address a specific pooled thread for a
     "close yourself" follow-up job, so closing can never be delegated back to
     the coordinator thread once a worker has opened its connection. (Verified:

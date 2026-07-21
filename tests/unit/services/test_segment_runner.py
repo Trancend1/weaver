@@ -160,8 +160,9 @@ def test_concurrent_window_opens_one_connection_per_worker() -> None:
         return connection
 
     def work(connection: _FakeConnection, item: int) -> int:
-        # Keep every worker busy so the executor is forced to spin up the full
-        # window: it reuses an idle thread instead of spawning a new one.
+        # Load-bearing: connections are opened lazily, on a worker's first
+        # dispatched item. Without the delay one worker could drain all 12 items
+        # before the others are scheduled, and fewer than 3 would ever open one.
         time.sleep(0.02)
         return item
 

@@ -409,18 +409,35 @@ def translate_project(
         first_n: When set, translate only the first N selected segments. The
             remaining segments stay in their current status. Composes with
             ``retry_failed`` and ``dry_run``.
-        progress_callback: Optional callback invoked after each selected segment
-            with `(index, total, segment, translated, input_tokens,
-            output_tokens)`. In dry-run mode the callback receives
+        progress_callback: Optional callback invoked after each completed
+            segment with `(ordinal, total, segment, translated, input_tokens,
+            output_tokens)`. `ordinal` is a 1-based *completion* ordinal, not a
+            position in the selection: under `[translation] max_concurrent > 1`
+            segments complete out of source order, so `ordinal` says how many
+            segments have finished, not which one this is. The runner serializes
+            the callback (never two at once), but under `max_concurrent > 1` it
+            runs on a worker thread, so callbacks must be thread-safe and must
+            not assume the calling thread. In dry-run mode the callback receives
             `translated=False` and the per-segment estimated input tokens.
-        should_cancel: Optional predicate checked before each segment. When it
-            returns True the loop stops cleanly, leaving already-translated
-            segments committed and the rest in their prior status (cooperative
-            cancel, ADR `0019`). CLI passes None (no behavior change); the web
+        should_cancel: Optional predicate checked before each segment is
+            dispatched. When it returns True the run stops cleanly, leaving
+            already-translated segments committed and the rest in their prior
+            status (cooperative cancel, ADR `0019`). Under `max_concurrent > 1`
+            up to `max_concurrent` segments are already in flight and run to
+            completion, and any segment dequeued after the flag flips is
+            discarded unprocessed. CLI passes None (no behavior change); the web
             cockpit passes the JobManager cancel flag.
 
     Returns:
         TranslationRunSummary with current database counts and token totals.
+
+    Raises:
+        Exception: Whatever a segment raised, via `run_segment_window`. Under
+            `max_concurrent > 1` a segment failure does not halt dispatch — only
+            `should_cancel` does — so segments queued after a failing one still
+            translate and still commit real writes before the earliest-dispatched
+            failure is re-raised. A raise here does not mean the run stopped at
+            that segment; read the database for the actual state.
     """
 
     base_dir = cwd or Path.cwd()
