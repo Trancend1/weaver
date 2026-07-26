@@ -10,12 +10,16 @@ $RepoRoot = Split-Path -Parent $DesktopDir
 
 $PyprojectPath = Join-Path $RepoRoot "pyproject.toml"
 $TauriConfPath = Join-Path $DesktopDir "tauri.conf.json"
+$InitPath = Join-Path $RepoRoot "src/weaver/__init__.py"
 
 if (-not (Test-Path -LiteralPath $PyprojectPath)) {
     throw "Missing pyproject.toml: $PyprojectPath"
 }
 if (-not (Test-Path -LiteralPath $TauriConfPath)) {
     throw "Missing tauri.conf.json: $TauriConfPath"
+}
+if (-not (Test-Path -LiteralPath $InitPath)) {
+    throw "Missing package __init__.py: $InitPath"
 }
 
 $PyprojectText = Get-Content -LiteralPath $PyprojectPath -Raw
@@ -34,6 +38,20 @@ $tauri = $TauriVersionMatch.Groups[1].Value
 
 if ($py -ne $tauri) {
     throw "Version drift: pyproject=$py tauri=$tauri"
+}
+
+# `weaver --version` / GET /version read this literal. It drifted unnoticed
+# through v0.7.1 and v0.7.2 (stuck at 0.7.0) because nothing compared it to
+# pyproject; mirrored by tests/unit/test_version.py.
+$InitText = Get-Content -LiteralPath $InitPath -Raw
+$InitVersionMatch = [regex]::Match($InitText, '(?m)^__version__ = "([^"]+)"')
+if (-not $InitVersionMatch.Success) {
+    throw "Could not read __version__ from $InitPath"
+}
+$init = $InitVersionMatch.Groups[1].Value
+
+if ($py -ne $init) {
+    throw "Version drift: pyproject=$py __init__=$init"
 }
 
 if ($PSBoundParameters.ContainsKey('Tag') -and $Tag) {
