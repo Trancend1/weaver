@@ -4,94 +4,7 @@ All notable changes to Weaver are recorded here. Format follows [Keep a Changelo
 
 ## [Unreleased]
 
-> Note: the entries below predate v0.7.1. The `0.7.1` (desktop installer) and
-> `0.7.2` (connection-first routing + enforcement loop) releases were tagged
-> without a changelog cut, so this section was never closed — see ADR 016–019
-> and git history for those releases. Left as-is rather than reconstructed from
-> memory; the next release should retire it.
-
-### Added
-
-- **DOCX export target** (Phase D) — the volume-aware cockpit exporter now supports
-  `target="docx"` alongside EPUB/TXT/HTML. One `.docx` per volume under
-  `output/docx/`, started/polled/cancelled through the same export job flow
-  (`POST /projects/{name}/export/{novel|volumes/{id}|chapters/{id}}`, SSE/status
-  unchanged) and selectable from the cockpit export dropdown.
-  - New pure renderer `renderers/docx.py` (`render_docx`) — a **custom minimal
-    OOXML (WordprocessingML) writer**. **No `python-docx`, no new dependency**
-    (`weaver[web]` is sufficient); DOCX is always **synthesized** from the
-    persisted chapter/segment content like TXT/HTML — there is **no write-back
-    path**, so the source file is never re-read.
-  - Same publishable rule as the other targets: latest `translated`/`manual`
-    translation when the attempt's `source_hash` matches, else source fallback;
-    manual edits preserved; translation history never exported; read-only (writes
-    no translations, calls no provider).
-  - Formatting baseline: document title, `Heading1` chapter headings, normal
-    paragraphs, built-in `Quote` style for blockquotes, and a page break before
-    chapters 2..N. No images, footnotes, advanced styling, or merged-omnibus DOCX.
-- **Configurable QA thresholds** (Phase D) — the deterministic scope-level QA
-  checks now read optional overrides from the existing `[qa]` table in
-  `project.toml`: `fallback_heavy_ratio` (0.0–1.0), `min_segments` (≥1), and
-  `repeated_min_chars` (≥1). Absent keys keep the Phase B defaults (`0.5` / `5` /
-  `8`), so existing projects are unchanged. Values are validated (wrong type or
-  out-of-range → `ConfigError`); foreign `[qa]` keys (the per-segment flags) are
-  ignored. The same thresholds apply across the CLI/API/UI QA paths
-  (`services/translation_qa.py`). New module `qa/thresholds.py`.
-- **Combined ZIP bundle export** (Phase D) — an optional `bundle` flag packages a
-  novel export's per-volume artifacts into one `output/<target>/bundle-<target>.zip`
-  (any target, incl. DOCX). Off by default; the per-volume files are still written.
-  Exposed as `ExportRequest.bundle` (API) and a "Bundle all volumes into one ZIP"
-  checkbox in the cockpit export form; `ExportResult`/the job result now carry
-  `bundle_path`. The bundle is skipped on cancel or when nothing was exported. New
-  module `services/export_bundle.py`. (A *merged-omnibus* single EPUB is not built —
-  a ZIP of per-volume files is the chosen, safe form.)
-- **Opt-in QA tree badges** (Phase D) — the project tree can now show per-volume and
-  per-chapter QA badges without ever running QA on page render. A "Load QA badges"
-  button GETs `/ui/projects/{name}/qa/tree-badges`, which runs the novel QA **once**
-  and returns out-of-band (`hx-swap-oob`) badge spans HTMX injects into the tree
-  slots. The tree render stays cheap (Gate B1 preserved); badges are explicit.
-- **Provider config hardening** (Phase D) — numeric `[provider]` settings are now
-  validated when the provider is built (new `providers/config_values.py`): a bad
-  `temperature` / `timeout_seconds` / `top_p` / `fail_rate` / `seed` (wrong type or
-  out of range) raises a clear `ConfigError` instead of a raw `ValueError`. Runtime
-  errors gained an **invalid-model** case for DeepSeek/custom and Gemini (misspelled
-  or unavailable `[provider] model` → actionable message). No provider behavior
-  change beyond validation/error mapping; **API key values never leak** into errors,
-  logs, or status messages (a regression test guards this).
-- **Delete a project** (Phase E) — the project page has a "Delete project" action and
-  the CLI gains `weaver delete <project.toml> [--yes]`. Both call the new
-  `services/project.delete_project`, which removes the project's `.weaver/<name>`
-  directory (translations, history, glossary, exports) behind a path-safety guard;
-  the **original imported source file is never touched**. The web route returns an
-  `HX-Redirect` to the dashboard; the CLI confirms unless `--yes`.
-
-### Changed
-
-- EPUB/TXT/HTML export behavior is unchanged. The export `target` validation set
-  now includes `docx`; an unsupported `target` (e.g. `pdf`) still returns `422`.
-- **Cockpit design system & UI overhaul** (Phase E) — presentation-only refactor of
-  the server-rendered UI: a full CSS custom-property token layer in `app.css`
-  (`:root`), three URL-dispatched layout modes (`api/ui_context.py`: global /
-  project / workspace), a left-aligned topbar with brand mark + favicon (replacing
-  the floating right nav), a widened 264px sidebar with inline line icons
-  (`partials/_icons.html`), dashboard **project cards** and per-volume progress
-  cards (replacing the dense table), QA **stat tiles**, a segmented sub-nav, and a
-  standardized `_page_header` breadcrumb on every page including 404 / error. No
-  backend, schema, or HTMX-contract change; all DOM hooks preserved.
-- **Terminology** (Phase E) — user-facing "QA" wording is now "Quality" across the
-  cockpit (nav, report page, badges button, pre-export check, advisories). The `/qa`
-  routes and `qa-*` element IDs are unchanged.
-- **Docs** — the Cal.com design study (`DESIGN.md`) and hybrid-layout guide
-  (`DESIGN_GUIDE.md`) are distilled into a single concise `docs/DESIGN_NOTES.md`;
-  completed-phase plans (B, D) and point-in-time reports (RC1, MVP stabilization)
-  were retired to git history.
-
-### Fixed
-
-- **External browser launch** (Phase E) — `weaver serve` now opens the URL in the
-  OS-default browser instead of an editor's embedded "Simple Browser". The launcher
-  (`cli/open_browser.py`) temporarily clears an editor-injected `$BROWSER` so the
-  real default browser is used; the server still binds `127.0.0.1` only.
+_Nothing yet._
 
 ## [0.7.3] - 2026-07-27
 
@@ -182,6 +95,199 @@ Performance & reliability release. Closes the v0.7.2 post-release audit ledger
   exactly (test-pinned). A JSON-parse repair round-trip now sums usage across both
   calls and is counted in the run summary.
 - The dead `[translation] max_retries` key is no longer written by `weaver init`.
+
+## [0.7.2] - 2026-06-19
+
+Connection-first routing plus the translation enforcement loop — 37 commits,
+ADRs **018**–**019**. Schema unchanged at **v12**. Reconstructed from git history
+during the 0.7.3 release gate; this release originally shipped without a
+changelog entry.
+
+### Added
+
+- **Connection registry** (ADR 018) — LLM endpoints are workspace-level named
+  *connections* (`connections.toml`) instead of per-project provider blocks. New
+  Add Connection surface with a Default Model field, plus a workspace
+  model-discovery cache.
+- **Per-task routing and fallback** — `[routing.<task>]` selects a connection +
+  free-form model id per task (translate / glossary-suggest / candidate), with a
+  simple per-segment fallback chain and a workspace `[defaults]` tier.
+- **Model-centric Active AI** — "Active AI" / "Switch AI" wired into translate;
+  the cross-project table became a switch station; fallback-author UI.
+- **CLI parity** — `weaver connections` and `weaver routing` reach everything the
+  cockpit can do.
+- **Translation enforcement loop** (ADR 019, E1–E4) — glossary and character
+  enforcement with anti-slop checks, a translation-profile contract, and
+  uncertain-term discovery.
+- Glossary bulk "Suggest targets" and a decluttered candidate-review row.
+- One-click "Translate volume" from the project page; chapters with 0/0 segments
+  (illustration / front-matter) are marked in the project tree.
+
+### Changed
+
+- **Collapsed to a single transport** — `openai_chat` (OpenAI-compatible
+  `/chat/completions`) plus `fake`. The native Gemini and Ollama clients were
+  removed; the legacy `deepseek` engine was renamed `openai_chat` and every
+  surface de-branded. Legacy `[provider] type` brands survive only as a
+  normalizing shim (gemini → `…/v1beta/openai`, ollama → `:11434/v1` keyless).
+- Removed the legacy per-project provider editor in favor of the connections
+  surface; plain-language copywriting pass across the cockpit.
+
+### Fixed
+
+- Cockpit translate honors Active AI and the fallback chain; glossary-suggest and
+  candidate generation inherit the project's Active AI.
+- AI target suggestion tolerates reasoning-model preambles and
+  markdown/prose-wrapped JSON, with a larger token budget.
+- Import-volume failures are surfaced instead of silently failing, and DB lock
+  contention is waited out.
+- Volume batch progress reconnects after a page reload or navigation.
+- **Security hardening of the connection/routing routes** for webUI + desktop:
+  `find_project` rejects path separators and `..` in project names (Windows
+  `\`-traversal), and inline error fallbacks HTML-escape reflected route params.
+
+## [0.7.1] - 2026-06-15
+
+The desktop track, plus the HTMX-first cockpit rebuild that preceded it: a
+hardened core → global workspace hubs → self-contained Windows desktop alpha →
+NSIS per-user installer → tag-triggered CI release. **175 commits** since 0.7.0,
+schema **v5 → v12**, ADRs **009**–**017**. Reconstructed from git history during
+the 0.7.3 release gate; this release originally shipped without a changelog entry,
+and the entries below were previously stranded under `[Unreleased]`.
+
+### Added
+
+- **HTMX-first cockpit foundation** (ADR 009) — Sprint G reworked the FastAPI app for
+  stability and Tauri-readiness, replacing the earlier npm-wrapper direction. Server-rendered
+  Jinja2 + HTMX, no SPA, no Node build step.
+- **Persistent job core** (ADR 010, migration v5 → v6) — SQLite-backed, in-process jobs
+  with replayable events, so translate/parse/export survive a page reload. Terminal state is
+  persisted before SSE completion and events replay read-only.
+- **Project/Volume lifecycle contract** (ADR 011) — Sprint H consolidated terminology and
+  separated project creation from volume import.
+- **EPUB preservation pipeline** (Sprints J/K) — structure parsing, preservation snapshot
+  (JSON + UI + CLI surfaces via `weaver epub-inspect`), atomic export writes, snapshot
+  preflight, and a fidelity report.
+- **Export gate + history ledger** (Sprint Q7, migration v11) — an exports hub with a
+  per-project export ledger and a pre-export readiness gate.
+- **Global workspace shell** (Sprints Q1–Q11) — cross-project dashboard command center,
+  Global Translation Queue, resources hub (glossary/character/memory), providers hub,
+  Content Explorer v2, per-segment Editor Context Panel, deterministic analytics, and a
+  stable project identity with a read-only cross-project index.
+- **Provider `complete()` primitive + AI glossary target suggestion** (ADR 014) — a
+  domain-agnostic completion primitive across DeepSeek/Gemini/Ollama/custom/Fake, plus an
+  on-demand, strictly-validated glossary target-suggestion service with visible failure.
+- **Image preview OCR security gate** (ADR 012).
+- **Desktop shell** (ADR 016, Sprints N–P) — Tauri sidecar host scaffolded, then a bundled
+  PyInstaller onedir Python sidecar for a self-contained Windows alpha, plus `DataDirError`
+  mapped to sidecar exit code 66 for an unwritable runtime dir.
+- **Desktop installer & release hardening** (ADR 017) — NSIS per-user installer target,
+  signing-ready bundle config (unsigned until a certificate exists), opt-in notify-only
+  update check with TLS, `latest.json` update manifest, desktop version synced from
+  `pyproject.toml` as the single source, and a version drift guard (pyproject vs tauri vs
+  tag) wired into a tag-triggered CI release.
+- **Review readiness** surfaced in the export preflight and the review queue.
+- **DOCX export target** (Phase D) — the volume-aware cockpit exporter now supports
+  `target="docx"` alongside EPUB/TXT/HTML. One `.docx` per volume under
+  `output/docx/`, started/polled/cancelled through the same export job flow
+  (`POST /projects/{name}/export/{novel|volumes/{id}|chapters/{id}}`, SSE/status
+  unchanged) and selectable from the cockpit export dropdown.
+  - New pure renderer `renderers/docx.py` (`render_docx`) — a **custom minimal
+    OOXML (WordprocessingML) writer**. **No `python-docx`, no new dependency**
+    (`weaver[web]` is sufficient); DOCX is always **synthesized** from the
+    persisted chapter/segment content like TXT/HTML — there is **no write-back
+    path**, so the source file is never re-read.
+  - Same publishable rule as the other targets: latest `translated`/`manual`
+    translation when the attempt's `source_hash` matches, else source fallback;
+    manual edits preserved; translation history never exported; read-only (writes
+    no translations, calls no provider).
+  - Formatting baseline: document title, `Heading1` chapter headings, normal
+    paragraphs, built-in `Quote` style for blockquotes, and a page break before
+    chapters 2..N. No images, footnotes, advanced styling, or merged-omnibus DOCX.
+- **Configurable QA thresholds** (Phase D) — the deterministic scope-level QA
+  checks now read optional overrides from the existing `[qa]` table in
+  `project.toml`: `fallback_heavy_ratio` (0.0–1.0), `min_segments` (≥1), and
+  `repeated_min_chars` (≥1). Absent keys keep the Phase B defaults (`0.5` / `5` /
+  `8`), so existing projects are unchanged. Values are validated (wrong type or
+  out-of-range → `ConfigError`); foreign `[qa]` keys (the per-segment flags) are
+  ignored. The same thresholds apply across the CLI/API/UI QA paths
+  (`services/translation_qa.py`). New module `qa/thresholds.py`.
+- **Combined ZIP bundle export** (Phase D) — an optional `bundle` flag packages a
+  novel export's per-volume artifacts into one `output/<target>/bundle-<target>.zip`
+  (any target, incl. DOCX). Off by default; the per-volume files are still written.
+  Exposed as `ExportRequest.bundle` (API) and a "Bundle all volumes into one ZIP"
+  checkbox in the cockpit export form; `ExportResult`/the job result now carry
+  `bundle_path`. The bundle is skipped on cancel or when nothing was exported. New
+  module `services/export_bundle.py`. (A *merged-omnibus* single EPUB is not built —
+  a ZIP of per-volume files is the chosen, safe form.)
+- **Opt-in QA tree badges** (Phase D) — the project tree can now show per-volume and
+  per-chapter QA badges without ever running QA on page render. A "Load QA badges"
+  button GETs `/ui/projects/{name}/qa/tree-badges`, which runs the novel QA **once**
+  and returns out-of-band (`hx-swap-oob`) badge spans HTMX injects into the tree
+  slots. The tree render stays cheap (Gate B1 preserved); badges are explicit.
+- **Provider config hardening** (Phase D) — numeric `[provider]` settings are now
+  validated when the provider is built (new `providers/config_values.py`): a bad
+  `temperature` / `timeout_seconds` / `top_p` / `fail_rate` / `seed` (wrong type or
+  out of range) raises a clear `ConfigError` instead of a raw `ValueError`. Runtime
+  errors gained an **invalid-model** case for DeepSeek/custom and Gemini (misspelled
+  or unavailable `[provider] model` → actionable message). No provider behavior
+  change beyond validation/error mapping; **API key values never leak** into errors,
+  logs, or status messages (a regression test guards this).
+- **Delete a project** (Phase E) — the project page has a "Delete project" action and
+  the CLI gains `weaver delete <project.toml> [--yes]`. Both call the new
+  `services/project.delete_project`, which removes the project's `.weaver/<name>`
+  directory (translations, history, glossary, exports) behind a path-safety guard;
+  the **original imported source file is never touched**. The web route returns an
+  `HX-Redirect` to the dashboard; the CLI confirms unless `--yes`.
+
+### Changed
+
+- **Single provider config surface** (ADR 015) — provider/model + secret editing moved to
+  `/ui/providers`; the standalone `config.html` page was removed and the legacy config route
+  redirects there. A global default model without a provider is now rejected rather than
+  stored as an orphan default, and unbuildable provider config fails loudly.
+- **Design system** — an editorial design system with a workflow rail landed ahead of the
+  Phase E overhaul below.
+- Schema advanced **v5 → v12** across this release (persistent jobs, lifecycle, EPUB
+  snapshots, export ledger). All migrations are forward-only.
+- EPUB/TXT/HTML export behavior is unchanged. The export `target` validation set
+  now includes `docx`; an unsupported `target` (e.g. `pdf`) still returns `422`.
+- **Cockpit design system & UI overhaul** (Phase E) — presentation-only refactor of
+  the server-rendered UI: a full CSS custom-property token layer in `app.css`
+  (`:root`), three URL-dispatched layout modes (`api/ui_context.py`: global /
+  project / workspace), a left-aligned topbar with brand mark + favicon (replacing
+  the floating right nav), a widened 264px sidebar with inline line icons
+  (`partials/_icons.html`), dashboard **project cards** and per-volume progress
+  cards (replacing the dense table), QA **stat tiles**, a segmented sub-nav, and a
+  standardized `_page_header` breadcrumb on every page including 404 / error. No
+  backend, schema, or HTMX-contract change; all DOM hooks preserved.
+- **Terminology** (Phase E) — user-facing "QA" wording is now "Quality" across the
+  cockpit (nav, report page, badges button, pre-export check, advisories). The `/qa`
+  routes and `qa-*` element IDs are unchanged.
+- **Docs** — the Cal.com design study (`DESIGN.md`) and hybrid-layout guide
+  (`DESIGN_GUIDE.md`) are distilled into a single concise `docs/DESIGN_NOTES.md`;
+  completed-phase plans (B, D) and point-in-time reports (RC1, MVP stabilization)
+  were retired to git history.
+
+### Fixed
+
+- Job cancellation leaves a consistent terminal state for both translate and parse, and
+  terminal state is persisted before SSE completion.
+- The EPUB structure snapshot is persisted atomically with import, so a failed import can no
+  longer leave a half-written snapshot; chapter scope is honored on preserved EPUB export.
+- Ruby annotation text is skipped during EPUB import (reading glosses no longer pollute the
+  source text).
+- Version-zero legacy databases are handled safely instead of tripping the migration path.
+- Glossary candidate review is optimistic-update safe with bulk/keyboard actions; a dead AI
+  stub was dropped.
+- Cockpit re-attaches to a workspace after refresh and reports DB errors in plain language.
+- Glossary and character key mutations are slash-safe.
+- Review status changes no longer swap the whole segment row, and the save/history/candidate
+  targets broken by an over-broad `replaceAll` were restored.
+- **External browser launch** (Phase E) — `weaver serve` now opens the URL in the
+  OS-default browser instead of an editor's embedded "Simple Browser". The launcher
+  (`cli/open_browser.py`) temporarily clears an editor-injected `$BROWSER` so the
+  real default browser is used; the server still binds `127.0.0.1` only.
 
 ## [0.7.0] - 2026-06-05
 
