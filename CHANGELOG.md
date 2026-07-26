@@ -4,6 +4,12 @@ All notable changes to Weaver are recorded here. Format follows [Keep a Changelo
 
 ## [Unreleased]
 
+> Note: the entries below predate v0.7.1. The `0.7.1` (desktop installer) and
+> `0.7.2` (connection-first routing + enforcement loop) releases were tagged
+> without a changelog cut, so this section was never closed — see ADR 016–019
+> and git history for those releases. Left as-is rather than reconstructed from
+> memory; the next release should retire it.
+
 ### Added
 
 - **DOCX export target** (Phase D) — the volume-aware cockpit exporter now supports
@@ -86,6 +92,96 @@ All notable changes to Weaver are recorded here. Format follows [Keep a Changelo
   OS-default browser instead of an editor's embedded "Simple Browser". The launcher
   (`cli/open_browser.py`) temporarily clears an editor-injected `$BROWSER` so the
   real default browser is used; the server still binds `127.0.0.1` only.
+
+## [0.7.3] - 2026-07-26
+
+Performance & reliability release. Closes the v0.7.2 post-release audit ledger
+(A1–A8) plus the measured audit findings N1–N8. Schema moves to **v14**
+(forward-only, idempotent); no CLI or route contract breaks.
+
+### Added
+
+- **Opt-in bounded translate concurrency** (ADR 020) — `[translation] max_concurrent`
+  (1–4, **default 1** = previous sequential behavior bit-for-bit), exposed as
+  `weaver translate --max-concurrent` and a 1–4 select on the cockpit chapter
+  translate form. New `services/segment_runner.py` owns the worker window; each
+  worker owns and closes its own SQLite connection. Measured **2.78× at 3 workers**
+  on the latency-simulating FakeProvider bench (budget ≥ 2.4×).
+- **Enforcement provenance** persisted on `translations` (migration v14) — violations
+  JSON where `NULL` means "not evaluated" (distinct from `[]` = "evaluated clean"),
+  plus `repair_attempted` / `repair_outcome` and dedicated repair token columns.
+  Surfaced through the CLI, job result JSON, attempt history, and `/translations`.
+- **Input-safety guards** — the `MAX_UPLOAD_BYTES` cap (256 MiB) now applies to
+  `/projects/epub-preview`; a declared-uncompressed ceiling (`MAX_UNCOMPRESSED_BYTES`,
+  1 GiB) is checked from the zip central directory *before* parsing; malformed
+  chapter XHTML degrades per chapter via `DocumentIR.read_issues` instead of failing
+  the whole import.
+- **Bench coverage** — rolling-window flat-cost probe, cockpit render budgets, and a
+  concurrency scaling budget in `bench/run_performance_budgets.py`.
+- **Gated live provider tests** — `tests/integration/providers/test_gemini_live.py`
+  (`requires_cloud`) and `test_ollama_live.py` (first-ever `requires_ollama` usage).
+  Both drive the shipped legacy-shim defaults, so a pass proves the real endpoint
+  rather than a test-local constant. Not yet run against live endpoints.
+- **Version drift guard** — `tests/unit/test_version.py` and
+  `desktop/scripts/check-version.ps1` now compare `src/weaver/__init__.py` against
+  `pyproject.toml` (the single source of truth) and `desktop/tauri.conf.json`.
+
+### Changed
+
+- SQLite `PRAGMA synchronous = NORMAL` plus read-only pragmas on read paths
+  (commit cost was 1.325 ms at `FULL` vs 0.031 ms at `NORMAL`, with ≥ 2 commits
+  per segment).
+- `transaction()` now opens `BEGIN IMMEDIATE`. Load-bearing under concurrency: a
+  `DEFERRED` transaction whose first statement reads takes a SHARED lock and races
+  to upgrade, and SQLite reports that race as instant `SQLITE_BUSY` **without**
+  consulting `busy_timeout` (measured 121/160 failures before, 0/160 after).
+- The O(n²) rolling-window CTE is scoped to the chapter at **both** call sites
+  (including `list_export_segment_states`). Per-segment cost is now flat across the
+  10k-segment fixture (**1.96× → 0.74×** last-100 vs first-100).
+- `list_connections` and the secret store parse each TOML file once per render;
+  project discovery and queue polling dedupe under the existing 5 s cache
+  (≤ 1 DB open per project per render).
+- Token estimation is CJK-aware (~1 token/char for Japanese instead of `chars // 4`,
+  which undercounted ~3×); `MAX_CONTEXT_TOKENS` recalibrated 600 → **1000** honest
+  tokens so the typical 5-pair context window is preserved.
+- `[provider] max_retries` is now explicit on the OpenAI client (default 2), making
+  the SDK's hidden transport retries a visible, per-connection number.
+- Enforcement **detection** no longer requires `enforce_repair` — verdicts are
+  recorded even when automatic repair is off.
+- `weaver inspect` resolves the provider through routing instead of the legacy
+  `[provider]` block.
+- The `gemini` legacy-shim default model is `gemini-2.5-flash`; `gemini-1.5-flash`
+  was retired upstream and would 404 on first call.
+- Glossary matching hoists casefold work, batches writes with `executemany`, and
+  gains `idx_glossary_candidates_project` (migration v13).
+
+### Fixed
+
+- **`weaver --version` and `GET /version` reported `0.7.0`** through both the v0.7.1
+  and v0.7.2 releases — `src/weaver/__init__.py` was never bumped and no test or
+  release check compared it to `pyproject.toml`.
+- **The performance bench silently measured nothing** (audit N1) — the harness
+  string-replaced `type = "deepseek"`, but v0.7.2 `weaver init` writes
+  `[provider] type = ""`, so the translate/export budgets no-oped. Both harnesses
+  now write the fake provider block explicitly. Every pre-M1 baseline claim was
+  unfounded.
+- Corrupt `connections.toml` / `secrets.toml` is no longer silently destroyed. A
+  tolerant read returning `{}` paired with an unguarded rewrite meant the next save
+  rebuilt from the empty view; writes now go through
+  `core/toml_write.guard_unparseable_toml` (move-aside backup + a `ConfigError`
+  naming the backup file).
+- A dead primary connection with a healthy fallback completes the run instead of
+  aborting pre-flight (`translation.preflight_provider_chain`); the warning is
+  carried on the plan, result, summary, CLI echo, and job terminal events.
+- Hand-serialized TOML values escape control characters — four separate incomplete
+  private `_escape` copies were folded into one shared `escape_toml_string`.
+- The legacy provider brand (`deepseek`/`gemini`/`ollama`) is recorded in attempt
+  history again instead of being flattened to `openai_chat`.
+- Token accounting reconciles by construction: the attempt row stores the primary
+  call's usage, repair spend lives in its own columns, and `sum(rows) == summary`
+  exactly (test-pinned). A JSON-parse repair round-trip now sums usage across both
+  calls and is counted in the run summary.
+- The dead `[translation] max_retries` key is no longer written by `weaver init`.
 
 ## [0.7.0] - 2026-06-05
 
