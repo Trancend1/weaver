@@ -99,17 +99,6 @@ Performance & reliability release. Closes the v0.7.2 post-release audit ledger
 (A1–A8) plus the measured audit findings N1–N8. Schema moves to **v14**
 (forward-only, idempotent); no CLI or route contract breaks.
 
-> **Known gap — no live provider validation.** This release was verified against
-> the deterministic `fake` provider, the full offline test suite (1733 passed),
-> the performance budgets, and the AC-1…AC-9 acceptance gate — but **not against
-> a live LLM endpoint**. The gated Gemini and Ollama integration tests ship with
-> the release and have never been run. The `gemini-2.5-flash` shim default and
-> the `…/v1beta/openai` base_url are therefore unproven in production, and the
-> concurrency speed-up figure comes from simulated latency, not a network. The
-> maintainer accepted this risk knowingly. `[translation] max_concurrent`
-> defaults to `1`, so the least-tested path is off unless you opt in, and any
-> endpoint or model can be overridden per connection without a new release.
-
 ### Added
 
 - **Opt-in bounded translate concurrency** (ADR 020) — `[translation] max_concurrent`
