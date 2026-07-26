@@ -3,9 +3,62 @@
 **Track:** T9 (Release & Final Gate), with T6 (QA) and T0 (Docs)
 **Date:** 2026-07-26
 **Branch:** `chore/v073-release-gate`
-**Verdict:** 🟡 **Release-ready offline; tag deliberately withheld.** Every gate reachable
-without live credentials is green. Four live/tooling validations were **deferred by the
-owner on 2026-07-26**, so §2.4's live criteria stay open and **`v0.7.3` is not tagged**.
+**Verdict:** ✅ **Shipped — merged via PR #61 (`92e9470`) and tagged `v0.7.3` on 2026-07-27.**
+Every gate reachable without live credentials is green. The four live/tooling validations
+were first deferred (2026-07-26) and then, after post-merge verification showed them still
+unmet, **formally Risk Accepted by the owner on 2026-07-27** — §2.4's live criterion is
+**waived, not satisfied**.
+
+> ## Risk Accepted — live provider validation (owner decision, 2026-07-27)
+>
+> The owner was shown that criterion 9 of §2.4 was unmet and that pushing the tag triggers
+> `.github/workflows/release.yml` to publish a GitHub Release with an NSIS installer, then
+> directed the tag to be pushed anyway. Recorded here per §7's Risk Accepted status.
+>
+> **Not met:** (a) Gemini live over `…/v1beta/openai`; (b) Ollama live over `:11434/v1`;
+> (c) live concurrency spot-check ≥ 2×; (d) E2 repair token-cost delta →
+> `enforce_repair` default. Environment re-probed 2026-07-27, unchanged: no
+> `GEMINI_API_KEY`, no `ollama` binary, nothing on `:11434`, no `java`, no `py-spy`.
+>
+> **Exposure:** no live provider path in v0.7.3 has ever served a real request. Highest
+> probability of failure is the `gemini-2.5-flash` shim default — an untested constant,
+> though strictly better than the retired `gemini-1.5-flash` it replaces. Next is the
+> `…/v1beta/openai` base_url itself.
+>
+> **Mitigation:** `[translation] max_concurrent` defaults to `1`, so the newest and
+> least-tested code path is off unless opted into; `openai_chat` is one brand-free
+> transport, so a bad endpoint surfaces as an actionable `ProviderUnavailable` rather than
+> silently wrong output; endpoint and model are per-connection user config, so a wrong
+> default is fixable without a release.
+>
+> **Rollback:**
+> ```bash
+> git push --delete origin v0.7.3 && git tag -d v0.7.3
+> gh release delete v0.7.3 --yes
+> ```
+> No schema or data rollback is required — migration v14 is forward-only and additive, and
+> nothing in v0.7.3 rewrites existing rows.
+>
+> **Trigger to close:** run the four checks on the owner machine. If any fails, fix forward
+> in v0.7.4 rather than un-publishing, unless the failure makes translation unusable for
+> every provider.
+
+## Post-merge re-verification on `main` (2026-07-27)
+
+Re-run after PR #61 merged, to confirm the merge itself introduced nothing:
+
+| Check | Result |
+| --- | --- |
+| full suite | exit 0 — **1733 passed, 1 skipped, 3 deselected** (349.76 s) — byte-identical outcome to the pre-merge branch run |
+| bench budgets | exit 0 — **all PASS**; concurrency **2.64×** (≥ 2.4×), flat cost **0.72×**, translate 0.82 ms/seg |
+| acceptance gate | exit 0 — **AC-1…AC-9 PASS** |
+| ruff / format / pyright | clean · 395 files · **0 errors, 0 warnings** |
+| migration v14 | fresh DB → `user_version=14`; re-open → 14 (**idempotent**); all 5 provenance columns present; column set stable across re-open |
+| version sources | `pyproject` = `__init__` = `tauri.conf.json` = `0.7.3`; `weaver --version` → `weaver 0.7.3`; `check-version.ps1 -Tag v0.7.3` → *Version OK* |
+| M1–M4 artifacts on `main` | `PRAGMA synchronous = NORMAL`, `idx_glossary_candidates_project`, `toml_write` guard + escape, `preflight_provider_chain`, `MAX_UNCOMPRESSED_BYTES`, `read_issues`, provenance columns, `segment_runner.py`, `BEGIN IMMEDIATE` — all present in code, not merely claimed in docs |
+
+Concurrency moved 2.78× → **2.64×** between runs and flat cost 0.74× → 0.72×; both stay well
+inside budget. That is run-to-run variance on simulated latency, not a regression.
 
 ---
 
@@ -188,7 +241,8 @@ pyproject=0.7.3* (guard proven, not assumed).
 
 ## Recommended Next Role / Next Step
 
-**Role:** Repository Owner (live validation), then Release Captain for the tag.
+**Role:** Repository Owner — the waived validation is now **v0.7.4 carry-forward debt**, not a
+release blocker.
 
 **Next step — one command, on the owner machine:**
 
@@ -198,5 +252,6 @@ $env:GEMINI_API_KEY = "<key>"; uv run pytest -m requires_cloud -q
 
 That single run closes gap 1 (Gemini half) and gap 2 together. Then Ollama
 (`ollama serve` + `ollama pull qwen3:14b` → `uv run pytest -m requires_ollama -q`), the live
-`--max-concurrent 2` spot-check, and the E2 delta. Tag **only** after those — CI's
-`check-version.ps1 -Tag v0.7.3` will verify all three version sources agree.
+`--max-concurrent 2` spot-check, and the E2 delta. Because v0.7.3 is already published, a
+failure there is fixed forward in v0.7.4 — see the Risk Accepted block for the rollback
+commands if a failure turns out to be severe enough to warrant un-publishing.
