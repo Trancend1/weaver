@@ -45,7 +45,10 @@ _LEGACY_DEFAULTS: dict[str, dict[str, str]] = {
     },
     "gemini": {
         "protocol": PROTOCOL_OPENAI_CHAT,
-        "model": "gemini-1.5-flash",
+        # gemini-1.5-flash was retired upstream; the shim default must name a
+        # currently-served model or every legacy-brand project 404s on its first
+        # call (v0.7.3 M5). Pinned by tests/integration/providers/test_gemini_live.py.
+        "model": "gemini-2.5-flash",
         # Google's OpenAI-compatible surface lives under /v1beta/openai
         # (ADR 018 §5.3); bare /v1beta has no /chat/completions route.
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
